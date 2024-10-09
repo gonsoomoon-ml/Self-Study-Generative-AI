@@ -3,6 +3,7 @@ from PIL import Image
 import base64
 from io import BytesIO
 
+
 def load_and_prep_images(directory='.'):
     image_data = []
     for filename in os.listdir(directory):
