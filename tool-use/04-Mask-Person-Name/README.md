@@ -40,3 +40,5 @@ In the second image, we see Tom in a wider shot, sitting on a wooden bench in wh
     source activate base
     python character.py 
     ```
+- Example
+    - ![unmask-prompt-tool.png](unmask-prompt-tool.png)
