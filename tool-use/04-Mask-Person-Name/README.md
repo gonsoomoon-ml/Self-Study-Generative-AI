@@ -42,3 +42,7 @@ In the second image, we see Tom in a wider shot, sitting on a wooden bench in wh
     ```
 - Example
     - ![unmask-prompt-tool.png](unmask-prompt-tool.png)
+
+
+# A. Reference
+- [Claud.AI-Amazon Bedrock API](https://docs.anthropic.com/ko/api/claude-on-amazon-bedrock)
