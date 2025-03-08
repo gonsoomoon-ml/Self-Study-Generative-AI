@@ -94,5 +94,3 @@ echo "# Remvoe the given jupyter kernels"
 echo "# jupyter kernelspec uninstall -y " $VirtualEnv
 echo ""
 
-# Apply this setting
-# source ~/.bashrc 
