@@ -7,6 +7,10 @@
     - 환경: ml.m5.xlarge 
     - Region : us-west-2
 - Amazon Bedrock Model Access 가 필요 합니다.
+    - Amazon Nova Pro
+    - Amazon Nova lite
+    - Amazon Nova micro
+    - Claude 3.7 Sonnet 
     - Claude 3.5 Sonnet 
     - Claude 3.5 Haiku
     - Titan Embeddings G1 – Text
@@ -16,6 +20,8 @@
 ### 2.1. JupyerLab 을 열고 아래와 같이 터미널을 오픈 하세요.
 - ![open_terminal.png](img/open_terminal.png)
 ### 2.2. 아래와 같이 명령어를 넣고 Git 리포를 클로닝 합니다.
+#### [중요] 현재는 아래 git 을 다운로드 해서 사용을 해야 합니다.
+--> git clone https://github.com/gonsoomoon-ml/Self-Study-Generative-AI.git
     ```
     pwd
     git clone https://github.com/aws-samples/aws-ai-ml-workshop-kr.git
