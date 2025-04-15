@@ -20,7 +20,7 @@ def converse_with_bedrock(sys_prompt, usr_prompt):
         messages=usr_prompt, 
         system=sys_prompt,
         inferenceConfig=inference_config,
-        # additionalModelRequestFields=additional_model_fields
+        additionalModelRequestFields=additional_model_fields
     )
     return response['output']['message']['content'][0]['text']
 
@@ -121,7 +121,8 @@ session = boto3.session.Session()
 region_name = session.region_name
 
 boto3_client = init_boto3_client(region_name)
-llm_model = "us.amazon.nova-pro-v1:0"
+# llm_model = "us.amazon.nova-pro-v1:0"
+llm_model = "anthropic.claude-3-sonnet-20240229-v1:0"
 sql_search_client, table_search_client, sql_retriever, table_retriever = init_search_resources(region_name)
 
 
