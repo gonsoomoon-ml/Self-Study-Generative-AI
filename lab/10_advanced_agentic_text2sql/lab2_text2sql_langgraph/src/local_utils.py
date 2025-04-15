@@ -186,4 +186,79 @@ class NodeTester:
 
         return result
 
+######################################################       
+# Langfuse 정의
+######################################################       
 
+from langfuse.decorators import observe, langfuse_context
+from botocore.exceptions import ClientError
+ 
+@observe(as_type="generation", name="Bedrock Converse")
+def wrapped_bedrock_converse(**kwargs):
+    # 1. extract model metadata
+    kwargs_clone = kwargs.copy()
+    messages = kwargs_clone.pop('messages', None)
+    system = kwargs_clone.pop('system', None)
+    
+    # messages와 system을 형식에 맞게 처리
+    input_data = {
+        "kwargs": {
+            "system": system,            
+            "messages": messages,
+        }
+    }    
+
+    modelId = kwargs_clone.pop('modelId', None)
+    model_parameters = {
+        **kwargs_clone.pop('inferenceConfig', {}),
+        **kwargs_clone.pop('additionalModelRequestFields', {})
+    }
+  # 1. Langfuse 관측 컨텍스트에 입력, 모델 ID, 파라미터, 기타 메타데이터를 업데이트합니다.
+    langfuse_context.update_current_observation(
+        input=input_data,
+        model=modelId,
+        model_parameters=model_parameters,
+        metadata=kwargs_clone
+    )
+
+ 
+    # 2. model call with error handling
+    try:
+        response = boto3_client.converse(**kwargs)
+    except (ClientError, Exception) as e:
+        error_message = f"ERROR: Can't invoke '{modelId}'. Reason: {e}"
+        langfuse_context.update_current_observation(level="ERROR", status_message=error_message)
+        print(error_message)
+        return
+ 
+  # 3. extract response metadata
+  # Langfuse에 출력 텍스트, 토큰 사용량, 응답 메타데이터를 기록합니다.
+    response_text = response["output"]["message"]["content"][0]["text"]
+
+    langfuse_context.update_current_observation(
+    output=response_text,
+
+    usage_details={
+        "input": response["usage"]["inputTokens"],
+        "output": response["usage"]["outputTokens"],
+        "total": response["usage"]["totalTokens"]
+        },
+        metadata={
+            "ResponseMetadata": response["ResponseMetadata"],
+        }
+    )
+
+
+    return response_text
+
+def converse_with_bedrock_langfuse(sys_prompt, usr_prompt, model_id):
+
+    response_text = wrapped_bedrock_converse(
+        modelId=model_id,
+        messages=usr_prompt,
+        system=sys_prompt,
+        inferenceConfig={"maxTokens":4096,"temperature": 0.0, "topP": 0.1},
+        additionalModelRequestFields={"top_k":1}
+    )
+
+    return response_text

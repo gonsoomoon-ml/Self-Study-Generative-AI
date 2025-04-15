@@ -199,6 +199,7 @@ class retriever_utils():
         assert "emb" in kwargs, "Check your emb"
         assert "index_name" in kwargs, "Check your index_name"
         assert "os_conn" in kwargs, "Check your OpenSearch Connection"
+        assert "ensemble_weights" in kwargs, "Check your hybrid search weight"
 
         search_filter = deepcopy(kwargs.get("filter", []))
         similar_docs_semantic = cls.search_semantic(
