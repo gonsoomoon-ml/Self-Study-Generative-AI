@@ -31,13 +31,13 @@ def init_boto3_client(region: str):
     )
     return boto3.client("bedrock-runtime", region_name=region, config=retry_config)
 
-def init_search_resources(region_name):  
+def init_search_resources(region_name, k=10):  
     embedding_model = BedrockEmbeddings(model_id="amazon.titan-embed-text-v2:0", region_name=region_name, model_kwargs={"dimensions":1024})
     sql_search_client = OpenSearchClient(emb=embedding_model, index_name='example_queries', mapping_name='mappings-sql', vector="input_v", text="input", output=["input", "query"])
     table_search_client = OpenSearchClient(emb=embedding_model, index_name='schema_descriptions', mapping_name='mappings-detailed-schema', vector="table_summary_v", text="table_summary", output=["table_name", "table_summary"])
 
-    sql_retriever = OpenSearchHybridRetriever(sql_search_client, k=10)
-    table_retriever = OpenSearchHybridRetriever(table_search_client, k=10)
+    sql_retriever = OpenSearchHybridRetriever(sql_search_client, k=k)
+    table_retriever = OpenSearchHybridRetriever(table_search_client, k=k)
     return sql_search_client, table_search_client, sql_retriever, table_retriever
 
 def get_column_description(table_name):
@@ -123,7 +123,7 @@ region_name = session.region_name
 boto3_client = init_boto3_client(region_name)
 # llm_model = "us.amazon.nova-pro-v1:0"
 llm_model = "anthropic.claude-3-sonnet-20240229-v1:0"
-sql_search_client, table_search_client, sql_retriever, table_retriever = init_search_resources(region_name)
+sql_search_client, table_search_client, sql_retriever, table_retriever = init_search_resources(region_name, k=5)
 
 
 ######################################################       
@@ -193,8 +193,14 @@ class NodeTester:
 from langfuse.decorators import observe, langfuse_context
 from botocore.exceptions import ClientError
  
-@observe(as_type="generation", name="Bedrock Converse")
+# @observe(as_type="generation", name="Bedrock Converse")
+# @observe(as_type="generation")
 def wrapped_bedrock_converse(**kwargs):
+
+    function_name = kwargs.pop('function_name', "Bedrock Converse")
+    # Langfuse 컨텍스트에 이름 업데이트
+    langfuse_context.update_current_observation(name=function_name)    
+
     # 1. extract model metadata
     kwargs_clone = kwargs.copy()
     messages = kwargs_clone.pop('messages', None)
@@ -251,9 +257,36 @@ def wrapped_bedrock_converse(**kwargs):
 
     return response_text
 
-def converse_with_bedrock_langfuse(sys_prompt, usr_prompt, model_id):
+# def converse_with_bedrock_langfuse(sys_prompt, usr_prompt, model_id, function_name=None):
 
-    response_text = wrapped_bedrock_converse(
+#     observation_name = function_name if function_name else "Bedrock Converse"
+    
+#     print("observation_name: ", observation_name)
+#     # Langfuse 컨텍스트에 직접 이름 업데이트
+#     if function_name:
+#         langfuse_context.update_current_observation(name=function_name)    
+
+#     response_text = wrapped_bedrock_converse(
+#         modelId=model_id,
+#         messages=usr_prompt,
+#         system=sys_prompt,
+#         inferenceConfig={"maxTokens":4096,"temperature": 0.0, "topP": 0.1},
+#         additionalModelRequestFields={"top_k":1}
+#     )
+
+#     return response_text
+
+def converse_with_bedrock_langfuse(sys_prompt, usr_prompt, model_id, function_name=None):
+    # 기본 함수 이름 설정
+    observation_name = function_name or "Bedrock Converse"
+    
+    # 함수를 직접 호출하는 대신, 먼저 데코레이터를 동적으로 적용
+    # 이렇게 하면 observe에서 사용하는
+    # 장식된 함수가 매번 새롭게 생성됩니다
+    decorated_func = observe(as_type="generation", name=observation_name)(wrapped_bedrock_converse)
+    
+    # 이제 장식된 함수 호출
+    response_text = decorated_func(
         modelId=model_id,
         messages=usr_prompt,
         system=sys_prompt,
