@@ -182,10 +182,11 @@ class NodeTester:
     def __init__(self):
         pass
 
-    def test(self, node_function, test_state):
+    def test(self, node_function, test_state, verbose=True):
         result = node_function(test_state)
-        print("## Test Result:")
-        print(json.dumps(result, indent=2, ensure_ascii=False))
+        if verbose:
+            print("## Test Result:")
+            print(json.dumps(result, indent=2, ensure_ascii=False))
 
         return result
 
