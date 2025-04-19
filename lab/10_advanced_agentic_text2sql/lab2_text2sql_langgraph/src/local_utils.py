@@ -119,11 +119,14 @@ def search_by_keywords(keyword):
 
 session = boto3.session.Session()
 region_name = session.region_name
-
-boto3_client = init_boto3_client(region_name)
-# llm_model = "us.amazon.nova-pro-v1:0"
-llm_model = "anthropic.claude-3-sonnet-20240229-v1:0"
 sql_search_client, table_search_client, sql_retriever, table_retriever = init_search_resources(region_name, k=5)
+
+# boto3_client = init_boto3_client(region_name)
+# llm_model = "us.amazon.nova-pro-v1:0"
+# llm_model = "anthropic.claude-3-sonnet-20240229-v1:0"
+
+# llm_model = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+
 
 
 ######################################################       
@@ -198,6 +201,8 @@ from botocore.exceptions import ClientError
 def wrapped_bedrock_converse(**kwargs):
 
     function_name = kwargs.pop('function_name', "Bedrock Converse")
+    boto3_client = kwargs.pop('boto3_client', [])
+
     # Langfuse 컨텍스트에 이름 업데이트
     langfuse_context.update_current_observation(name=function_name)    
 
@@ -257,26 +262,15 @@ def wrapped_bedrock_converse(**kwargs):
 
     return response_text
 
-# def converse_with_bedrock_langfuse(sys_prompt, usr_prompt, model_id, function_name=None):
-
-#     observation_name = function_name if function_name else "Bedrock Converse"
-    
-#     print("observation_name: ", observation_name)
-#     # Langfuse 컨텍스트에 직접 이름 업데이트
-#     if function_name:
-#         langfuse_context.update_current_observation(name=function_name)    
-
-#     response_text = wrapped_bedrock_converse(
-#         modelId=model_id,
-#         messages=usr_prompt,
-#         system=sys_prompt,
-#         inferenceConfig={"maxTokens":4096,"temperature": 0.0, "topP": 0.1},
-#         additionalModelRequestFields={"top_k":1}
-#     )
-
-#     return response_text
-
+import boto3
 def converse_with_bedrock_langfuse(sys_prompt, usr_prompt, model_id, function_name=None):
+    
+    session = boto3.session.Session()
+    region_name = session.region_name
+
+    boto3_client = init_boto3_client(region_name)
+
+
     # 기본 함수 이름 설정
     observation_name = function_name or "Bedrock Converse"
     
@@ -285,13 +279,45 @@ def converse_with_bedrock_langfuse(sys_prompt, usr_prompt, model_id, function_na
     # 장식된 함수가 매번 새롭게 생성됩니다
     decorated_func = observe(as_type="generation", name=observation_name)(wrapped_bedrock_converse)
     
-    # 이제 장식된 함수 호출
-    response_text = decorated_func(
-        modelId=model_id,
-        messages=usr_prompt,
-        system=sys_prompt,
-        inferenceConfig={"maxTokens":4096,"temperature": 0.0, "topP": 0.1},
-        additionalModelRequestFields={"top_k":1}
-    )
+    
+    if "nova" in model_id:
+        response_text = decorated_func(
+            boto3_client = boto3_client,
+            modelId=model_id,
+            messages=usr_prompt,
+            system=sys_prompt,
+            inferenceConfig={"maxTokens":4096,"temperature": 0.0, "topP": 0.1},
+            # additionalModelRequestFields={"top_k":1} # <-- Nova 에서는 top_k 지원 안함.
+            )   
+    else:
+        response_text = decorated_func(
+            boto3_client = boto3_client,
+            modelId=model_id,
+            messages=usr_prompt,
+            system=sys_prompt,
+            inferenceConfig={"maxTokens":4096,"temperature": 0.0, "topP": 0.1},
+            additionalModelRequestFields={"top_k":1}
+            )   
+
 
     return response_text
+
+# def converse_with_bedrock_langfuse(sys_prompt, usr_prompt, model_id, function_name=None):
+#     # 기본 함수 이름 설정
+#     observation_name = function_name or "Bedrock Converse"
+    
+#     # 함수를 직접 호출하는 대신, 먼저 데코레이터를 동적으로 적용
+#     # 이렇게 하면 observe에서 사용하는
+#     # 장식된 함수가 매번 새롭게 생성됩니다
+#     decorated_func = observe(as_type="generation", name=observation_name)(wrapped_bedrock_converse)
+    
+#     # 이제 장식된 함수 호출
+#     response_text = decorated_func(
+#         modelId=model_id,
+#         messages=usr_prompt,
+#         system=sys_prompt,
+#         inferenceConfig={"maxTokens":4096,"temperature": 0.0, "topP": 0.1},
+#         additionalModelRequestFields={"top_k":1}
+#     )
+
+#     return response_text
