@@ -121,12 +121,6 @@ session = boto3.session.Session()
 region_name = session.region_name
 sql_search_client, table_search_client, sql_retriever, table_retriever = init_search_resources(region_name, k=5)
 
-# boto3_client = init_boto3_client(region_name)
-# llm_model = "us.amazon.nova-pro-v1:0"
-# llm_model = "anthropic.claude-3-sonnet-20240229-v1:0"
-
-# llm_model = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
-
 
 
 ######################################################       
@@ -242,24 +236,32 @@ def wrapped_bedrock_converse(**kwargs):
         langfuse_context.update_current_observation(level="ERROR", status_message=error_message)
         print(error_message)
         return
+
+    
  
   # 3. extract response metadata
   # Langfuse에 출력 텍스트, 토큰 사용량, 응답 메타데이터를 기록합니다.
-    response_text = response["output"]["message"]["content"][0]["text"]
-
-    langfuse_context.update_current_observation(
-    output=response_text,
-
-    usage_details={
-        "input": response["usage"]["inputTokens"],
-        "output": response["usage"]["outputTokens"],
-        "total": response["usage"]["totalTokens"]
-        },
-        metadata={
-            "ResponseMetadata": response["ResponseMetadata"],
-        }
-    )
-
+    try:
+        response_text = response["output"]["message"]["content"][0]["text"]
+    
+        langfuse_context.update_current_observation(
+        output=response_text,
+    
+        usage_details={
+            "input": response["usage"]["inputTokens"],
+            "output": response["usage"]["outputTokens"],
+            "total": response["usage"]["totalTokens"]
+            },
+            metadata={
+                "ResponseMetadata": response["ResponseMetadata"],
+            }
+        )
+    except (ClientError, Exception) as e:
+        print("## response: \n", response) 
+        error_message = f"ERROR: Can't parse:  Reason: {e}"
+        langfuse_context.update_current_observation(level="ERROR", status_message=error_message)
+        print(error_message)
+        return error_message
 
     return response_text
 
@@ -303,22 +305,3 @@ def converse_with_bedrock_langfuse(sys_prompt, usr_prompt, model_id, function_na
 
     return response_text
 
-# def converse_with_bedrock_langfuse(sys_prompt, usr_prompt, model_id, function_name=None):
-#     # 기본 함수 이름 설정
-#     observation_name = function_name or "Bedrock Converse"
-    
-#     # 함수를 직접 호출하는 대신, 먼저 데코레이터를 동적으로 적용
-#     # 이렇게 하면 observe에서 사용하는
-#     # 장식된 함수가 매번 새롭게 생성됩니다
-#     decorated_func = observe(as_type="generation", name=observation_name)(wrapped_bedrock_converse)
-    
-#     # 이제 장식된 함수 호출
-#     response_text = decorated_func(
-#         modelId=model_id,
-#         messages=usr_prompt,
-#         system=sys_prompt,
-#         inferenceConfig={"maxTokens":4096,"temperature": 0.0, "topP": 0.1},
-#         additionalModelRequestFields={"top_k":1}
-#     )
-
-#     return response_text
