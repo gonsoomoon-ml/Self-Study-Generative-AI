@@ -18,3 +18,15 @@ SELECT * FROM Invoice WHERE Total > 10;
 SELECT * FROM Track WHERE Milliseconds > 500000;
 SELECT * FROM InvoiceLine WHERE Quantity > 1;
 SELECT * FROM Customer WHERE Company IS NOT NULL;
+SELECT 
+    e.EmployeeId,
+    e.FirstName || ' ' || e.LastName AS EmployeeName,
+    SUM(i.Total) AS TotalSales,
+    COUNT(DISTINCT c.CustomerId) AS CustomerCount
+FROM Employee e
+JOIN Customer c ON e.EmployeeId = c.SupportRepId
+JOIN Invoice i ON c.CustomerId = i.CustomerId
+WHERE i.InvoiceDate >= DATE('now', '-3 month')
+GROUP BY e.EmployeeId, e.FirstName, e.LastName
+ORDER BY TotalSales DESC
+LIMIT 5;

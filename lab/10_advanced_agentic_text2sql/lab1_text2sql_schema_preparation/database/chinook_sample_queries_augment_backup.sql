@@ -45,7 +45,6 @@ SELECT MIN(UnitPrice) FROM Track;
 SELECT COUNT(DISTINCT Country) FROM Customer;
 SELECT COUNT(DISTINCT BillingCountry) FROM Invoice;
 SELECT SUM(Bytes) / 1024 / 1024 AS TotalMegabytes FROM Track;
-
 -- 그룹화 쿼리
 SELECT AlbumId, COUNT(*) AS TrackCount FROM Track GROUP BY AlbumId;
 SELECT AlbumId, SUM(Milliseconds) / 60000 AS DurationMinutes FROM Track GROUP BY AlbumId;
@@ -57,7 +56,6 @@ SELECT BillingCountry, SUM(Total) AS TotalSales FROM Invoice GROUP BY BillingCou
 SELECT BillingCity, COUNT(*) AS InvoiceCount FROM Invoice GROUP BY BillingCity ORDER BY InvoiceCount DESC;
 SELECT MediaTypeId, COUNT(*) AS TrackCount FROM Track GROUP BY MediaTypeId;
 SELECT CustomerId, COUNT(*) AS InvoiceCount, SUM(Total) AS TotalSpent FROM Invoice GROUP BY CustomerId ORDER BY TotalSpent DESC LIMIT 10;
-
 -- JOIN 쿼리
 SELECT a.Title, ar.Name AS Artist FROM Album a JOIN Artist ar ON a.ArtistId = ar.ArtistId;
 SELECT t.Name AS TrackName, a.Title AS AlbumTitle FROM Track t JOIN Album a ON t.AlbumId = a.AlbumId;
@@ -69,7 +67,6 @@ SELECT il.InvoiceLineId, t.Name AS TrackName FROM InvoiceLine il JOIN Track t ON
 SELECT e.FirstName, e.LastName, c.FirstName AS CustomerFirstName, c.LastName AS CustomerLastName FROM Employee e JOIN Customer c ON e.EmployeeId = c.SupportRepId;
 SELECT p.Name AS PlaylistName, t.Name AS TrackName FROM Playlist p JOIN PlaylistTrack pt ON p.PlaylistId = pt.PlaylistId JOIN Track t ON pt.TrackId = t.TrackId;
 SELECT i.InvoiceId, c.Email, c.FirstName, c.LastName FROM Invoice i JOIN Customer c ON i.CustomerId = c.CustomerId WHERE i.Total > 10;
-
 -- 서브쿼리
 SELECT * FROM Album WHERE ArtistId = (SELECT ArtistId FROM Artist WHERE Name = 'Iron Maiden');
 SELECT * FROM Track WHERE GenreId = (SELECT GenreId FROM Genre WHERE Name = 'Jazz');
