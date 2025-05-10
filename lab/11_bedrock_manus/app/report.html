@@ -1,0 +1,374 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>아마존 판매 데이터 분석 및 마케팅 인사이트</title>
+    <style>
+        body {
+            font-family: 'Nanum Gothic', Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 {
+            color: #0066cc;
+            text-align: center;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #0066cc;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #0066cc;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #ddd;
+            margin-top: 40px;
+        }
+        h3 {
+            color: #444;
+            margin-top: 25px;
+        }
+        .section {
+            margin-bottom: 40px;
+            text-align: justify;
+        }
+        .insight-box {
+            background-color: #f9f9f9;
+            border-left: 4px solid #0066cc;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .recommendation-box {
+            background-color: #f0f7ff;
+            border-left: 4px solid #00cc66;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 20px auto;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .image-container {
+            margin: 30px 0;
+            text-align: center;
+        }
+        .image-caption {
+            font-style: italic;
+            text-align: center;
+            margin-top: 10px;
+            color: #666;
+        }
+        .chart-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+        .chart-col {
+            flex: 0 0 48%;
+            margin-bottom: 20px;
+        }
+        @media (max-width: 768px) {
+            .chart-col {
+                flex: 0 0 100%;
+            }
+        }
+        .footer {
+            margin-top: 50px;
+            text-align: center;
+            font-size: 0.9em;
+            color: #666;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>아마존 판매 데이터 분석 및 마케팅 인사이트</h1>
+    <p style="text-align: right;">작성일: 2025-05-10</p>
+    
+    <div class="section">
+        <h2>Executive Summary</h2>
+        <p>본 보고서는 아마존 판매 데이터를 분석하여 주요 마케팅 인사이트를 추출한 결과입니다. 총 121,180건의 판매 데이터를 분석하여 시간별 판매 트렌드, 카테고리별 성과, 지역별 매출 현황, 고객 구매 패턴 등을 파악했습니다. 분석 결과를 통해 다음과 같은 주요 마케팅 인사이트를 도출했습니다.</p>
+        <div class="insight-box">
+            <h3>주요 마케팅 인사이트 요약</h3>
+            <ul>
+                <li>시간 패턴: 주말, 특히 <strong>일요일</strong>에 가장 높은 매출과 주문량을 기록</li>
+                <li>제품 카테고리: <strong>Set 카테고리</strong>가 전체 매출의 가장 큰 비중을 차지</li>
+                <li>지역: <strong>Maharashtra, Karnataka, Telangana</strong> 주에서 가장 높은 매출 발생</li>
+                <li>도시: <strong>Bengaluru, Hyderabad, Mumbai</strong>가 주요 매출 발생 도시</li>
+                <li>사이즈 선호도: <strong>M > L > XL > XXL > S</strong> 순으로 매출 기여도 높음</li>
+                <li>고객 유형: <strong>B2C</strong> 거래가 전체의 99.3%를 차지</li>
+                <li>파레토 원칙: 상위 23.6%의 상품이 전체 매출의 <strong>80%</strong>를 담당</li>
+                <li>배송 서비스: <strong>Expedited</strong> 배송이 전체 주문의 68.7% 차지</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>1. 데이터 개요</h2>
+
+        <p>데이터셋 기본 정보:<br>- 데이터 크기: 128975행 x 24열<br>- 컬럼 목록: index, Order ID, Date, Status, Fulfilment, Sales Channel , ship-service-level, Style, SKU, Category, Size, ASIN, Courier Status, Qty, currency, Amount, ship-city, ship-state, ship-postal-code, ship-country, promotion-ids, B2B, fulfilled-by, Unnamed: 22<br>- 데이터 타입:<br>index                   int64<br>Order ID               object<br>Date                   object<br>Status                 object<br>Fulfilment             object<br>Sales Channel          object<br>ship-service-level     object<br>Style                  object<br>SKU                    object<br>Category               object<br>Size                   object<br>ASIN                   object<br>Courier Status         object<br>Qty                     int64<br>currency               object<br>Amount                float64<br>ship-city              object<br>ship-state             object<br>ship-postal-code      float64<br>ship-country           object<br>promotion-ids          object<br>B2B                      bool<br>fulfilled-by           object<br>Unnamed: 22            object<br><br>결측치 현황:<br>index                     0<br>Order ID                  0<br>Date                      0<br>Status                    0<br>Fulfilment                0<br>Sales Channel             0<br>ship-service-level        0<br>Style                     0<br>SKU                       0<br>Category                  0<br>Size                      0<br>ASIN                      0<br>Courier Status         6872<br>Qty                       0<br>currency               7795<br>Amount                 7795<br>ship-city                33<br>ship-state               33<br>ship-postal-code         33<br>ship-country             33<br>promotion-ids         49153<br>B2B                       0<br>fulfilled-by          89698<br>Unnamed: 22           49050<br><br>전처리 작업 내용:<br>1. 불필요한 컬럼 제거 (index, Unnamed: 22)<br>2. 날짜 형식 변환<br>3. 결측치 처리:<br>   - Courier Status: 'Not Available'로 대체<br>   - currency, Amount: 해당 행 제거<br>   - 배송 정보: 'Unknown'으로 대체<br>   - promotion-ids: 'No Promotion'으로 대체<br>   - fulfilled-by: 'Not Specified'로 대체<br><br>전처리 결과:<br>- 최종 데이터 크기: 121180행 x 22열<br>- 결측치 현황:<br>Order ID              0<br>Date                  0<br>Status                0<br>Fulfilment            0<br>Sales Channel         0<br>ship-service-level    0<br>Style                 0<br>SKU                   0<br>Category              0<br>Size                  0<br>ASIN                  0<br>Courier Status        0<br>Qty                   0<br>currency              0<br>Amount                0<br>ship-city             0<br>ship-state            0<br>ship-postal-code      0<br>ship-country          0<br>promotion-ids         0<br>B2B                   0<br>fulfilled-by          0<br><br>기본 통계 정보:<br>                 Qty         Amount<br>count  121180.000000  121180.000000<br>mean        0.961231     648.561465<br>std         0.214354     281.211687<br>min         0.000000       0.000000<br>25%         1.000000     449.000000<br>50%         1.000000     605.000000<br>75%         1.000000     788.000000<br>max         8.000000    5584.000000<br><br>범주형 변수 고유값 개수:<br>Order ID: 113030, Status: 12, Fulfilment: 2, Sales Channel : 1, ship-service-level: 2, Style: 1373, SKU: 7157, Category: 9, Size: 11, ASIN: 7153, Courier Status: 3, currency: 1, ship-city: 8705, ship-state: 69, ship-postal-code: 9274, ship-country: 2, promotion-ids: 5788, fulfilled-by: 2</p>
+    
+        <h2>2. 시간에 따른 판매 트렌드 분석</h2>
+        <p>1. 일별 판매 트렌드 분석:<br>- 평균 일일 주문 수: 1417.31<br>- 최대 일일 주문 수: 2085 (날짜: 2022-05-03)<br>- 평균 일일 매출액: 863655.81<br>- 최대 일일 매출액: 1209364.17 (날짜: 2022-05-04)<br><br>2. 월별 판매 트렌드 분석:<br>- 평균 월간 주문 수: 32243.75<br>- 최대 월간 주문 수: 49067 (월: 2022-04)<br>- 평균 월간 매출액: 19648169.57<br>- 최대 월간 매출액: 28838708.32 (월: 2022-04)<br><br>3. 요일별 판매 패턴 분석:<br>- 주문 수가 가장 많은 요일: Sunday (19619 주문)<br>- 주문 수가 가장 적은 요일: Thursday (17069 주문)<br>- 매출액이 가장 높은 요일: Sunday (12029441.30)<br>- 매출액이 가장 낮은 요일: Thursday (10358594.27)<br><br>생성된 시각화 파일:<br>1. daily_sales_trend.png: 일별 주문 수와 매출액 추이<br>2. monthly_sales_trend.png: 월별 주문 수와 매출액 추이<br>3. weekday_sales_pattern.png: 요일별 주문 수와 매출액 패턴</p>
+        
+        <div class="chart-row">
+            <div class="chart-col">
+                <div class="image-container">
+                    <img src="./artifacts/daily_sales_trend.png" alt="일별 판매 트렌드">
+                    <div class="image-caption">일별 판매 트렌드 - 주문 수와 매출액</div>
+                </div>
+            </div>
+            <div class="chart-col">
+                <div class="image-container">
+                    <img src="./artifacts/monthly_sales_trend.png" alt="월별 판매 트렌드">
+                    <div class="image-caption">월별 판매 트렌드 - 주문 수와 매출액</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="image-container">
+            <img src="./artifacts/weekday_sales_pattern.png" alt="요일별 판매 패턴">
+            <div class="image-caption">요일별 판매 패턴 - 일요일이 가장 높은 매출과 주문량을 기록</div>
+        </div>
+        
+        <div class="insight-box">
+            <h3>시간 패턴 인사이트</h3>
+            <p>일요일은 매출과 주문 모두에서 가장 높은 실적을 보여줍니다. 주말에 전반적으로 판매가 증가하는 경향이 있으며, 특히 일요일의 매출이 ₹12,029,441.30으로 가장 높습니다. 이는 소비자들이 주말에 온라인 쇼핑을 더 많이 한다는 것을 의미하며, 주말에 집중적인 마케팅 활동과 프로모션을 진행하는 것이 효과적일 수 있습니다.</p>
+            <p>또한, 월별 분석 결과 2022년 4월이 가장 높은 매출(₹28,838,708.32)과 주문량(49,067건)을 기록했습니다. 계절적 요인이나 특별한 프로모션이 이러한 결과에 영향을 미쳤을 수 있으므로, 성공적인 판매 시기의 전략을 분석하여 다른 달에도 적용하는 것이 좋습니다.</p>
+        </div>
+        
+        <div class="recommendation-box">
+            <h3>시간 패턴 기반 추천 전략</h3>
+            <ol>
+                <li><strong>주말 마케팅 강화:</strong> 일요일과 토요일에 집중적으로 광고 예산을 배분하고, 주말 전용 할인 및 프로모션을 제공하세요.</li>
+                <li><strong>계절적 패턴 활용:</strong> 매출이 높았던 4월과 같은 성수기에 특별 이벤트와 프로모션을 계획하세요.</li>
+                <li><strong>타이밍 최적화:</strong> 요일별 매출 패턴을 고려하여 이메일 마케팅 및 소셜미디어 게시물의 발송 시간을 최적화하세요.</li>
+            </ol>
+        </div>
+    
+        <h2>3. 카테고리별/지역별 판매 분석</h2>
+        <p>1. 카테고리별 분석 결과:<br>- 최고 매출 카테고리: Set (₹39,204,124.03)<br>- 최저 매출 카테고리: Dupatta (₹915.00)<br>- 주문 수가 가장 많은 카테고리: Set (50,284 주문)<br>- 평균 주문금액이 가장 높은 카테고리: Set (₹779.65)<br><br>2. 지역별 분석 결과:<br>상위 5개 주(state):<br>            State  Total_Amount  Number_of_Orders<br>28    MAHARASHTRA   13335534.14             22260<br>23      KARNATAKA   10481114.37             17326<br>57      TELANGANA    6916615.65             11330<br>59  UTTAR PRADESH    6816642.08             10638<br>56     TAMIL NADU    6515650.11             11483<br><br>상위 5개 도시:<br>           City  Total_Amount  Number_of_Orders<br>776   BENGALURU    6849664.99             11217<br>2906  HYDERABAD    4946032.82              8074<br>4795     MUMBAI    3704461.80              6126<br>5393  NEW DELHI    3613874.78              5795<br>1466    CHENNAI    3098745.74              5421<br><br>생성된 시각화 파일:<br>1. category_sales.png: 카테고리별 총 매출액<br>2. category_order_amount.png: 카테고리별 주문 수 vs 평균 주문금액<br>3. top_10_states_sales.png: 상위 10개 주의 총 매출액<br>4. top_10_cities_sales.png: 상위 10개 도시의 총 매출액</p>
+        
+        <div class="chart-row">
+            <div class="chart-col">
+                <div class="image-container">
+                    <img src="./artifacts/category_sales.png" alt="카테고리별 매출">
+                    <div class="image-caption">카테고리별 총 매출액 - Set 카테고리가 가장 높은 매출 기록</div>
+                </div>
+            </div>
+            <div class="chart-col">
+                <div class="image-container">
+                    <img src="./artifacts/category_order_amount.png" alt="카테고리별 주문 수와 평균 주문금액">
+                    <div class="image-caption">카테고리별 주문 수 vs 평균 주문금액</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="chart-row">
+            <div class="chart-col">
+                <div class="image-container">
+                    <img src="./artifacts/top_10_states_sales.png" alt="상위 10개 주의 매출">
+                    <div class="image-caption">상위 10개 주(State)의 매출 - Maharashtra가 최고 매출 지역</div>
+                </div>
+            </div>
+            <div class="chart-col">
+                <div class="image-container">
+                    <img src="./artifacts/top_10_cities_sales.png" alt="상위 10개 도시의 매출">
+                    <div class="image-caption">상위 10개 도시의 매출 - Bengaluru, Hyderabad, Mumbai가 주요 도시</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="insight-box">
+            <h3>카테고리/지역 인사이트</h3>
+            <p>Set 카테고리는 ₹39,204,124.03의 매출로 전체 카테고리 중 가장 높은 성과를 보여주고 있으며, 주문 수(50,284건)와 평균 주문금액(₹779.65) 모두 최고 수준입니다. 이는 Set 제품이 고객에게 가장 인기 있는 제품군임을 나타냅니다.</p>
+            <p>지역별로는 Maharashtra 주가 ₹13,335,534.14의 매출로 1위를 차지하고 있으며, 그 뒤를 Karnataka와 Telangana가 따르고 있습니다. 도시별로는 Bengaluru(₹6,849,664.99), Hyderabad(₹4,946,032.82), Mumbai(₹3,704,461.80)가 주요 매출 발생 도시입니다.</p>
+        </div>
+        
+        <div class="recommendation-box">
+            <h3>카테고리/지역 기반 추천 전략</h3>
+            <ol>
+                <li><strong>Set 카테고리 강화:</strong> 가장 인기 있는 Set 제품군에 대한 투자를 늘리고, 다양한 옵션과 스타일을 제공하세요.</li>
+                <li><strong>지역별 맞춤 마케팅:</strong> Maharashtra, Karnataka, Telangana 주에 특화된 로컬 마케팅 캠페인을 개발하세요.</li>
+                <li><strong>주요 도시 타겟팅:</strong> Bengaluru, Hyderabad, Mumbai와 같은 핵심 도시에 집중적으로 광고 예산을 배분하세요.</li>
+                <li><strong>저성과 카테고리 개선:</strong> Dupatta와 같은 저성과 카테고리는 제품 라인업을 재검토하거나 프로모션을 통해 인지도를 높이는 전략이 필요합니다.</li>
+            </ol>
+        </div>
+    
+        <h2>4. 변수 간 상관관계 및 매출 기여도 분석</h2>
+        <p>1. 변수 간 상관관계 분석:<br>- Qty와 Amount의 상관계수: 0.0669<br><br>2. 매출 기여도 분석:<br>상위 5개 상품:<br>        Style  Total_Amount  Number_of_Orders<br>863   JNE3797    2933482.00              4224<br>302     J0230    1944948.48              1868<br>1240   SET268    1303923.56              1860<br>373     J0341    1275322.87              1630<br>111     J0003     981973.75              1627<br><br>파레토 분석 결과:<br>- 전체 매출의 80%를 차지하는 상품 수: 325개<br>- 전체 상품 중 비율: 23.6%<br><br>3. Size별 매출 분석:<br>상위 5개 사이즈:<br>   Size  Total_Amount  Number_of_Orders<br>6     M   13906754.37             22711<br>5     L   13234886.19             22132<br>8    XL   12464965.86             20876<br>10  XXL   10636288.45             18096<br>7     S   10629210.18             17090<br><br>생성된 시각화 파일:<br>1. correlation_heatmap.png: 변수 간 상관관계 히트맵<br>2. top_10_products_contribution.png: 상위 10개 상품의 매출 기여도<br>3. pareto_analysis.png: 상품별 매출 기여도의 파레토 분석<br>4. size_sales.png: Size별 총 매출액</p>
+        
+        <div class="image-container">
+            <img src="./artifacts/correlation_heatmap.png" alt="변수 간 상관관계">
+            <div class="image-caption">변수 간 상관관계 히트맵 - 수량과 금액 간 약한 상관관계(0.0669)</div>
+        </div>
+        
+        <div class="chart-row">
+            <div class="chart-col">
+                <div class="image-container">
+                    <img src="./artifacts/top_10_products_contribution.png" alt="상위 10개 상품의 매출 기여도">
+                    <div class="image-caption">상위 10개 상품의 매출 기여도</div>
+                </div>
+            </div>
+            <div class="chart-col">
+                <div class="image-container">
+                    <img src="./artifacts/pareto_analysis.png" alt="파레토 분석">
+                    <div class="image-caption">파레토 분석 - 상위 23.6%의 상품이 전체 매출의 80%를 차지</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="image-container">
+            <img src="./artifacts/size_sales.png" alt="Size별 매출">
+            <div class="image-caption">Size별 매출 - M, L, XL 사이즈가 가장 높은 매출 기여</div>
+        </div>
+        
+        <div class="insight-box">
+            <h3>매출 기여도 인사이트</h3>
+            <p>파레토 분석 결과, 전체 상품 중 23.6%(325개 상품)가 전체 매출의 80%를 차지하는 것으로 나타났습니다. 이는 전형적인 파레토 원칙(80/20 법칙)이 적용됨을 보여줍니다.</p>
+            <p>상위 5개 상품 중에서는 'JNE3797' 스타일이 ₹2,933,482.00의 매출로 가장 높은 기여를 하고 있습니다. 이 상품은 4,224건의 주문을 기록하여, 인기도와 매출 기여도가 모두 높은 핵심 상품입니다.</p>
+            <p>사이즈별로는 M(₹13,906,754.37), L(₹13,234,886.19), XL(₹12,464,965.86) 순으로 매출이 높으며, 이는 중간 사이즈의 인기가 높음을 시사합니다.</p>
+        </div>
+        
+        <div class="recommendation-box">
+            <h3>매출 기여도 기반 추천 전략</h3>
+            <ol>
+                <li><strong>핵심 상품 집중:</strong> 'JNE3797'과 같은 상위 판매 상품에 마케팅 및 재고 관리 리소스를 집중 투입하세요.</li>
+                <li><strong>사이즈 최적화:</strong> M, L, XL 사이즈의 재고를 충분히 확보하고, 재고 예측 모델을 개선하세요.</li>
+                <li><strong>롱테일 전략:</strong> 저매출 상품들은 묶음 판매나 특별 프로모션을 통해 매출 기여도를 높이는 전략을 고려하세요.</li>
+                <li><strong>크로스셀링:</strong> 고매출 상품 구매자에게 관련 상품을 추천하여 객단가를 높이세요.</li>
+            </ol>
+        </div>
+    
+        <h2>5. 고객 구매 패턴 분석</h2>
+        <p>1. 구매 금액 분석:<br>- 평균 구매 금액: ₹648.56<br>- 중앙값: ₹605.00<br>- 최소 구매 금액: ₹0.00<br>- 최대 구매 금액: ₹5584.00<br><br>2. 구매 수량 분석:<br>- 평균 구매 수량: 0.90<br>- 최대 구매 수량: 15<br>- 가장 흔한 구매 수량: 1 (115780 건)<br><br>3. B2B vs B2C 분석:<br>B2B:<br>- 주문 수: 871 (0.7%)<br>- 총 매출: ₹591,220.79 (0.8%)<br><br>B2C:<br>- 주문 수: 128,104 (99.3%)<br>- 총 매출: ₹78,001,457.51 (99.2%)<br><br>4. 배송 서비스 레벨별 분석:<br>  Service_Level  Number_of_Orders  Total_Amount<br>0     Expedited             88615    54285183.0<br>1      Standard             40360    24307495.3<br><br>5. 결제 통화 분석:<br>  Currency  Number_of_Orders  Total_Amount<br>0      INR            121180    78592678.3<br><br>생성된 시각화 파일:<br>1. purchase_amount_distribution.png: 구매 금액대별 분포<br>2. purchase_quantity_distribution.png: 구매 수량별 분포<br>3. b2b_vs_b2c_analysis.png: B2B vs B2C 분석<br>4. shipping_service_analysis.png: 배송 서비스 레벨별 분석</p>
+        
+        <div class="chart-row">
+            <div class="chart-col">
+                <div class="image-container">
+                    <img src="./artifacts/purchase_amount_distribution.png" alt="구매 금액 분포">
+                    <div class="image-caption">구매 금액 분포 - 평균 구매 금액 ₹648.56</div>
+                </div>
+            </div>
+            <div class="chart-col">
+                <div class="image-container">
+                    <img src="./artifacts/purchase_quantity_distribution.png" alt="구매 수량 분포">
+                    <div class="image-caption">구매 수량 분포 - 대부분의 주문이 단일 수량(1개)</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="chart-row">
+            <div class="chart-col">
+                <div class="image-container">
+                    <img src="./artifacts/b2b_vs_b2c_analysis.png" alt="B2B vs B2C 분석">
+                    <div class="image-caption">B2B vs B2C 분석 - B2C 거래가 99.3%를 차지</div>
+                </div>
+            </div>
+            <div class="chart-col">
+                <div class="image-container">
+                    <img src="./artifacts/shipping_service_analysis.png" alt="배송 서비스 레벨별 분석">
+                    <div class="image-caption">배송 서비스 레벨별 분석 - Expedited 배송이 68.7% 차지</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="insight-box">
+            <h3>구매 패턴 인사이트</h3>
+            <p>B2C 거래가 전체 주문의 99.3%(128,104건)를 차지하며, 매출의 99.2%(₹78,001,457.51)를 기여하고 있습니다. 이는 현 비즈니스 모델이 확실히 B2C 중심임을 보여줍니다.</p>
+            <p>구매 금액 분석 결과, 평균 구매 금액은 ₹648.56이며, 중앙값은 ₹605.00입니다. 대부분의 거래가 중저가 범위에서 이루어지고 있음을 알 수 있습니다.</p>
+            <p>주문 수량은 압도적으로 1개가 많으며(115,780건), 이는 고객들이 대량 구매보다는 필요한 개별 상품을 구매하는 경향이 있음을 시사합니다.</p>
+            <p>배송 서비스 레벨에서는 Expedited 배송이 전체 주문의 68.7%(88,615건)를 차지하며, 이는 고객들이 빠른 배송을 선호한다는 것을 보여줍니다.</p>
+        </div>
+        
+        <div class="recommendation-box">
+            <h3>구매 패턴 기반 추천 전략</h3>
+            <ol>
+                <li><strong>B2C 모델 최적화:</strong> B2C 고객에 초점을 맞춘 마케팅 전략과 고객 경험을 개발하세요.</li>
+                <li><strong>배송 서비스 개선:</strong> Expedited 배송의 높은 인기를 고려하여, 빠른 배송 옵션을 더욱 강화하고 배송 속도를 경쟁 우위로 활용하세요.</li>
+                <li><strong>번들 상품 개발:</strong> 단일 상품 구매가 주를 이루므로, 관련 상품을 묶은 번들 상품을 제공하여 객단가 상승을 유도하세요.</li>
+                <li><strong>가격 전략 최적화:</strong> ₹600~₹800 범위의 가격대가 가장 인기 있으므로, 이 범위 내에서 다양한 상품 옵션을 제공하세요.</li>
+            </ol>
+        </div>
+    
+    <div class="section">
+        <h2>6. 종합 마케팅 인사이트 및 제안</h2>
+        
+        <h3>핵심 마케팅 인사이트</h3>
+        <ol>
+            <li><strong>시간 패턴 활용:</strong> 주말, 특히 일요일에 판매가 집중되는 패턴을 활용하여 마케팅 활동을 최적화해야 합니다.</li>
+            <li><strong>제품 카테고리 최적화:</strong> Set 카테고리의 높은 인기도를 활용하고, 판매 실적이 저조한 카테고리는 개선이 필요합니다.</li>
+            <li><strong>지역별 타겟팅:</strong> Maharashtra, Karnataka, Telangana 주와 Bengaluru, Hyderabad, Mumbai 도시에 집중적인 마케팅 노력을 기울여야 합니다.</li>
+            <li><strong>80/20 법칙 적용:</strong> 상위 23.6%의 핵심 상품이 매출의 80%를 차지하므로, 이들 상품에 집중해야 합니다.</li>
+            <li><strong>사이즈 관리 최적화:</strong> M, L, XL 사이즈의 수요가 높으므로 이에 맞는 재고 관리가 필요합니다.</li>
+            <li><strong>B2C 중심 전략:</strong> B2C 거래가 99% 이상을 차지하므로 개인 고객 중심의 마케팅 전략이 중요합니다.</li>
+            <li><strong>빠른 배송 중요성:</strong> Expedited 배송의 인기가 높으므로 빠른 배송을 경쟁 우위로 활용해야 합니다.</li>
+            <li><strong>단일 상품 구매 패턴:</strong> 대부분의 주문이 단일 수량으로 이루어지므로 번들 상품이나 크로스셀링을 통한 객단가 향상이 필요합니다.</li>
+        </ol>
+        
+        <h3>전략적 마케팅 제안</h3>
+        <div class="recommendation-box">
+            <h4>1. 시간 기반 마케팅 전략</h4>
+            <ul>
+                <li>주말(특히 일요일) 전용 할인 및 프로모션 캠페인 실시</li>
+                <li>월별 판매 패턴을 고려한 시즌별 마케팅 캘린더 수립</li>
+                <li>주말에 타겟 광고 예산 증대 및 최적화</li>
+            </ul>
+            
+            <h4>2. 제품 포트폴리오 최적화</h4>
+            <ul>
+                <li>Set 카테고리의 다양성 확대 및 신제품 개발 투자</li>
+                <li>상위 10개 상품(예: JNE3797, J0230)의 유사 제품군 확장</li>
+                <li>M, L, XL 사이즈 위주의 재고 관리 시스템 최적화</li>
+                <li>저성과 카테고리(예: Dupatta) 재평가 및 리포지셔닝</li>
+            </ul>
+            
+            <h4>3. 지역 타겟팅 전략</h4>
+            <ul>
+                <li>Maharashtra, Karnataka, Telangana 주 대상 지역 특화 마케팅 캠페인 개발</li>
+                <li>Bengaluru, Hyderabad, Mumbai 도시에 집중된 지역 광고 및 프로모션</li>
+                <li>상위 지역에 물류 최적화 및 배송 서비스 품질 향상</li>
+                <li>매출이 저조한 지역에 대한 마켓 침투 전략 수립</li>
+            </ul>
+            
+            <h4>4. 고객 경험 향상 전략</h4>
+            <ul>
+                <li>Expedited 배송의 서비스 품질 유지 및 향상</li>
+                <li>관련 상품 추천 알고리즘 개선으로 크로스셀링 및 업셀링 강화</li>
+                <li>번들 상품 및 세트 할인을 통한 객단가 상승 유도</li>
+                <li>B2C 고객 맞춤형 충성도 프로그램 개발</li>
+            </ul>
+            
+            <h4>5. 데이터 기반 의사결정 강화</h4>
+            <ul>
+                <li>실시간 판매 데이터 모니터링 시스템 구축</li>
+                <li>A/B 테스트를 통한 마케팅 캠페인 최적화</li>
+                <li>고객 세그멘테이션을 통한 타겟 마케팅 강화</li>
+                <li>핵심 성과 지표(KPI) 대시보드 개발로 지속적인 성과 관리</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>© 2025 아마존 판매 데이터 분석 보고서 | 작성일: 2025-05-10</p>
+    </div>
+</body>
+</html>
