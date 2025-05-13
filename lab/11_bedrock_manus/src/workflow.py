@@ -6,13 +6,17 @@ from src.utils.common_utils import get_message_from_string
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,  # Default level is INFO
+    level=logging.DEBUG,  # Default level is INFO
+    # level=logging.INFO,  # Default level is INFO
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
 def enable_debug_logging():
     """Enable debug level logging for more detailed execution information."""
     logging.getLogger(__name__).setLevel(logging.DEBUG)
+
+enable_debug_logging()
+
 
 # 로거 설정을 전역으로 한 번만 수행
 logger = logging.getLogger(__name__)
@@ -23,7 +27,34 @@ handler = logging.StreamHandler()
 formatter = logging.Formatter('\n%(levelname)s [%(name)s] %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
-logger.setLevel(logging.INFO)  # 기본 레벨은 INFO로 설정
+# logger.setLevel(logging.INFO)  # 기본 레벨은 INFO로 설정
+logger.setLevel(logging.DEBUG) 
+
+from dotenv import load_dotenv
+import os
+from langfuse.callback import CallbackHandler
+import os
+
+########################################################
+# Add by Gonsoo
+########################################################
+def get_langfuse_handler():
+    # .env 파일에서 환경 변수 로드
+    load_dotenv("../.env")
+
+
+    langfuse_handler = CallbackHandler(
+        public_key=os.environ.get('LANGFUSE_PUBLIC_KEY'),
+        secret_key=os.environ.get('LANGFUSE_SECRET_KEY'),
+        host=os.environ.get('LANGFUSE_HOST'),
+    )
+
+    # connection test
+    print("## Langfuse 인증 테스트:", langfuse_handler.auth_check())    
+
+    return langfuse_handler
+########################################################
+
 
 class Colors:
     BLUE = '\033[94m'
@@ -39,6 +70,9 @@ graph = build_graph()
 
 def get_graph():
     return graph
+
+
+from langchain_core.runnables import RunnableConfig
 
 def run_agent_workflow(user_input: str, debug: bool = False):
     """Run the agent workflow with the given user input.
@@ -69,7 +103,12 @@ def run_agent_workflow(user_input: str, debug: bool = False):
     user_prompts = user_prompts.format(**context)
     messages = [get_message_from_string(role="user", string=user_prompts, imgs=[])]
 
-        
+    langfuse_handler = get_langfuse_handler()
+    config = RunnableConfig(
+                recursion_limit=3, 
+                callbacks=[langfuse_handler]  # 여기에 Langfuse 핸들러 추가}    
+    )
+
     result = graph.invoke(
         input={
             # Constants
@@ -81,9 +120,7 @@ def run_agent_workflow(user_input: str, debug: bool = False):
             "search_before_planning": False,
             "request": user_input
         },
-        config={
-            "recursion_limit": 100
-        }
+        config=config    
     )
     logger.debug(f"{Colors.RED}Final workflow state: {result}{Colors.END}")
     logger.info(f"{Colors.GREEN}===== Workflow completed successfully ====={Colors.END}")

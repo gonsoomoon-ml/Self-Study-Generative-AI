@@ -191,6 +191,186 @@ class bedrock_chain:
             else: return other(result)
         return bedrock_chain(combined)
 
+class bedrock_utils_tokens():
+
+    @staticmethod
+    def get_message_from_string(role, string, img=None):
+        
+        if not string or string.strip() == "":
+            string = "Default message"  # 또는 에러 처리
+
+        message = {
+            "role": role,
+            "content": [{"text": dedent(string)}]
+        }
+        if img is not None:
+            img_message = {
+                "image": {
+                    "format": 'png',
+                    "source": {"bytes": img}
+                }
+            }
+            message["content"].append(img_message)
+
+        return message
+        
+    @staticmethod
+    def get_system_prompt(system_prompts, prompt_cache=False, cache_type="defalut"): # ephemeral/defalut
+        if prompt_cache: return [{"text": system_prompts}, {"cachePoint": {"type": cache_type}}]
+        else: return [{"text": system_prompts}]
+
+    @staticmethod
+    def converse_api(**kwargs):
+
+        llm = kwargs["llm"]
+        model_id = llm.model_id
+        bedrock_client = llm.bedrock_client
+        inference_config = llm.inference_config
+        additional_model_request_fields = llm.additional_model_request_fields
+        stream = llm.stream
+
+        print("### stream: ", stream)
+        
+
+        messages = kwargs["messages"]
+        system_prompts = kwargs.get("system_prompts", None)
+        tool_config = kwargs.get("tool_config", None)
+        verbose = kwargs.get("verbose", False)
+        args = {}
+
+        if system_prompts != None: args["system"] = system_prompts
+        if inference_config != None: args["inferenceConfig"] = inference_config
+        if additional_model_request_fields != None: args["additionalModelRequestFields"] = additional_model_request_fields
+        if tool_config != None:
+            args["toolConfig"] = tool_config
+            #print ('args["toolConfig"]', args["toolConfig"])
+        args["messages"], args["modelId"] = messages, model_id
+
+        if stream:
+            response = bedrock_client.converse_stream(**args)
+        else:
+            response = bedrock_client.converse(**args)
+            
+        return {"response": response, "verbose": verbose, "stream": stream, "callback": llm.callbacks[0]}
+
+    @staticmethod
+    def outputparser(**kwargs):
+
+        response = kwargs["response"]
+        verbose = kwargs.get("verbose", False)
+        stream = kwargs["stream"]
+        callback = kwargs["callback"]
+        
+        output = {"text": "","reasoning": "", "signature": "", "toolUse": None, "token_usage": None, "latency": None}
+        message = {"content": []}
+                
+        if not stream:
+
+            try:
+                message = response['output']['message']
+                output["stop_reason"] = response.get("stopReason", None)
+                
+                for content in message['content']:
+                                        
+                    if content.get("reasoningContent"):
+                        output["reasoning"] = content["reasoningContent"]["reasoningText"]["text"]
+                        
+                    if content.get("text"):
+                        output["text"] = content['text']
+                    
+                    if content.get("toolUse"):
+                        output["toolUse"] = content['toolUse']
+                        
+                    token_usage = response['usage']
+                    # print(f"Input tokens:  {token_usage['inputTokens']}")
+                    # print(f"Output tokens:  {token_usage['outputTokens']}")
+                    # print(f"Total tokens:  {token_usage['totalTokens']}")
+                    # print(f"Stop reason: {response['stopReason']}")
+                    output["token_usage"] = {
+                        "inputTokens": token_usage['inputTokens'],
+                        "outputTokens": token_usage['outputTokens'],
+                        "totalTokens": token_usage['totalTokens']
+                    }
+
+                if verbose:
+                    for content in message['content']:
+                        if content.get("text"):
+                            print(f"Text: {content['text']}")
+                        elif content.get("toolUse"):
+                            print(f"toolUseId: {content['toolUse']['toolUseId']}")
+                            print(f"name: {content['toolUse']['name']}")
+                            print(f"input: {content['toolUse']['input']}")
+
+            except ClientError as err:
+                message = err.response['Error']['Message']
+                print("A client error occurred: %s", message)
+        else:
+            try:
+                tool_use = {}
+                stream_response = response["stream"]
+
+                for event in stream_response:
+                                        
+                    if 'messageStart' in event:
+                        message['role'] = event['messageStart']['role']
+                        if verbose: print(f"\nRole: {event['messageStart']['role']}")
+                    elif 'contentBlockStart' in event:
+                        tool = event['contentBlockStart']['start']['toolUse']
+                        tool_use['toolUseId'] = tool['toolUseId']
+                        tool_use['name'] = tool['name']
+                    elif 'contentBlockDelta' in event:
+                        delta = event['contentBlockDelta']['delta']
+                        if "reasoningContent" in delta:
+                            if "text" in delta["reasoningContent"]:
+                                output["reasoning"] += delta["reasoningContent"]["text"]
+                                #print("\033[94m" + reasoning_text + "\033[0m", end="")
+                                print("\033[94m" + delta["reasoningContent"]["text"] + "\033[0m", end="")
+                            elif 'signature' in delta["reasoningContent"]:
+                                output["signature"] += delta["reasoningContent"]["signature"]
+                            else:
+                                print("") 
+                        if 'toolUse' in delta:
+                            if 'input' not in tool_use: tool_use['input'] = ''
+                            tool_use['input'] += delta['toolUse']['input']
+                            #print("\033[92m" + delta['toolUse']['input'] + "\033[0m", end="")
+                            #logger.info(f"{Colors.BOLD}\n{delta['toolUse']['input']}{Colors.END}")
+                            #callback.on_llm_new_token(delta['toolUse']['input'])                           
+                        elif 'text' in delta:
+                            output["text"] += delta['text']
+                            callback.on_llm_new_token(delta['text'])                            
+                    elif 'contentBlockStop' in event:
+                        if 'input' in tool_use:
+                            tool_use['input'] = json.loads(tool_use['input'])
+                            message['content'].append({'toolUse': tool_use})
+                            output["toolUse"] = {'toolUse': tool_use}
+                            tool_use = {}
+                        else:
+                            if output["text"] != "":
+                                message['content'].append({'text': output["text"]})
+                            if output["reasoning"] != "":
+                                message['content'].append({'reasoningContent': {"reasoningText": {"text": output["reasoning"], "signature": output["signature"]}}})
+                    elif 'messageStop' in event:
+                        stop_reason = event['messageStop']['stopReason']
+                        output["stop_reason"] = stop_reason
+                        print(f"\nStop reason: {event['messageStop']['stopReason']}")
+                if 'metadata' in event:
+                    metadata = event['metadata']
+                    if 'usage' in metadata:
+                        output["token_usage"] = {
+                            "inputTokens": metadata['usage']['inputTokens'],
+                            "outputTokens": metadata['usage']['outputTokens'],
+                            "totalTokens": metadata['usage']['totalTokens']
+                        }
+                    if 'metrics' in event['metadata']:
+                        print(
+                            f"Latency: {metadata['metrics']['latencyMs']} milliseconds")
+                        output["latency"] = metadata['metrics']['latencyMs']
+            except ClientError as err:
+                message = err.response['Error']['Message']
+                print("A client error occurred: %s", message)
+        
+        return output, message
+
 class bedrock_utils():
 
     @staticmethod
@@ -228,6 +408,9 @@ class bedrock_utils():
         inference_config = llm.inference_config
         additional_model_request_fields = llm.additional_model_request_fields
         stream = llm.stream
+
+        print("### stream: ", stream)
+        
 
         messages = kwargs["messages"]
         system_prompts = kwargs.get("system_prompts", None)
@@ -372,7 +555,6 @@ class bedrock_utils():
                 print("A client error occurred: %s", message)
         
         return output, message
-
 
 
 

@@ -1,4 +1,4 @@
-import os
+import os, sys
 import json
 import pprint
 import logging
@@ -20,8 +20,9 @@ from textwrap import dedent
 from src.utils.common_utils import get_message_from_string
 
 llm_module = os.environ.get('LLM_MODULE', 'src.agents.llm')
-if llm_module == 'src.agents.llm_st': from src.agents.llm_st import get_llm_by_type, llm_call
-else: from src.agents.llm import get_llm_by_type, llm_call
+if llm_module == 'src.agents.llm_st': from src.agents.llm_st import get_llm_by_type, llm_call, llm_call_langfuse
+else: from src.agents.llm import get_llm_by_type, llm_call, llm_call_langfuse
+
 
 # 새 핸들러와 포맷터 설정
 logger = logging.getLogger(__name__)
@@ -29,11 +30,13 @@ logger.propagate = False  # 상위 로거로 메시지 전파 중지
 for handler in logger.handlers[:]:
     logger.removeHandler(handler)
 handler = logging.StreamHandler()
+# handler = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter('\n%(levelname)s [%(name)s] %(message)s')  # 로그 레벨이 동적으로 표시되도록 변경
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 # DEBUG와 INFO 중 원하는 레벨로 설정
 #logger.setLevel(logging.INFO)  # 기본 레벨은 INFO로 설정
+logger.setLevel(logging.DEBUG) 
 
 RESPONSE_FORMAT = "Response from {}:\n\n<response>\n{}\n</response>\n\n*Please execute the next step.*"
 FULL_PLAN_FORMAT = "Here is full plan :\n\n<full_plan>\n{}\n</full_plan>\n\n*Please consider this to select the next step.*"
@@ -174,7 +177,7 @@ def supervisor_node(state: State) -> Command[Literal[*TEAM_MEMBERS, "__end__"]]:
         }
     )
 
-def planner_node(state: State) -> Command[Literal["supervisor", "__end__"]]:
+def planner_node(state: State) -> Command[Literal["__end__"]]:
     """Planner node that generate the full plan."""
     logger.info(f"{Colors.GREEN}===== Planner generating full plan ====={Colors.END}")
     logger.info(f"{Colors.BLUE}===== Planner - Deep thinking mode: {state.get("deep_thinking_mode")} ====={Colors.END}")
@@ -190,8 +193,10 @@ def planner_node(state: State) -> Command[Literal["supervisor", "__end__"]]:
     messages[-1]["content"][-1]["text"] = '\n\n'.join([messages[-1]["content"][-1]["text"], FULL_PLAN_FORMAT.format(full_plan)])
     
     llm = get_llm_by_type(AGENT_LLM_MAP["planner"])    
-    llm.stream = True
-    llm_caller = llm_call(llm=llm, verbose=False, tracking=False)
+    #llm.stream = True
+    llm.stream = False
+    llm_caller = llm_call_langfuse(llm=llm, verbose=False, tracking=False)
+    # llm_caller = llm_call(llm=llm, verbose=False, tracking=False)
         
     if state.get("deep_thinking_mode"): llm = get_llm_by_type("reasoning")
     if state.get("search_before_planning"):
@@ -200,6 +205,11 @@ def planner_node(state: State) -> Command[Literal["supervisor", "__end__"]]:
         messages[-1]["content"][-1]["text"] += f"\n\n# Relative Search Results\n\n{json.dumps([{'title': elem['title'], 'content': elem['content']} for elem in searched_content], ensure_ascii=False)}"
     if AGENT_LLM_MAP["planner"] in ["reasoning"]: enable_reasoning = True
     else: enable_reasoning = False
+
+    logger.debug("########################################################")
+    logger.debug(f"\n{Colors.RED}Planner - system_prompts:\n{pprint.pformat(system_prompts, indent=2, width=100)}{Colors.END}")
+    logger.debug(f"\n{Colors.RED}Planner - messages:\n{pprint.pformat(messages, indent=2, width=100)}{Colors.END}")
+    logger.debug("########################################################")
 
     response, ai_message = llm_caller.invoke(
         agent_name="planner",
@@ -211,7 +221,7 @@ def planner_node(state: State) -> Command[Literal["supervisor", "__end__"]]:
     full_response = response["text"]
     logger.debug(f"\n{Colors.RED}Planner response:\n{pprint.pformat(full_response, indent=2, width=100)}{Colors.END}")
 
-    goto = "supervisor"
+    goto = "__end__"
         
     history = state.get("history", [])
     history.append({"agent":"planner", "message": full_response})
@@ -226,6 +236,104 @@ def planner_node(state: State) -> Command[Literal["supervisor", "__end__"]]:
         goto=goto,
     )
 
+# def planner_node(state: State) -> Command[Literal["supervisor", "__end__"]]:
+#     """Planner node that generate the full plan."""
+#     logger.info(f"{Colors.GREEN}===== Planner generating full plan ====={Colors.END}")
+#     logger.info(f"{Colors.BLUE}===== Planner - Deep thinking mode: {state.get("deep_thinking_mode")} ====={Colors.END}")
+#     logger.info(f"{Colors.BLUE}===== Planner - Search before planning: {state.get("search_before_planning")} ====={Colors.END}")
+#     logger.debug(f"\n{Colors.RED}Planner - current state messages:\n{pprint.pformat(state['messages'], indent=2, width=100)}{Colors.END}")
+#     prompt_cache, cache_type = AGENT_PROMPT_CACHE_MAP["planner"]
+#     if prompt_cache: logger.debug(f"{Colors.GREEN}Planner - Prompt Cache Enabled{Colors.END}")
+#     else: logger.debug(f"{Colors.GREEN}Planner - Prompt Cache Disabled{Colors.END}")
+#     system_prompts, messages = apply_prompt_template("planner", state, prompt_cache=prompt_cache, cache_type=cache_type)
+#     # whether to enable deep thinking mode
+       
+#     full_plan = state.get("full_plan", "")
+#     messages[-1]["content"][-1]["text"] = '\n\n'.join([messages[-1]["content"][-1]["text"], FULL_PLAN_FORMAT.format(full_plan)])
+    
+#     llm = get_llm_by_type(AGENT_LLM_MAP["planner"])    
+#     llm.stream = True
+#     llm_caller = llm_call(llm=llm, verbose=False, tracking=False)
+        
+#     if state.get("deep_thinking_mode"): llm = get_llm_by_type("reasoning")
+#     if state.get("search_before_planning"):
+#         searched_content = tavily_tool.invoke({"query": state["request"]})
+#         messages = deepcopy(messages)
+#         messages[-1]["content"][-1]["text"] += f"\n\n# Relative Search Results\n\n{json.dumps([{'title': elem['title'], 'content': elem['content']} for elem in searched_content], ensure_ascii=False)}"
+#     if AGENT_LLM_MAP["planner"] in ["reasoning"]: enable_reasoning = True
+#     else: enable_reasoning = False
+
+#     response, ai_message = llm_caller.invoke(
+#         agent_name="planner",
+#         messages=messages,
+#         system_prompts=system_prompts,
+#         enable_reasoning=enable_reasoning,
+#         reasoning_budget_tokens=8192
+#     )
+#     full_response = response["text"]
+#     logger.debug(f"\n{Colors.RED}Planner response:\n{pprint.pformat(full_response, indent=2, width=100)}{Colors.END}")
+
+#     goto = "supervisor"
+        
+#     history = state.get("history", [])
+#     history.append({"agent":"planner", "message": full_response})
+#     logger.info(f"{Colors.GREEN}===== Planner completed task ====={Colors.END}")
+#     return Command(
+#         update={
+#             "messages": [get_message_from_string(role="user", string=full_response, imgs=[])],
+#             "messages_name": "planner",
+#             "full_plan": full_response,
+#             "history": history
+#         },
+#         goto=goto,
+#     )
+
+
+def coordinator_node(state: State) -> Command[Literal["__end__"]]:
+    """Coordinator node that communicate with customers."""
+    logger.info(f"{Colors.GREEN}===== Coordinator talking...... ====={Colors.END}")
+    
+    prompt_cache, cache_type = AGENT_PROMPT_CACHE_MAP["coordinator"]
+    if prompt_cache:
+        logger.debug(f"{Colors.GREEN}Coordinator - Prompt Cache Enabled{Colors.END}")
+    else:
+        logger.debug(f"{Colors.GREEN}Coordinator - Prompt Cache Disabled{Colors.END}")
+    system_prompts, messages = apply_prompt_template("coordinator", state, prompt_cache=prompt_cache, cache_type=cache_type)
+
+    logger.debug("########################################################")
+    logger.debug(f"\n{Colors.RED}Coordinator - system_prompts:\n{pprint.pformat(system_prompts, indent=2, width=100)}{Colors.END}")
+    logger.debug(f"\n{Colors.RED}Coordinator - messages:\n{pprint.pformat(messages, indent=2, width=100)}{Colors.END}")
+    logger.debug("########################################################")
+
+    llm = get_llm_by_type(AGENT_LLM_MAP["coordinator"])    
+    llm.stream = True
+    # llm.stream = False # input/output token size 나오게 하기 위해.
+    # llm_caller = llm_call(llm=llm, verbose=False, tracking=False)
+    llm_caller = llm_call_langfuse(llm=llm, verbose=False, tracking=False)
+    if AGENT_LLM_MAP["coordinator"] in ["reasoning"]:
+        enable_reasoning = True
+    
+    response, ai_message = llm_caller.invoke(
+        agent_name="coordinator",
+        messages=messages,
+        system_prompts=system_prompts,
+        enable_reasoning=False,
+        reasoning_budget_tokens=8192
+    )
+    
+    logger.debug(f"\n{Colors.RED}Current state messages:\n{pprint.pformat(state['messages'], indent=2, width=100)}{Colors.END}")
+    logger.debug(f"\n{Colors.RED}Coordinator response:\n{pprint.pformat(response, indent=2, width=100)}{Colors.END}")
+
+    history = state.get("history", [])
+    history.append({"agent": "coordinator", "message": response["text"]})
+
+    logger.info(f"{Colors.GREEN}===== Coordinator completed task ====={Colors.END}")
+    return Command(
+        update={"history": history},
+        goto="__end__",
+    )
+
+
 def coordinator_node(state: State) -> Command[Literal["planner", "__end__"]]:
     """Coordinator node that communicate with customers."""
     logger.info(f"{Colors.GREEN}===== Coordinator talking...... ====={Colors.END}")
@@ -235,8 +343,12 @@ def coordinator_node(state: State) -> Command[Literal["planner", "__end__"]]:
     else: logger.debug(f"{Colors.GREEN}Coordinator - Prompt Cache Disabled{Colors.END}")
     system_prompts, messages = apply_prompt_template("coordinator", state, prompt_cache=prompt_cache, cache_type=cache_type)
     llm = get_llm_by_type(AGENT_LLM_MAP["coordinator"])    
-    llm.stream = True
-    llm_caller = llm_call(llm=llm, verbose=False, tracking=False)
+    # llm.stream = True
+    llm.stream = False # input/output token size 나오게 하기 위해.
+    # llm_caller = llm_call(llm=llm, verbose=False, tracking=False)
+    llm_caller = llm_call_langfuse(llm=llm, verbose=False, tracking=False)
+
+    # llm_caller = llm_call(llm=llm, verbose=False, tracking=False)
     if AGENT_LLM_MAP["coordinator"] in ["reasoning"]: enable_reasoning = True
     
     response, ai_message = llm_caller.invoke(
