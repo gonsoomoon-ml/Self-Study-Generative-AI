@@ -407,10 +407,7 @@ class bedrock_utils():
         bedrock_client = llm.bedrock_client
         inference_config = llm.inference_config
         additional_model_request_fields = llm.additional_model_request_fields
-        stream = llm.stream
-
-        print("### stream: ", stream)
-        
+        stream = llm.stream        
 
         messages = kwargs["messages"]
         system_prompts = kwargs.get("system_prompts", None)
@@ -425,6 +422,9 @@ class bedrock_utils():
             args["toolConfig"] = tool_config
             #print ('args["toolConfig"]', args["toolConfig"])
         args["messages"], args["modelId"] = messages, model_id
+
+
+        # print(" ## inference_config: \n", inference_config)
 
         if stream:
             response = bedrock_client.converse_stream(**args)

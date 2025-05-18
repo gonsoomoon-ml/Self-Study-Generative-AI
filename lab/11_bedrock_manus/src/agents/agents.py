@@ -129,7 +129,9 @@ class create_react_agent_langfuse():
         # self.llm_caller = llm_call(llm=self.llm, verbose=False, tracking=False)
         self.llm_caller = llm_call_langfuse(llm=self.llm, verbose=False, tracking=False)
         
-        if AGENT_LLM_MAP[self.agent_name] in ["reasoning"]: self.enable_reasoning = True
+        if AGENT_LLM_MAP[self.agent_name] in ["reasoning"]: 
+            # self.enable_reasoning = True
+            self.enable_reasoning = False
         else: self.enable_reasoning = False
         
         if self.agent_name == "researcher": self.tool_config = research_tool_config
@@ -162,7 +164,7 @@ class create_react_agent_langfuse():
             )
             messages.append(ai_message)    
 
-            print("## response in agent: \n", json.dumps(response, indent=2, ensure_ascii=False))
+            # print("## response in agent: \n", json.dumps(response, indent=2, ensure_ascii=False))
             
             # 도구 사용 요청 확인
             stop_reason = response.get("stop_reason") or response.get("stopReason")

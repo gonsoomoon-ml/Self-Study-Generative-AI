@@ -5,6 +5,7 @@ LLMType = Literal["basic", "reasoning", "vision"]
 CACHEType = Tuple[bool, Literal["default", "ephemeral"]]
 
 # Define agent-LLM mapping
+
 AGENT_LLM_MAP: dict[str, LLMType] = {
     "coordinator": "basic",
     "planner": "reasoning",

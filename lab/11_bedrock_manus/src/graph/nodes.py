@@ -210,7 +210,9 @@ def planner_node(state: State) -> Command[Literal["supervisor", "__end__"]]:
         searched_content = tavily_tool.invoke({"query": state["request"]})
         messages = deepcopy(messages)
         messages[-1]["content"][-1]["text"] += f"\n\n# Relative Search Results\n\n{json.dumps([{'title': elem['title'], 'content': elem['content']} for elem in searched_content], ensure_ascii=False)}"
-    if AGENT_LLM_MAP["planner"] in ["reasoning"]: enable_reasoning = True
+    if AGENT_LLM_MAP["planner"] in ["reasoning"]: 
+        # enable_reasoning = True
+        enable_reasoning = False
     else: enable_reasoning = False
 
     response, ai_message = llm_caller.invoke(

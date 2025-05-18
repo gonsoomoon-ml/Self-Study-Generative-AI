@@ -194,8 +194,7 @@ class llm_call_langfuse():
                 print(f'Info: Extended Thinking enabled increasing maxTokens from {self.llm.inference_config["maxTokens"]} to {adjusted_max_tokens} to exceed reasoning budget')
                 self.llm.inference_config["maxTokens"] = adjusted_max_tokens
 
-            self.llm.additional_model_request_fields = reasoning_config
-            self.llm.inference_config["temperature"] = 1.0
+            self.llm.inference_config["temperature"] = 1.0 # 추론 모드에서는 1.0 이외는 에러 발생 함.
 
         
         # 기본 함수 이름 설정
@@ -213,6 +212,8 @@ class llm_call_langfuse():
             messages=messages,
             tool_config=tool_config,
             modelId = self.llm.model_id,
+            inferenceConfig = self.llm.inference_config,
+            additionalModelRequestFields = self.llm.additional_model_request_fields,
             verbose=self.verbose
         )   
 
@@ -246,37 +247,79 @@ class llm_call_langfuse():
         }    
 
         modelId = kwargs_clone.pop('modelId', None)
+
         model_parameters = {
             **kwargs_clone.pop('inferenceConfig', {}),
-            **kwargs_clone.pop('additionalModelRequestFields', {}),
-            # "tool_config": tool_config,
         }
+        ##############################3
         # 1. Langfuse 관측 컨텍스트에 입력, 모델 ID, 파라미터, 기타 메타데이터를 업데이트합니다.
+        ##############################3
         langfuse_context.update_current_observation(
             input=input_data,
             model=modelId,
             model_parameters=model_parameters,
-            metadata=kwargs_clone
+            # metadata=kwargs_clone
         )
+        ##############################3
         # 2. model call with error handling
-        try:
+        ##############################3
+        import time
+        
+        max_attempts = 3
+        delay_seconds = 1
+        response = None
+        ai_message = None
+        last_error = None
+        
+        for attempt in range(max_attempts):
+            try:
+                response, ai_message = self.chain(
+                    llm=self.llm,
+                    system_prompts=system_prompts,
+                    messages=messages,
+                    tool_config=tool_config,
+                    verbose=self.verbose
+                )
+                # 성공하면 반복문 종료
+                break
+                
+            except (ClientError, Exception) as e:
+                last_error = e
+                error_message = f"Attempt {attempt + 1}/{max_attempts}: ERROR: Can't invoke '{modelId}'. Reason: {e}"
+                print(error_message)
+                
+                # 마지막 시도가 아니면 대기 후 재시도
+                if attempt < max_attempts - 1:
+                    time.sleep(delay_seconds)
+                    continue
+                
+                # 마지막 시도에서 실패한 경우
+                final_error_message = f"ERROR: Can't invoke '{modelId}' after {max_attempts} attempts. Last error: {last_error}"
+                langfuse_context.update_current_observation(level="ERROR", status_message=final_error_message)
+                print("Error in exception during calling chain: ", final_error_message)
+                return {"text": final_error_message}, {"error": final_error_message}
+    
+        
+        # try:
 
-            response, ai_message = self.chain( ## pipeline의 제일 처음 func의 argument를 입력으로 한다. 여기서는 converse_api의 arg를 쓴다.
-                llm=self.llm,
-                system_prompts=system_prompts,
-                messages=messages,
-                tool_config=tool_config,
-                verbose=self.verbose
-            )
+        #     response, ai_message = self.chain( ## pipeline의 제일 처음 func의 argument를 입력으로 한다. 여기서는 converse_api의 arg를 쓴다.
+        #         llm=self.llm,
+        #         system_prompts=system_prompts,
+        #         messages=messages,
+        #         tool_config=tool_config,
+        #         verbose=self.verbose
+        #     )
 
-        except (ClientError, Exception) as e:
-            error_message = f"ERROR: Can't invoke '{modelId}'. Reason: {e}"
-            langfuse_context.update_current_observation(level="ERROR", status_message=error_message)
-            print("Error in exception during calling chain: ", error_message)
-            # Always return a dict with 'text' key to avoid KeyError downstream
-            return {"text": error_message}, {"error": error_message}
+        # except (ClientError, Exception) as e:
+        #     error_message = f"ERROR: Can't invoke '{modelId}'. Reason: {e}"
+        #     langfuse_context.update_current_observation(level="ERROR", status_message=error_message)
+        #     print("Error in exception during calling chain: ", error_message)
+        #     # Always return a dict with 'text' key to avoid KeyError downstream
+        #     return {"text": error_message}, {"error": error_message}
 
+        ##############################3
         # 3. extract response metadata
+        ##############################3
         # Langfuse에 출력 텍스트, 토큰 사용량, 응답 메타데이터를 기록합니다.
         try:
             response_text = response["text"]
@@ -298,7 +341,7 @@ class llm_call_langfuse():
                 metadata={
                     "reasoning_text": reasoning_text, 
                     "toolUse_text": response.get("toolUse", {}),
-                    "ResponseMetadata": response.get("ResponseMetadata", {}),
+                    # "ResponseMetadata": response.get("ResponseMetadata", {}),
                 }
             )
 
