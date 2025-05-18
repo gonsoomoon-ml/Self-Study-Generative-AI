@@ -299,23 +299,6 @@ class llm_call_langfuse():
                 print("Error in exception during calling chain: ", final_error_message)
                 return {"text": final_error_message}, {"error": final_error_message}
     
-        
-        # try:
-
-        #     response, ai_message = self.chain( ## pipeline의 제일 처음 func의 argument를 입력으로 한다. 여기서는 converse_api의 arg를 쓴다.
-        #         llm=self.llm,
-        #         system_prompts=system_prompts,
-        #         messages=messages,
-        #         tool_config=tool_config,
-        #         verbose=self.verbose
-        #     )
-
-        # except (ClientError, Exception) as e:
-        #     error_message = f"ERROR: Can't invoke '{modelId}'. Reason: {e}"
-        #     langfuse_context.update_current_observation(level="ERROR", status_message=error_message)
-        #     print("Error in exception during calling chain: ", error_message)
-        #     # Always return a dict with 'text' key to avoid KeyError downstream
-        #     return {"text": error_message}, {"error": error_message}
 
         ##############################3
         # 3. extract response metadata

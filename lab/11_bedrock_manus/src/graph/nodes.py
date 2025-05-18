@@ -190,6 +190,9 @@ def planner_node(state: State) -> Command[Literal["supervisor", "__end__"]]:
     logger.info(f"{Colors.GREEN}===== Planner generating full plan ====={Colors.END}")
     logger.info(f"{Colors.BLUE}===== Planner - Deep thinking mode: {state.get("deep_thinking_mode")} ====={Colors.END}")
     logger.info(f"{Colors.BLUE}===== Planner - Search before planning: {state.get("search_before_planning")} ====={Colors.END}")
+
+    logger.debug(f"\n{Colors.RED}Planner state:\n{pprint.pformat(state, indent=2, width=100)}{Colors.END}")
+    
     logger.debug(f"\n{Colors.RED}Planner - current state messages:\n{pprint.pformat(state['messages'], indent=2, width=100)}{Colors.END}")
     prompt_cache, cache_type = AGENT_PROMPT_CACHE_MAP["planner"]
     if prompt_cache: logger.debug(f"{Colors.GREEN}Planner - Prompt Cache Enabled{Colors.END}")
@@ -241,49 +244,6 @@ def planner_node(state: State) -> Command[Literal["supervisor", "__end__"]]:
     )
 
 
-def coordinator_node(state: State) -> Command[Literal["__end__"]]:
-    """Coordinator node that communicate with customers."""
-    logger.info(f"{Colors.GREEN}===== Coordinator talking...... ====={Colors.END}")
-    
-    prompt_cache, cache_type = AGENT_PROMPT_CACHE_MAP["coordinator"]
-    if prompt_cache:
-        logger.debug(f"{Colors.GREEN}Coordinator - Prompt Cache Enabled{Colors.END}")
-    else:
-        logger.debug(f"{Colors.GREEN}Coordinator - Prompt Cache Disabled{Colors.END}")
-    system_prompts, messages = apply_prompt_template("coordinator", state, prompt_cache=prompt_cache, cache_type=cache_type)
-
-    logger.debug("########################################################")
-    logger.debug(f"\n{Colors.RED}Coordinator - system_prompts:\n{pprint.pformat(system_prompts, indent=2, width=100)}{Colors.END}")
-    logger.debug(f"\n{Colors.RED}Coordinator - messages:\n{pprint.pformat(messages, indent=2, width=100)}{Colors.END}")
-    logger.debug("########################################################")
-
-    llm = get_llm_by_type(AGENT_LLM_MAP["coordinator"])    
-    llm.stream = True
-    # llm.stream = False # input/output token size 나오게 하기 위해.
-    # llm_caller = llm_call(llm=llm, verbose=False, tracking=False)
-    llm_caller = llm_call_langfuse(llm=llm, verbose=False, tracking=False)
-    if AGENT_LLM_MAP["coordinator"] in ["reasoning"]:
-        enable_reasoning = True
-    
-    response, ai_message = llm_caller.invoke(
-        agent_name="coordinator",
-        messages=messages,
-        system_prompts=system_prompts,
-        enable_reasoning=False,
-        reasoning_budget_tokens=8192
-    )
-    
-    logger.debug(f"\n{Colors.RED}Current state messages:\n{pprint.pformat(state['messages'], indent=2, width=100)}{Colors.END}")
-    logger.debug(f"\n{Colors.RED}Coordinator response:\n{pprint.pformat(response, indent=2, width=100)}{Colors.END}")
-
-    history = state.get("history", [])
-    history.append({"agent": "coordinator", "message": response["text"]})
-
-    logger.info(f"{Colors.GREEN}===== Coordinator completed task ====={Colors.END}")
-    return Command(
-        update={"history": history},
-        goto="__end__",
-    )
 
 
 def coordinator_node(state: State) -> Command[Literal["planner", "__end__"]]:
@@ -310,6 +270,8 @@ def coordinator_node(state: State) -> Command[Literal["planner", "__end__"]]:
         enable_reasoning=False,
         reasoning_budget_tokens=8192
     )
+
+    logger.debug(f"\n{Colors.RED}Current state:\n{pprint.pformat(state, indent=2, width=100)}{Colors.END}")
     
     logger.debug(f"\n{Colors.RED}Current state messages:\n{pprint.pformat(state['messages'], indent=2, width=100)}{Colors.END}")
     logger.debug(f"\n{Colors.RED}Coordinator response:\n{pprint.pformat(response, indent=2, width=100)}{Colors.END}")
