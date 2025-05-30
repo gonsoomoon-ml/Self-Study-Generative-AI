@@ -125,13 +125,14 @@ class create_react_agent_langfuse():
 
         self.agent_name = kwargs["agent_name"]
         self.llm = get_llm_by_type(AGENT_LLM_MAP[self.agent_name])
+        print("## Agent Name: ", self.agent_name, " , ", AGENT_LLM_MAP[self.agent_name])
         self.llm.stream = True
         # self.llm_caller = llm_call(llm=self.llm, verbose=False, tracking=False)
         self.llm_caller = llm_call_langfuse(llm=self.llm, verbose=False, tracking=False)
         
         if AGENT_LLM_MAP[self.agent_name] in ["reasoning"]: 
-            # self.enable_reasoning = True
-            self.enable_reasoning = False
+            self.enable_reasoning = True
+            # self.enable_reasoning = False
         else: self.enable_reasoning = False
         
         if self.agent_name == "researcher": self.tool_config = research_tool_config
@@ -140,7 +141,8 @@ class create_react_agent_langfuse():
         elif self.agent_name == "reporter": self.tool_config = reporter_tool_config
             
         # 반복 대화 처리를 위한 설정
-        self.MAX_TURNS = 30  # 무한 루프 방지용 최대 턴 수
+        self.MAX_TURNS = 20  # 무한 루프 방지용 최대 턴 수
+        # self.MAX_TURNS = 12  # 무한 루프 방지용 최대 턴 수
         self.turn = 0
         self.final_response = False
         

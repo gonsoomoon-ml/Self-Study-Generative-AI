@@ -6,6 +6,28 @@ CACHEType = Tuple[bool, Literal["default", "ephemeral"]]
 
 # Define agent-LLM mapping
 
+# AGENT_LLM_MAP: dict[str, LLMType] = {
+#     "coordinator": "basic",
+#     "planner": "reasoning",
+#     "supervisor": "reasoning",
+#     "researcher": "basic",
+#     "coder": "basic",
+#     "browser": "vision",
+#     "reporter": "reasoning"
+# }
+
+# High Quality
+# AGENT_LLM_MAP: dict[str, LLMType] = {
+#     "coordinator": "basic",
+#     "planner": "reasoning",
+#     "supervisor": "reasoning",
+#     "researcher": "basic",
+#     "coder": "reasoning",
+#     "browser": "vision",
+#     "reporter": "reasoning"
+# }
+
+# Middle Quality
 AGENT_LLM_MAP: dict[str, LLMType] = {
     "coordinator": "basic",
     "planner": "reasoning",
@@ -15,6 +37,7 @@ AGENT_LLM_MAP: dict[str, LLMType] = {
     "browser": "vision",
     "reporter": "reasoning"
 }
+
 AGENT_PROMPT_CACHE_MAP: dict[bool, CACHEType] = {
     "coordinator": (False, "default"),
     "planner": (True, "default"),

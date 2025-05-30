@@ -266,7 +266,7 @@ class llm_call_langfuse():
         import time
         
         max_attempts = 3
-        delay_seconds = 1
+        delay_seconds = 60
         response = None
         ai_message = None
         last_error = None
@@ -323,8 +323,6 @@ class llm_call_langfuse():
                 },
                 metadata={
                     "reasoning_text": reasoning_text, 
-                    "toolUse_text": response.get("toolUse", {}),
-                    # "ResponseMetadata": response.get("ResponseMetadata", {}),
                 }
             )
 
@@ -369,6 +367,7 @@ def get_llm_by_type(llm_type: LLMType):
             # model_id=bedrock_info.get_model_id(model_name="Nova-Pro-CRI"),
             # model_id=bedrock_info.get_model_id(model_name="Claude-V3-Haiku"),
             # model_id=bedrock_info.get_model_id(model_name="Nova-Lite"),
+            # model_id=bedrock_info.get_model_id(model_name="Claude-V3-7-Sonnet-CRI"),
             model_id=bedrock_info.get_model_id(model_name="Claude-V3-5-V-2-Sonnet-CRI"),
             bedrock_client=boto3_bedrock,
             stream=True,

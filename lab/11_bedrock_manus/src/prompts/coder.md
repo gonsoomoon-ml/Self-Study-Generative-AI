@@ -63,6 +63,47 @@ print(df.head())
 print(df.describe())
 ```
 </data_analysis_requirements>
+
+<korean_pdf_requirements>
+- [CRITICAL] When creating PDFs that contain Korean text, proper Unicode font support MUST be implemented.
+
+- [REQUIRED] For ALL PDF generation with Korean text, follow these critical rules:
+
+  1. NEVER use default Western fonts directly with Korean text
+  2. ALWAYS find and add a Korean font with Unicode support (uni=True parameter is essential)
+  3. ALWAYS set the Korean font BEFORE outputting any Korean text
+  4. ALWAYS include error handling for font issues
+  5. ALWAYS provide a fallback method if primary PDF generation fails
+
+- [REQUIRED] PDF generation should follow this 3-step process:
+
+  STEP 1: Find Korean fonts on the system
+  - Use matplotlib's font manager to search for fonts with 'Nanum' in their name
+  - Check common system paths where Korean fonts might be installed
+  - Provide clear error messages if no Korean font is found
+
+  STEP 2: Create a custom PDF class that properly handles Korean text
+  - Extend the FPDF class with proper Korean text support
+  - Add methods to automatically handle font switching
+  - Include comprehensive error handling
+
+  STEP 3: Implement fallback mechanisms
+  - If FPDF fails, try using ReportLab library instead
+  - If no Korean fonts are available, provide clear warnings to the user
+
+- [CRITICAL] Implementation notes:
+  1. Always create a custom class extending FPDF for Korean support
+  2. Always use uni=True when adding Korean fonts
+  3. Always wrap Korean text operations in try-except blocks
+  4. Always implement a fallback to ReportLab if FPDF fails
+  5. Never use string formatting with curly braces in your code
+  6. Use string concatenation for log messages (error + " occurred")
+  7. Test with simple Korean text before generating complex documents
+
+- [ALTERNATIVES] If FPDF continues causing problems:
+  1. Switch completely to ReportLab which has better Unicode support
+  2. Consider using WeasyPrint or xhtml2pdf for HTML-to-PDF conversion
+</korean_pdf_requirements>
  
 <matplotlib_requirements>
 - [CRITICAL] Must declare one of these matplotlib styles when you use `matplotlib`:

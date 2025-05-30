@@ -138,6 +138,7 @@ def supervisor_node(state: State) -> Command[Literal[*TEAM_MEMBERS, "__end__"]]:
     else: logger.debug(f"{Colors.GREEN}Supervisor - Prompt Cache Disabled{Colors.END}")
     system_prompts, messages = apply_prompt_template("supervisor", state, prompt_cache=prompt_cache, cache_type=cache_type)    
     llm = get_llm_by_type(AGENT_LLM_MAP["supervisor"])
+    print("## AGENT_LLM_MAP[supervisor]: ", AGENT_LLM_MAP["supervisor"])
     llm.stream = True
     llm_caller = llm_call_langfuse(llm=llm, verbose=False, tracking=False)        
     # llm_caller = llm_call(llm=llm, verbose=False, tracking=False)
@@ -203,6 +204,7 @@ def planner_node(state: State) -> Command[Literal["supervisor", "__end__"]]:
     full_plan = state.get("full_plan", "")
     messages[-1]["content"][-1]["text"] = '\n\n'.join([messages[-1]["content"][-1]["text"], FULL_PLAN_FORMAT.format(full_plan)])
     
+    print("## AGENT_LLM_MAP[planner]: ", AGENT_LLM_MAP["planner"])
     llm = get_llm_by_type(AGENT_LLM_MAP["planner"])    
     llm.stream = True
     llm_caller = llm_call_langfuse(llm=llm, verbose=False, tracking=False)    
@@ -214,8 +216,8 @@ def planner_node(state: State) -> Command[Literal["supervisor", "__end__"]]:
         messages = deepcopy(messages)
         messages[-1]["content"][-1]["text"] += f"\n\n# Relative Search Results\n\n{json.dumps([{'title': elem['title'], 'content': elem['content']} for elem in searched_content], ensure_ascii=False)}"
     if AGENT_LLM_MAP["planner"] in ["reasoning"]: 
-        # enable_reasoning = True
-        enable_reasoning = False
+        enable_reasoning = True
+        # enable_reasoning = False
     else: enable_reasoning = False
 
     response, ai_message = llm_caller.invoke(
@@ -255,7 +257,8 @@ def coordinator_node(state: State) -> Command[Literal["planner", "__end__"]]:
     else: logger.debug(f"{Colors.GREEN}Coordinator - Prompt Cache Disabled{Colors.END}")
     system_prompts, messages = apply_prompt_template("coordinator", state, prompt_cache=prompt_cache, cache_type=cache_type)
     llm = get_llm_by_type(AGENT_LLM_MAP["coordinator"])    
-    # llm.stream = True
+    print("## AGENT_LLM_MAP[coordinator]: ", AGENT_LLM_MAP["coordinator"])
+    
     llm.stream = False # input/output token size 나오게 하기 위해.
     # llm_caller = llm_call(llm=llm, verbose=False, tracking=False)
     llm_caller = llm_call_langfuse(llm=llm, verbose=False, tracking=False)

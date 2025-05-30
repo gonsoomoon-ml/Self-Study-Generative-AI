@@ -105,7 +105,7 @@ def run_agent_workflow(user_input: str, debug: bool = False):
 
     langfuse_handler = get_langfuse_handler()
     config = RunnableConfig(
-                recursion_limit=3, 
+                recursion_limit=50, 
                 callbacks=[langfuse_handler]  # 여기에 Langfuse 핸들러 추가}    
     )
 

@@ -246,10 +246,14 @@ class bedrock_utils_tokens():
 
         print(" ## inference_config: \n", inference_config)
 
-        if stream:
-            response = bedrock_client.converse_stream(**args)
-        else:
-            response = bedrock_client.converse(**args)
+        try:
+            if stream:
+                response = bedrock_client.converse_stream(**args)
+            else:
+                response = bedrock_client.converse(**args)
+        except Exception as e:
+            print(f"Error occurred during bedrock client converse: {e}")
+            return {"response": None, "verbose": verbose, "stream": None, "callback": llm.callbacks[0]}
             
         return {"response": response, "verbose": verbose, "stream": stream, "callback": llm.callbacks[0]}
 

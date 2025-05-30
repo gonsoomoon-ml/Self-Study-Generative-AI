@@ -19,6 +19,8 @@ def apply_prompt_template(prompt_name: str, state: AgentState, prompt_cache=Fals
             "FULL_PLAN": state["full_plan"]
         }
     else: context = {"CURRENT_TIME": datetime.now().strftime("%a %b %d %Y %H:%M:%S %z")}
+    # print(" ## context: \n", context)    
+    
     system_prompts = system_prompts.format(**context)
     system_prompts = bedrock_utils.get_system_prompt(system_prompts=system_prompts, prompt_cache=prompt_cache, cache_type=cache_type) 
         
