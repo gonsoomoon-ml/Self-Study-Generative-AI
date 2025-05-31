@@ -25,14 +25,16 @@ def remove_artifact_folder(folder_path="./artifacts/"):
     else:
         print(f"'{folder_path}' 폴더가 존재하지 않습니다.")
 
-def execution(user_query):
+def execution(user_query, csv_file_path=None):
 
     remove_artifact_folder()
+    
     result = run_agent_workflow(
-        user_input=user_query,
-        debug=False
-    )
-
+            user_input=user_query,
+            csv_file_path=csv_file_path,
+            debug=False,
+        )
+    
     # Print the conversation history
     print("\n=== Conversation History ===")
     print ("result", result)

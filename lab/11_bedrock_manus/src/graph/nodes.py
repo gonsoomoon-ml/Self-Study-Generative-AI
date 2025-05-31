@@ -64,7 +64,7 @@ def research_node(state: State) -> Command[Literal["supervisor"]]:
     
 
     logger.info("Research agent completed task")
-    logger.debug(f"Research agent response: {result["content"][-1]["text"]}")
+    logger.debug(f"Research agent response: {result['content'][-1]['text']}")
 
     history = state.get("history", [])
     history.append({"agent":"researcher", "message": result["content"][-1]["text"]})
@@ -89,7 +89,7 @@ def code_node(state: State) -> Command[Literal["supervisor"]]:
     clues = '\n\n'.join([clues, CLUES_FORMAT.format("coder", result["content"][-1]["text"])])
 
     logger.debug(f"\n{Colors.RED}Coder - current state messages:\n{pprint.pformat(state['messages'], indent=2, width=100)}{Colors.END}")
-    logger.debug(f"\n{Colors.RED}Coder response:\n{pprint.pformat(result["content"][-1]["text"], indent=2, width=100)}{Colors.END}")
+    logger.debug(f"\n{Colors.RED}Coder response:\n{pprint.pformat(result['content'][-1]['text'], indent=2, width=100)}{Colors.END}")
 
     history = state.get("history", [])
     history.append({"agent":"coder", "message": result["content"][-1]["text"]})
@@ -114,7 +114,7 @@ def browser_node(state: State) -> Command[Literal["supervisor"]]:
     clues = state.get("clues", "")
     clues = '\n\n'.join([clues, CLUES_FORMAT.format("browser", result["content"][-1]["text"])])
     logger.info("Browser agent completed task")
-    logger.debug(f"Browser agent response: {result['content'][-1]["text"]}")
+    logger.debug(f"Browser agent response: {result['content'][-1]['text']}")
 
     history = state.get("history", [])
     history.append({"agent":"browser", "message": result["content"][-1]["text"]})
@@ -189,8 +189,8 @@ def supervisor_node(state: State) -> Command[Literal[*TEAM_MEMBERS, "__end__"]]:
 def planner_node(state: State) -> Command[Literal["supervisor", "__end__"]]:
     """Planner node that generate the full plan."""
     logger.info(f"{Colors.GREEN}===== Planner generating full plan ====={Colors.END}")
-    logger.info(f"{Colors.BLUE}===== Planner - Deep thinking mode: {state.get("deep_thinking_mode")} ====={Colors.END}")
-    logger.info(f"{Colors.BLUE}===== Planner - Search before planning: {state.get("search_before_planning")} ====={Colors.END}")
+    logger.info(f"{Colors.BLUE}===== Planner - Deep thinking mode: {state.get('deep_thinking_mode')} ====={Colors.END}")
+    logger.info(f"{Colors.BLUE}===== Planner - Search before planning: {state.get('search_before_planning')} ====={Colors.END}")
 
     logger.debug(f"\n{Colors.RED}Planner state:\n{pprint.pformat(state, indent=2, width=100)}{Colors.END}")
     

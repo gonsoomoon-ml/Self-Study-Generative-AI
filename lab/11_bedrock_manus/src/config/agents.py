@@ -30,8 +30,8 @@ CACHEType = Tuple[bool, Literal["default", "ephemeral"]]
 # Middle Quality
 AGENT_LLM_MAP: dict[str, LLMType] = {
     "coordinator": "basic",
-    "planner": "reasoning",
-    "supervisor": "reasoning",
+    "planner": "basic",
+    "supervisor": "basic",
     "researcher": "basic",
     "coder": "basic",
     "browser": "vision",
@@ -40,11 +40,21 @@ AGENT_LLM_MAP: dict[str, LLMType] = {
 
 AGENT_PROMPT_CACHE_MAP: dict[bool, CACHEType] = {
     "coordinator": (False, "default"),
-    "planner": (True, "default"),
-    "supervisor": (True, "default"),
+    "planner": (False, "default"),
+    "supervisor": (False, "default"),
     "researcher": (False, "default"),
     "coder": (False, "default"),
     "browser": (False, "default"),
-    "reporter": (True, "default")
+    "reporter": (False, "default")
 }
+
+# AGENT_PROMPT_CACHE_MAP: dict[bool, CACHEType] = {
+#     "coordinator": (False, "default"),
+#     "planner": (True, "default"),
+#     "supervisor": (True, "default"),
+#     "researcher": (False, "default"),
+#     "coder": (False, "default"),
+#     "browser": (False, "default"),
+#     "reporter": (True, "default")
+# }
 

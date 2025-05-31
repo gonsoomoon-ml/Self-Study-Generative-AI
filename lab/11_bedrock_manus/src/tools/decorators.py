@@ -55,8 +55,18 @@ def log_io(func: Callable) -> Callable:
             
             if "current_agent" in st.session_state:
                 current_agent = st.session_state["current_agent"]
-                st.session_state["tool_containers"][current_agent]["input"].markdown(f"Coder - {status}\n{code}")
-                st.session_state["tool_containers"][current_agent]["output"].markdown(f"{stdout}")
+                if not current_agent or current_agent not in st.session_state["tool_containers"]:
+                    current_agent = "coder"
+                    st.session_state["current_agent"] = current_agent
+                    if "tool_containers" not in st.session_state:
+                        st.session_state["tool_containers"] = {}
+                    if current_agent not in st.session_state["tool_containers"]:
+                        st.session_state["tool_containers"][current_agent] = {
+                            "input": st.empty(),
+                            "output": st.empty()
+                        }
+                # st.session_state["tool_containers"][current_agent]["input"].markdown(f"Coder - {status}\n{code}")
+                # st.session_state["tool_containers"][current_agent]["output"].markdown(f"{stdout}")
         else:
             cmd = None
             if len(result.split("||")) == 2: cmd, stdout = result.split("||")
@@ -64,8 +74,18 @@ def log_io(func: Callable) -> Callable:
             
             if "current_agent" in st.session_state:
                 current_agent = st.session_state["current_agent"]
-                if cmd != None: st.session_state["tool_containers"][current_agent]["input"].markdown(f"```bash\n{cmd}\n```")
-                st.session_state["tool_containers"][current_agent]["output"].code(f"Coder - Tool {func_name} returned:\n{result}")
+                if not current_agent or current_agent not in st.session_state["tool_containers"]:
+                    current_agent = "coder"
+                    st.session_state["current_agent"] = current_agent
+                    if "tool_containers" not in st.session_state:
+                        st.session_state["tool_containers"] = {}
+                    if current_agent not in st.session_state["tool_containers"]:
+                        st.session_state["tool_containers"][current_agent] = {
+                            "input": st.empty(),
+                            "output": st.empty()
+                        }
+                # if cmd != None: st.session_state["tool_containers"][current_agent]["input"].markdown(f"```bash\n{cmd}\n```")
+                # st.session_state["tool_containers"][current_agent]["output"].code(f"Coder - Tool {func_name} returned:\n{result}")
         return result
 
     return wrapper

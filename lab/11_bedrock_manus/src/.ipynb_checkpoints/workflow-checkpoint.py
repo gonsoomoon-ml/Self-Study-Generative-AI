@@ -3,6 +3,7 @@ from textwrap import dedent
 from src.config import TEAM_MEMBERS
 from src.graph import build_graph
 from src.utils.common_utils import get_message_from_string
+import pandas as pd
 
 # Configure logging
 logging.basicConfig(
@@ -74,7 +75,7 @@ def get_graph():
 
 from langchain_core.runnables import RunnableConfig
 
-def run_agent_workflow(user_input: str, debug: bool = False):
+def run_agent_workflow(user_input: str, csv_file_path: str = None, debug: bool = False):
     """Run the agent workflow with the given user input.
 
     Args:
@@ -90,25 +91,35 @@ def run_agent_workflow(user_input: str, debug: bool = False):
     if debug:
         enable_debug_logging()
 
-    #logger.info(f"Starting workflow with user input: {user_input}")
     logger.info(f"{Colors.GREEN}===== Starting workflow ====={Colors.END}")
     logger.info(f"{Colors.GREEN}\nuser input: {user_input}{Colors.END}")
+    logger.info(f"{Colors.GREEN}\nuser file path: {csv_file_path}{Colors.END}")
     
-    user_prompts = dedent(
-        '''
-        Here is a user request: <user_request>{user_request}</user_request>
-        '''
-    )
-    context = {"user_request": user_input}
-    user_prompts = user_prompts.format(**context)
+    # csv_file_path가 주어지면 파일 경로만 user_prompts에 포함
+    if csv_file_path is not None:
+        user_prompts = dedent(
+            '''
+            Here is a user request: <user_request>{user_request}</user_request>\n
+            Here is a file path: <file_path>{file_path}</file_path>
+            '''
+        )
+        context = {"user_request": user_input, "file_path": csv_file_path}
+        user_prompts = user_prompts.format(**context)
+    else:
+        user_prompts = dedent(
+            '''
+            Here is a user request: <user_request>{user_request}</user_request>
+            '''
+        )
+        context = {"user_request": user_input}
+        user_prompts = user_prompts.format(**context)
     messages = [get_message_from_string(role="user", string=user_prompts, imgs=[])]
 
     langfuse_handler = get_langfuse_handler()
     config = RunnableConfig(
-                recursion_limit=3, 
+                recursion_limit=30, 
                 callbacks=[langfuse_handler]  # 여기에 Langfuse 핸들러 추가}    
     )
-
     result = graph.invoke(
         input={
             # Constants
@@ -118,10 +129,23 @@ def run_agent_workflow(user_input: str, debug: bool = False):
             "messages": messages,
             "deep_thinking_mode": True,
             "search_before_planning": False,
-            "request": user_input
+            "request": user_prompts 
         },
         config=config    
     )
+    # result = graph.invoke(
+    #     input={
+    #         # Constants
+    #         "TEAM_MEMBERS": TEAM_MEMBERS,
+    #         # Runtime Variables
+    #         #"messages": [{"role": "user", "content": user_input}],
+    #         "messages": messages,
+    #         "deep_thinking_mode": True,
+    #         "search_before_planning": False,
+    #         "request": user_input
+    #     },
+    #     config=config    
+    # )
     logger.debug(f"{Colors.RED}Final workflow state: {result}{Colors.END}")
     logger.info(f"{Colors.GREEN}===== Workflow completed successfully ====={Colors.END}")
     return result
