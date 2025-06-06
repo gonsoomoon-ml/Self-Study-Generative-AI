@@ -4,15 +4,20 @@ from strands.tools.mcp.mcp_client import MCPClient
 
 def main():
     # 클라이언트 생성 - EC2 테스트를 위해 IP 주소를 명시적으로 설정
-    # 로컬 테스트: "http://localhost:8000/mcp"
-    # EC2 배포 시: "http://[EC2-PUBLIC-IP]:8000/mcp"
-    SERVER_URL = "http://localhost:8000/mcp"  # 테스트 후 EC2 IP로 변경
-    streamable_http_mcp_client = MCPClient(lambda: streamablehttp_client(SERVER_URL))
-    
+    # SERVER_URL = "http://XX.XX.XX.XX:8000/mcp/"  # URL 끝에 슬래시(/) 추가
+    SERVER_URL = "http://35.163.60.34:8000/mcp/"  # URL 끝에 슬래시(/) 추가
+    print(f"Connecting to server at {SERVER_URL}")
+            
     try:
+        streamable_http_mcp_client = MCPClient(lambda: streamablehttp_client(SERVER_URL))
+        print("Client initialized successfully")
+        
         print("\n=== 방법 1: with 구문과 Agent를 사용한 자연어 처리 ===")
         with streamable_http_mcp_client:
+            print("Connected to server, listing tools...")
             tools = streamable_http_mcp_client.list_tools_sync()
+            print(f"Available tools: {tools}")
+            
             agent = Agent(tools=tools)
             response = agent("키 170cm와 몸무게 70kg으로 BMI를 계산해줘")
             print("Agent response:", response)
@@ -35,6 +40,7 @@ def main():
 
     except Exception as e:
         print(f"\nError: {e}")
+        print("예상치 못한 오류가 발생했습니다.")
 
 if __name__ == "__main__":
     main()

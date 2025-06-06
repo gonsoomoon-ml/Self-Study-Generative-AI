@@ -1,6 +1,7 @@
 from mcp.server.fastmcp import FastMCP
 
-mcp = FastMCP("BMI")
+# host를 생성자에서 설정
+mcp = FastMCP("BMI", host="0.0.0.0", port=8000)
 
 # Tools
 @mcp.tool()

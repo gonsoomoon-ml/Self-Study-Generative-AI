@@ -3,8 +3,12 @@ from strands import Agent
 from strands.tools.mcp.mcp_client import MCPClient
 
 def main():
-    # 클라이언트 생성
-    streamable_http_mcp_client = MCPClient(lambda: streamablehttp_client("http://localhost:8000/mcp"))
+    # 로컬 테스트 
+    SERVER_URL = "http://localhost:8000/mcp"
+    # EC2 테스트 
+    # SERVER_URL = "http://XX.XX.XX.XX:8000/mcp/"  # URL 끝에 슬래시(/) 추가
+    streamable_http_mcp_client = MCPClient(lambda: streamablehttp_client(SERVER_URL))
+    
     
     try:
         print("\n=== 방법 1: with 구문과 Agent를 사용한 자연어 처리 ===")
