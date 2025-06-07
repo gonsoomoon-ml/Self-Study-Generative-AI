@@ -1,0 +1,31 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/moongons/Desktop",
+        "/Users/moongons/Downloads"
+      ]
+    },
+    "canvas": {
+      "command": "/Users/moongons/.local/bin/uv",
+      "args": [
+        "--directory",
+        "/Users/moongons/VSCode/aws-kr-startup-samples/gen-ai/mcp-tutorial/module-01/part-01/src/example-2",
+        "run",
+        "mcp-nova-canvas.py"
+      ]
+    },
+    "kr-weather": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://35.163.60.34:8000/mcp/",
+        "--allow-http"
+      ]
+    }    
+  }
+}

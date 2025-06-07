@@ -38,7 +38,6 @@ LOCATION_TABLE = {
     "세종":   {"latitude": 36.4801, "longitude": 127.2891, "stn_id": "239"},
     "수원":   {"latitude": 37.2636, "longitude": 127.0286, "stn_id": "119"},
     # 추가 주요 도시
-    "성남":   {"latitude": 37.4200, "longitude": 127.1265, "stn_id": "211"},
     "창원":   {"latitude": 35.2285, "longitude": 128.6811, "stn_id": "155"},
     "전주":   {"latitude": 35.8242, "longitude": 127.1480, "stn_id": "146"},
     "청주":   {"latitude": 36.6424, "longitude": 127.4890, "stn_id": "131"},
@@ -52,7 +51,6 @@ LOCATION_TABLE = {
     "목포":   {"latitude": 34.8118, "longitude": 126.3922, "stn_id": "165"},
     "진주":   {"latitude": 35.1802, "longitude": 128.1076, "stn_id": "192"},
     "원주":   {"latitude": 37.3422, "longitude": 127.9207, "stn_id": "114"},
-    "광명":   {"latitude": 37.4772, "longitude": 126.8644, "stn_id": "202"},
     # 필요시 추가 도시...
 }
 
@@ -402,19 +400,19 @@ def run_tests():
     end_dt = "20250603"    # 원하는 종료일(YYYYMMDD)
     # 현재 시간 (서울 기준)
     now = datetime.now(ZoneInfo("Asia/Seoul")).strftime('%Y-%m-%d %H:%M:%S')
-    print(f"[현재 시간] {now}")
-    print(f"[지역 정보] {location_name}")
-    print("[get_now_forecast] (초단기예보)")
+    # print(f"[현재 시간] {now}")
+    # print(f"[지역 정보] {location_name}")
+    # print("[get_now_forecast] (초단기예보)")
     result_now = asyncio.run(get_now_forecast(location_name))
-    print(result_now)
+    # print(result_now)
     # 사용자 입력: 시작일, 종료일
     if len(sys.argv) == 3:
         start_dt = sys.argv[1]
         end_dt = sys.argv[2]
     # else: start_dt, end_dt는 위에서 지정한 변수값 사용
-    print(f"\n[get_past_weather_stats] ({start_dt}~{end_dt}, 일별 평균)")
-    print(f"[현재 시간] {now}")
-    print(f"[지역 정보] {location_name}")
+    # print(f"\n[get_past_weather_stats] ({start_dt}~{end_dt}, 일별 평균)")
+    # print(f"[현재 시간] {now}")
+    # print(f"[지역 정보] {location_name}")
     result_daily_stats = asyncio.run(get_past_weather_stats(
         location_name=location_name,
         start_dt=start_dt,
@@ -422,31 +420,16 @@ def run_tests():
         start_hh='01',
         end_hh='23'
     ))
-    print(result_daily_stats)
+    # print(result_daily_stats)
 
 if __name__ == "__main__":
     import sys
     import warnings
     import os
 
-    # 모든 경고를 stderr로 출력
-    def warn_with_traceback(message, category, filename, lineno, file=None, line=None):
-        print(f"{filename}:{lineno}: {category.__name__}: {message}", file=sys.stderr)
-    warnings.showwarning = warn_with_traceback
-
-    # 예외 발생 시 traceback을 stderr로만 출력
-    def excepthook(type, value, traceback):
-        import traceback as tb
-        tb.print_exception(type, value, traceback, file=sys.stderr)
-    sys.excepthook = excepthook
-
-    if len(sys.argv) > 1 and sys.argv[1] == "test":
-        # 테스트 모드: run_tests()만 실행
-        run_tests()
-    else:
-        # MCP 서버 모드: stdout 완전 차단 (디버깅 시 주석처리)
-        # sys.stdout = open(os.devnull, "w")
-        print("[DEBUG] MCP server starting", file=sys.stderr)
-        mcp.run(transport='stdio')
+    # MCP 서버 모드: stdout 완전 차단 (디버깅 시 주석처리)
+    # sys.stdout = open(os.devnull, "w")
+    print("[DEBUG] MCP server starting", file=sys.stderr)
+    mcp.run(transport='stdio')
 
    

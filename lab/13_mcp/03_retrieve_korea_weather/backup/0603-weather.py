@@ -38,7 +38,6 @@ LOCATION_TABLE = {
     "세종":   {"latitude": 36.4801, "longitude": 127.2891, "stn_id": "239"},
     "수원":   {"latitude": 37.2636, "longitude": 127.0286, "stn_id": "119"},
     # 추가 주요 도시
-    "성남":   {"latitude": 37.4200, "longitude": 127.1265, "stn_id": "211"},
     "창원":   {"latitude": 35.2285, "longitude": 128.6811, "stn_id": "155"},
     "전주":   {"latitude": 35.8242, "longitude": 127.1480, "stn_id": "146"},
     "청주":   {"latitude": 36.6424, "longitude": 127.4890, "stn_id": "131"},
@@ -52,7 +51,6 @@ LOCATION_TABLE = {
     "목포":   {"latitude": 34.8118, "longitude": 126.3922, "stn_id": "165"},
     "진주":   {"latitude": 35.1802, "longitude": 128.1076, "stn_id": "192"},
     "원주":   {"latitude": 37.3422, "longitude": 127.9207, "stn_id": "114"},
-    "광명":   {"latitude": 37.4772, "longitude": 126.8644, "stn_id": "202"},
     # 필요시 추가 도시...
 }
 
@@ -137,13 +135,13 @@ async def _fetch_weather(lat: float, lon: float, api_url: str):
     async with httpx.AsyncClient() as client:
         response = await client.get(api_url, params=params)
     if response.status_code != 200:
-        # print("API Error:", response.status_code, response.text, file=sys.stderr)
+        print("API Error:", response.status_code, response.text, file=sys.stderr)
         return None
     try:
         result = response.json()
     except Exception as e:
-        # print("JSON 파싱 에러:", e, file=sys.stderr)
-        # print("응답 본문:", response.text, file=sys.stderr)
+        print("JSON 파싱 에러:", e, file=sys.stderr)
+        print("응답 본문:", response.text, file=sys.stderr)
         return None
     # body 키가 있는지 확인
     if (
@@ -152,7 +150,7 @@ async def _fetch_weather(lat: float, lon: float, api_url: str):
         'items' not in result['response']['body'] or
         'item' not in result['response']['body']['items']
     ):
-        # print("API 응답에 body/items/item이 없습니다. 전체 응답:", result, file=sys.stderr)
+        print("API 응답에 body/items/item이 없습니다. 전체 응답:", result, file=sys.stderr)
         return None
     items = result['response']['body']['items']['item']
     data = {}
@@ -199,15 +197,12 @@ async def get_now_forecast(location_name: str = "서울") -> str:
         get_now_forecast(location_name="서울")
         # → "기온: 24°C\n하늘상태: 흐림\n강수형태: 없음\n습도: 40%\n1시간 강수량: 강수없음"
     """
-    try:
-        info = LOCATION_TABLE.get(location_name)
-        if not info:
-            return f"지원하지 않는 도시명입니다: {location_name}"
-        latitude = info["latitude"]
-        longitude = info["longitude"]
-        return await _get_now_forecast_by_coords(latitude, longitude)
-    except Exception as e:
-        return f"[ERROR] get_now_forecast: {e}"
+    info = LOCATION_TABLE.get(location_name)
+    if not info:
+        return f"지원하지 않는 도시명입니다: {location_name}"
+    latitude = info["latitude"]
+    longitude = info["longitude"]
+    return await _get_now_forecast_by_coords(latitude, longitude)
 
 @mcp.tool()
 async def get_past_weather_stats(
@@ -232,163 +227,160 @@ async def get_past_weather_stats(
     - 예시:
         get_past_weather_stats(location_name="서울", start_dt="20250501", end_dt="20250514")
     """
-    try:
-        from datetime import datetime, timedelta
-        # 도시 정보 lookup
-        info = LOCATION_TABLE.get(location_name)
-        if not info:
-            return json.dumps({"error": f"지원하지 않는 도시명입니다: {location_name}"}, ensure_ascii=False)
-        stn_id = info["stn_id"]
-        latitude = info["latitude"]
-        longitude = info["longitude"]
-        # 날짜 기본값: 1주일 전~어제
-        if not end_dt or not start_dt:
-            end_date = datetime.now() - timedelta(days=1)
-            start_date = end_date - timedelta(days=6)
-            start_dt = start_date.strftime('%Y%m%d')
-            end_dt = end_date.strftime('%Y%m%d')
-        # 날짜 차이 계산 (YYYYMMDD)
-        start_date = datetime.strptime(start_dt, '%Y%m%d')
-        end_date = datetime.strptime(end_dt, '%Y%m%d')
-        delta_days = (end_date - start_date).days + 1
-        if delta_days > 14:
-            new_end_date = start_date + timedelta(days=13)
-            guide = f"요청하신 기간({delta_days}일)은 2주(14일)까지 가능합니다. 2주 이내로 입력해 주세요."
-            # 2주 초과 시 안내 메시지만 반환
-            location_info = {
-                "name": location_name,
-                "latitude": latitude,
-                "longitude": longitude
-            }
-            return json.dumps({"guide": guide, "location": location_info}, ensure_ascii=False, indent=2)
-        else:
-            guide = None
-        # 시간 단위 데이터 요청 (직접 API 호출)
-        params = {
-            'ServiceKey': API_KR_WEATHER_SECRET,
-            'pageNo': '1',
-            'numOfRows': '500',
-            'dataType': 'JSON',
-            'dataCd': 'ASOS',
-            'dateCd': 'HR',
-            'startDt': start_dt,
-            'endDt': end_dt,
-            'stnIds': stn_id,
-            'startHh': start_hh or '01',
-            'endHh': end_hh or '23'
-        }
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.get(PAST_OBS_API_URL, params=params)
-        if response.status_code != 200:
-            return f"API Error: {response.status_code} {response.text}"
-        try:
-            data = response.json()
-        except Exception as e:
-            return f"JSON 파싱 에러: {e}\n응답 본문: {response.text}"
-        
-        if (
-            'response' not in data or
-            'body' not in data['response'] or
-            'items' not in data['response']['body'] or
-            'item' not in data['response']['body']['items']
-        ):
-            return f"API 응답에 body/items/item이 없습니다. 전체 응답: {json.dumps(data, ensure_ascii=False)}"
-        
-        items = data['response']['body']['items']['item']
-        # 표 형태 문자열 생성 (기존 raw와 동일하게)
-        result_lines = ["일시      기온(°C)  강수량(mm)"]
-        for item in items:
-            tm = item.get('tm', '-')
-            ta = item.get('ta', '-')
-            rn = item.get('rn', '-')
-            result_lines.append(f"{tm}  {ta}      {rn}")
-        raw = '\n'.join(result_lines)
-        # 파싱: 표 형태 문자열을 라인별로 분리
-        lines = raw.splitlines()
-        if len(lines) < 2:
-            return json.dumps({"error": "데이터 없음", "raw": raw}, ensure_ascii=False)
-        header = lines[0].split()
-        data_lines = lines[1:]
-        records = []
-        for line in data_lines:
-            parts = line.split()
-            if len(parts) < 3:
-                continue
-            tm = f"{parts[0]} {parts[1]}"
-            try:
-                ta = float(parts[2])
-            except Exception as e:
-                # print(f"[WARN] 온도 변환 오류: {parts[2]}, 에러: {e}", file=sys.stderr)
-                ta = None
-            if len(parts) > 3:
-                try:
-                    rn = float(parts[3])
-                except Exception as e:
-                    # print(f"[WARN] 강수량 변환 오류: {parts[3]}, 에러: {e}", file=sys.stderr)
-                    rn = 0.0
-            else:
-                rn = 0.0
-            records.append({"tm": tm, "ta": ta, "rn": rn})
-        if not records:
-            return json.dumps({"error": "데이터 없음", "raw": raw}, ensure_ascii=False)
-        import pandas as pd
-        df = pd.DataFrame(records)
-        df['date'] = df['tm'].str[:10]
-        df['ta'] = pd.to_numeric(df['ta'], errors='coerce').fillna(0)
-        df['rn'] = pd.to_numeric(df['rn'], errors='coerce').fillna(0)
-        result = (
-            df.groupby('date').agg(
-                max_temp=('ta', 'max'),
-                min_temp=('ta', 'min'),
-                avg_rain=('rn', 'mean')
-            ).round(2)
-            .reset_index().set_index('date')
-        )
-        def temp_desc(row):
-            max_t = row['max_temp']
-            if max_t < 10:
-                return '춥다'
-            elif max_t < 20:
-                return '선선하다'
-            elif max_t < 28:
-                return '덥다'
-            else:
-                return '매우 덥다'
-        def rain_desc(row):
-            rain = row['avg_rain']
-            if rain == 0:
-                return '강수 없음'
-            elif rain < 5:
-                return '강수 적음'
-            else:
-                return '강수 많음'
-        result['temp_desc'] = result.apply(temp_desc, axis=1)
-        result['rain_desc'] = result.apply(rain_desc, axis=1)
-        result = result.to_dict(orient='index')
-        # 날짜 구간 전체 생성
-        all_dates = []
-        cur = start_date
-        while cur <= end_date:
-            all_dates.append(cur.strftime('%Y-%m-%d'))
-            cur += timedelta(days=1)
-        # 누락된 날짜는 '데이터 없음'으로 추가
-        for d in all_dates:
-            if d not in result:
-                result[d] = {"error": "데이터 없음"}
-        # (정렬 보장)
-        result = {d: result[d] for d in sorted(result)}
-        # location 정보 추가
+    from datetime import datetime, timedelta
+    # 도시 정보 lookup
+    info = LOCATION_TABLE.get(location_name)
+    if not info:
+        return json.dumps({"error": f"지원하지 않는 도시명입니다: {location_name}"}, ensure_ascii=False)
+    stn_id = info["stn_id"]
+    latitude = info["latitude"]
+    longitude = info["longitude"]
+    # 날짜 기본값: 1주일 전~어제
+    if not end_dt or not start_dt:
+        end_date = datetime.now() - timedelta(days=1)
+        start_date = end_date - timedelta(days=6)
+        start_dt = start_date.strftime('%Y%m%d')
+        end_dt = end_date.strftime('%Y%m%d')
+    # 날짜 차이 계산 (YYYYMMDD)
+    start_date = datetime.strptime(start_dt, '%Y%m%d')
+    end_date = datetime.strptime(end_dt, '%Y%m%d')
+    delta_days = (end_date - start_date).days + 1
+    if delta_days > 14:
+        new_end_date = start_date + timedelta(days=13)
+        guide = f"요청하신 기간({delta_days}일)은 2주(14일)까지 가능합니다. 2주 이내로 입력해 주세요."
+        # 2주 초과 시 안내 메시지만 반환
         location_info = {
             "name": location_name,
             "latitude": latitude,
             "longitude": longitude
         }
-        if guide:
-            return json.dumps({"guide": guide, "location": location_info, "data": result}, ensure_ascii=False, indent=2)
-        else:
-            return json.dumps({"location": location_info, "data": result}, ensure_ascii=False, indent=2)
+        return json.dumps({"guide": guide, "location": location_info}, ensure_ascii=False, indent=2)
+    else:
+        guide = None
+    # 시간 단위 데이터 요청 (직접 API 호출)
+    params = {
+        'ServiceKey': API_KR_WEATHER_SECRET,
+        'pageNo': '1',
+        'numOfRows': '500',
+        'dataType': 'JSON',
+        'dataCd': 'ASOS',
+        'dateCd': 'HR',
+        'startDt': start_dt,
+        'endDt': end_dt,
+        'stnIds': stn_id,
+        'startHh': start_hh or '01',
+        'endHh': end_hh or '23'
+    }
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.get(PAST_OBS_API_URL, params=params)
+    if response.status_code != 200:
+        return f"API Error: {response.status_code} {response.text}"
+    try:
+        data = response.json()
     except Exception as e:
-        return f"[ERROR] get_past_weather_stats: {e}"
+        return f"JSON 파싱 에러: {e}\n응답 본문: {response.text}"
+    
+    if (
+        'response' not in data or
+        'body' not in data['response'] or
+        'items' not in data['response']['body'] or
+        'item' not in data['response']['body']['items']
+    ):
+        return f"API 응답에 body/items/item이 없습니다. 전체 응답: {json.dumps(data, ensure_ascii=False)}"
+    
+    items = data['response']['body']['items']['item']
+    # 표 형태 문자열 생성 (기존 raw와 동일하게)
+    result_lines = ["일시      기온(°C)  강수량(mm)"]
+    for item in items:
+        tm = item.get('tm', '-')
+        ta = item.get('ta', '-')
+        rn = item.get('rn', '-')
+        result_lines.append(f"{tm}  {ta}      {rn}")
+    raw = '\n'.join(result_lines)
+    # 파싱: 표 형태 문자열을 라인별로 분리
+    lines = raw.splitlines()
+    if len(lines) < 2:
+        return json.dumps({"error": "데이터 없음", "raw": raw}, ensure_ascii=False)
+    header = lines[0].split()
+    data_lines = lines[1:]
+    records = []
+    for line in data_lines:
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        tm = f"{parts[0]} {parts[1]}"
+        try:
+            ta = float(parts[2])
+        except Exception as e:
+            print(f"[WARN] 온도 변환 오류: {parts[2]}, 에러: {e}", file=sys.stderr)
+            ta = None
+        if len(parts) > 3:
+            try:
+                rn = float(parts[3])
+            except Exception as e:
+                print(f"[WARN] 강수량 변환 오류: {parts[3]}, 에러: {e}", file=sys.stderr)
+                rn = 0.0
+        else:
+            rn = 0.0
+        records.append({"tm": tm, "ta": ta, "rn": rn})
+    if not records:
+        return json.dumps({"error": "데이터 없음", "raw": raw}, ensure_ascii=False)
+    import pandas as pd
+    df = pd.DataFrame(records)
+    df['date'] = df['tm'].str[:10]
+    df['ta'] = pd.to_numeric(df['ta'], errors='coerce').fillna(0)
+    df['rn'] = pd.to_numeric(df['rn'], errors='coerce').fillna(0)
+    result = (
+        df.groupby('date').agg(
+            max_temp=('ta', 'max'),
+            min_temp=('ta', 'min'),
+            avg_rain=('rn', 'mean')
+        ).round(2)
+        .reset_index().set_index('date')
+    )
+    def temp_desc(row):
+        max_t = row['max_temp']
+        if max_t < 10:
+            return '춥다'
+        elif max_t < 20:
+            return '선선하다'
+        elif max_t < 28:
+            return '덥다'
+        else:
+            return '매우 덥다'
+    def rain_desc(row):
+        rain = row['avg_rain']
+        if rain == 0:
+            return '강수 없음'
+        elif rain < 5:
+            return '강수 적음'
+        else:
+            return '강수 많음'
+    result['temp_desc'] = result.apply(temp_desc, axis=1)
+    result['rain_desc'] = result.apply(rain_desc, axis=1)
+    result = result.to_dict(orient='index')
+    # 날짜 구간 전체 생성
+    all_dates = []
+    cur = start_date
+    while cur <= end_date:
+        all_dates.append(cur.strftime('%Y-%m-%d'))
+        cur += timedelta(days=1)
+    # 누락된 날짜는 '데이터 없음'으로 추가
+    for d in all_dates:
+        if d not in result:
+            result[d] = {"error": "데이터 없음"}
+    # (정렬 보장)
+    result = {d: result[d] for d in sorted(result)}
+    # location 정보 추가
+    location_info = {
+        "name": location_name,
+        "latitude": latitude,
+        "longitude": longitude
+    }
+    if guide:
+        return json.dumps({"guide": guide, "location": location_info, "data": result}, ensure_ascii=False, indent=2)
+    else:
+        return json.dumps({"location": location_info, "data": result}, ensure_ascii=False, indent=2)
 
 def run_tests():
     import asyncio
@@ -444,9 +436,8 @@ if __name__ == "__main__":
         # 테스트 모드: run_tests()만 실행
         run_tests()
     else:
-        # MCP 서버 모드: stdout 완전 차단 (디버깅 시 주석처리)
-        # sys.stdout = open(os.devnull, "w")
-        print("[DEBUG] MCP server starting", file=sys.stderr)
+        # MCP 서버 모드: stdout 완전 차단
+        sys.stdout = open(os.devnull, "w")
         mcp.run(transport='stdio')
 
-   
+    

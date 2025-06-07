@@ -5,7 +5,8 @@ from strands.tools.mcp.mcp_client import MCPClient
 def main():
     # 클라이언트 생성 - EC2 테스트를 위해 IP 주소를 명시적으로 설정
     # SERVER_URL = "http://XX.XX.XX.XX:8000/mcp/"  # URL 끝에 슬래시(/) 추가
-    SERVER_URL = "http://35.163.60.34:8000/mcp/"  # URL 끝에 슬래시(/) 추가
+    # SERVER_URL = "http://35.163.60.34:8000/mcp/"  # URL 끝에 슬래시(/) 추가
+    SERVER_URL = "http://35.163.60.34:9000/mcp/"  # URL 끝에 슬래시(/) 추가
     print(f"Connecting to server at {SERVER_URL}")
             
     try:
