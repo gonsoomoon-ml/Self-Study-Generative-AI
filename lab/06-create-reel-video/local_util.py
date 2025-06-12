@@ -66,7 +66,8 @@ def call_video_creation(bedrock_runtime, bucket_name, input_image, text_prompt )
 
     # Start the asynchronous video generation job.
     invocation = bedrock_runtime.start_async_invoke(
-        modelId="amazon.nova-reel-v1:0",
+        # modelId="amazon.nova-reel-v1:0",
+        modelId = "amazon.nova-reel-v1:1",
         modelInput=model_input,
         outputDataConfig={
             "s3OutputDataConfig": {
