@@ -203,7 +203,10 @@ Tool parameters: location_name="서울", start_dt="20250115", end_dt="20250121"
     - plt.style.use('fivethirtyeight') - Web/media-friendly style
 - [CRITICAL] Must import lovelyplots at the beginning of visualization code:
     - import lovelyplots  # Don't omit this import
-- Use font: plt.rc('font', family='Nanum Gothic') # [UPDATED] Correct font name
+- [CRITICAL] Korean font setup - MUST use the robust font configuration method below:
+    - ALWAYS use the direct font path finding method for reliable Korean text display
+    - Include multiple fallback font options based on installed system fonts
+    - Clear matplotlib font cache if needed
 - Apply grid lines to all graphs (alpha=0.3)
 - DPI: 150 (high resolution)
 - Set font sizes: title: 14-16, axis labels: 12-14, tick labels: 8-10, legend: 8-10
@@ -213,14 +216,89 @@ Tool parameters: location_name="서울", start_dt="20250115", end_dt="20250121"
 ```python
 # Correct visualization setup - ALWAYS USE THIS PATTERN
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 import lovelyplots  # [CRITICAL] ALWAYS import this
 
 # [CRITICAL] ALWAYS set a style
 plt.style.use(['ipynb', 'use_mathtext','colors5-light'])  # Choose one from the required styles
 
-# Set font and other required parameters
-plt.rc('font', family='Nanum Gothic')  # [UPDATED] Correct font name
+# [CRITICAL] Robust Korean font setup - MUST USE THIS METHOD
+def setup_korean_font():
+    """
+    Robust Korean font setup with direct path finding and multiple fallbacks
+    Based on system-installed Nanum fonts
+    """
+    # Korean fonts in order of preference (based on common installations)
+    korean_fonts = [
+        'NanumGothic',           # 나눔고딕 - Most common
+        'NanumBarunGothic',      # 나눔바른고딕 - Clean alternative  
+        'NanumGothicCoding',     # 나눔고딕코딩 - Coding optimized
+        'NanumSquare',           # 나눔스퀘어 - Modern look
+        'NanumMyeongjo',         # 나눔명조 - Serif alternative
+        'Malgun Gothic',         # Windows default Korean
+        'Apple SD Gothic Neo',   # macOS default Korean
+        'DejaVu Sans'           # Final fallback
+    ]
+    
+    selected_font = None
+    font_path = None
+    
+    # Method 1: Direct font path finding (most reliable)
+    for font_name in korean_fonts:
+        try:
+            font_path = fm.findfont(font_name)
+            if font_path and font_path != fm.findfont('DejaVu Sans'):  # Ensure it's not fallback
+                font_prop = fm.FontProperties(fname=font_path)
+                selected_font = font_prop.get_name()
+                print("✓ Found Korean font via path: " + font_name + " -> " + font_path)
+                
+                # Apply robust font configuration
+                plt.rcParams['font.family'] = selected_font
+                plt.rcParams['axes.unicode_minus'] = False  # Fix minus sign display
+                plt.rcParams['font.size'] = 10
+                
+                # Verify font works with Korean text
+                test_korean = "한글테스트"
+                return selected_font, font_path
+                
+        except Exception as e:
+            print("× Font path method failed for " + font_name + ": " + str(e))
+            continue
+    
+    # Method 2: Fallback to font family name (if path method fails)
+    print("Trying fallback method with font family names...")
+    available_fonts = set(f.name for f in fm.fontManager.ttflist)
+    
+    for font_name in korean_fonts:
+        if font_name in available_fonts:
+            try:
+                plt.rcParams['font.family'] = font_name
+                plt.rcParams['axes.unicode_minus'] = False
+                print("✓ Using fallback font: " + font_name)
+                return font_name, None
+            except Exception as e:
+                print("× Fallback method failed for " + font_name + ": " + str(e))
+                continue
+    
+    # Method 3: Final emergency fallback
+    print("⚠️  WARNING: No Korean font found. Using system default.")
+    print("⚠️  Korean text may not display correctly.")
+    plt.rcParams['font.family'] = 'DejaVu Sans'
+    plt.rcParams['axes.unicode_minus'] = False
+    return 'DejaVu Sans', None
+
+# Apply Korean font setup
+selected_font, font_path = setup_korean_font()
+print("Final font configuration: " + selected_font)
+if font_path:
+    print("Font path: " + font_path)
+
+# Create figure with proper settings
 plt.figure(figsize=(10, 6), dpi=150)
+
+# Test Korean text display (optional verification)
+# plt.text(0.5, 0.5, "한글 테스트", transform=plt.gca().transAxes, 
+#          fontsize=12, ha='center', va='center')
 
 # Rest of visualization code
 ```
@@ -244,7 +322,7 @@ os.makedirs('./artifacts', exist_ok=True)
 
 # Result file path
 results_file = './artifacts/all_results.txt'
-backup_file = './artifacts/all_results_backup_{{{{0}}}}.txt'.format(datetime.now().strftime("%Y%m%d_%H%M%S"))
+backup_file = './artifacts/all_results_backup_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '.txt'
 
 # Current analysis parameters - modify these values according to your actual analysis
 stage_name = "Weather_Data_Collection_and_Analysis"
@@ -268,19 +346,19 @@ artifact_files = [
 current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 current_result_text = """
 ==================================================
-## Analysis Stage: {{{{0}}}}
-## Execution Time: {{{{1}}}}
+## Analysis Stage: """ + stage_name + """
+## Execution Time: """ + current_time + """
 --------------------------------------------------
 Result Description: 
-{{{{2}}}}
+""" + result_description + """
 
-Weather Data File: {{{{3}}}}
-""".format(stage_name, current_time, result_description, weather_data_file)
+Weather Data File: """ + weather_data_file + """
+"""
 
 if artifact_files:
     current_result_text += "--------------------------------------------------\nGenerated Files:\n"
     for file_path, file_desc in artifact_files:
-        current_result_text += "- {{{{0}}}} : {{{{1}}}}\n".format(file_path, file_desc)
+        current_result_text += "- " + file_path + " : " + file_desc + "\n"
 
 current_result_text += "==================================================\n"
 
@@ -307,7 +385,7 @@ except Exception as e:
     print("Error occurred while saving results: " + str(e))
     # Try saving to temporary file in case of error
     try:
-        temp_file = './artifacts/result_emergency_{{{{0}}}}.txt'.format(datetime.now().strftime("%Y%m%d_%H%M%S"))
+        temp_file = './artifacts/result_emergency_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '.txt'
         with open(temp_file, 'w', encoding='utf-8') as f:
             f.write(current_result_text)
         print("Results saved to temporary file: " + temp_file)

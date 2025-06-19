@@ -3,8 +3,6 @@ import streamlit as st
 import pandas as pd
 from pathlib import Path
 import glob
-from urllib.parse import quote
-from io import StringIO
 import base64
 
 module_path = ".."
@@ -20,8 +18,13 @@ Path(UPLOAD_DIR).mkdir(exist_ok=True)  # 디렉토리 생성
 
 ##################### Title ########################
 st.set_page_config(page_title="Amazon Bedrock-Manus: Agentic Deep Report Generation💬", page_icon="💬", layout="wide")
-st.title("Agentic Deep Data Analysis Report Generation on Amazon Bedrock")
-st.markdown('- CSV 파일을 업로드하고 자연어로 분석을 요청하세요')
+st.markdown("""
+<div style='text-align: left;'>
+<h1 style='margin: 0; padding: 0; line-height: 1.2;'>Amazon Bedrock-Manus Powered:</h1>
+<h1 style='margin: 0; padding: 0; line-height: 1.2;'>Agentic Deep Data Analysis & Report Generation</h1>
+</div>
+""", unsafe_allow_html=True)
+
 
 ####################### Initialization ###############################
 if "messages" not in st.session_state: 
@@ -87,37 +90,24 @@ if st.session_state["uploaded_file_path"]:
                     )
                     st.success("✅ 분석이 완료되었습니다!")
                     
-                    # 결과 파일 다운로드/보기 기능
+                    # PDF 결과 파일 미리보기 기능
                     artifacts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "artifacts"))
-                    txt_files = glob.glob(os.path.join(artifacts_dir, '*.txt'))
                     pdf_files = glob.glob(os.path.join(artifacts_dir, '*.pdf'))
-                    result_files = txt_files + pdf_files
                     
-                    if result_files:
+                    if pdf_files:
                         st.markdown("---")
-                        st.subheader("📂 결과 파일 다운로드 및 미리보기")
-                        for idx, file_name in enumerate(txt_files + pdf_files):
+                        st.subheader("📂 PDF 결과 파일 미리보기")
+                        for file_name in pdf_files:
                             file_path = os.path.join(artifacts_dir, file_name)
-                            # 파일명만 출력
                             st.markdown(f"**{file_name}**")
+                            
                             with open(file_path, "rb") as f:
-                                file_bytes = f.read()
-                            if file_name.lower().endswith('.pdf'):
-                                with open(file_path, "rb") as f:
-                                    base64_pdf = base64.b64encode(f.read()).decode('utf-8')
-                                pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="700" height="900" type="application/pdf"></iframe>'
-                                st.markdown("미리보기:")
-                                st.markdown(pdf_display, unsafe_allow_html=True)
-                            else:
-                                st.download_button(
-                                    label=f"⬇️ 다운로드",
-                                    data=file_bytes,
-                                    file_name=file_name,
-                                    mime="text/plain",
-                                    key=f"download_btn_{idx}_{file_name}"
-                                )
+                                base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+                            pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="700" height="900" type="application/pdf"></iframe>'
+                            st.markdown("미리보기:")
+                            st.markdown(pdf_display, unsafe_allow_html=True)
                     else:
-                        st.info("아직 생성된 결과 파일이 없습니다.")
+                        st.info("아직 생성된 PDF 결과 파일이 없습니다.")
                     
                 except Exception as e:
                     st.error(f"분석 중 오류 발생: {e}")

@@ -45,6 +45,23 @@ This is STRICTLY ENFORCE.
 - Each step assigned to an agent must include detailed instructions for all subtasks that the agent must perform.
 </execution_rules>
 
+<weather_data_priority>
+This is CRITICAL for weather-related requests.
+- [CRITICAL] If the user's request mentions weather analysis, weather impact, or weather correlation:
+  - ALWAYS prioritize weather data collection as the FIRST task in Coder's checklist
+  - Weather data collection must be completed BEFORE any other analysis
+  - Specify the exact location, date range, and weather parameters needed in the task description
+- [REQUIRED] Weather data collection task format:
+  - [ ] MCP 날씨 데이터 수집 (location: [도시명], period: [YYYYMMDD-YYYYMMDD])
+  - Include this as the first item in Coder's task list when weather is mentioned
+- [WORKFLOW] Correct sequence for weather-related analysis:
+  1. Weather data collection (MCP tool)
+  2. Data preprocessing and integration
+  3. Weather impact analysis
+  4. Business insights extraction
+  5. Visualization and reporting
+</weather_data_priority>
+
 <plan_exanple>
 Good plan example:
 1. Researcher: Collect and analyze all relevant information
