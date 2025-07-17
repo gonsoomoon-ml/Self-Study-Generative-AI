@@ -1,86 +1,100 @@
-## 기본적인 Bedrock Agent 호출 예시
-
-python
 import boto3
-import json
+import logging
+import time
+from botocore.exceptions import ClientError
 
-# Bedrock Agent Runtime 클라이언트 생성
-bedrock_agent_runtime = boto3.client(
-    service_name='bedrock-agent-runtime',
-    region_name='us-west-2'  # 사용 중인 리전으로 변경
-)
+# 로깅 레벨을 ERROR로 변경하여 INFO 메시지 숨기기
+logging.basicConfig(level=logging.ERROR)
+logger = logging.getLogger(__name__)
 
-# 에이전트 호출 (동기식)
-def invoke_agent(agent_id, agent_alias_id, input_text):
+def invoke_bedrock_agent(agent_id, alias_id, prompt, session_id, streaming=False):
+    """
+    Amazon Bedrock Agent를 호출하는 함수
+    
+    Args:
+        agent_id (str): Agent ID
+        alias_id (str): Agent Alias ID  
+        prompt (str): 사용자 입력 프롬프트
+        session_id (str): 세션 ID (대화 연속성을 위해)
+        streaming (bool): 스트리밍 모드 여부 (기본값: False)
+    
+    Returns:
+        tuple: (Agent의 응답, 첫 번째 단어 출력 시간)
+    """
+    client = boto3.client(
+        service_name="bedrock-agent-runtime",
+        region_name="us-west-2"
+    )
+    
     try:
-        response = bedrock_agent_runtime.invoke_agent(
+        start_time = time.time()
+        first_word_time = None
+        
+        response = client.invoke_agent(
             agentId=agent_id,
-            agentAliasId=agent_alias_id,
-            sessionId='test-session-001',  # 세션 ID는 고유한 값으로 설정
-            inputText=input_text
+            agentAliasId=alias_id,
+            enableTrace=False,
+            sessionId=session_id,
+            inputText=prompt,
+            streamingConfigurations={
+                "applyGuardrailInterval": 20,
+                "streamFinalResponse": streaming
+            }
         )
         
-        # 응답 처리
-        completion = response.get('completion', {})
-        if 'text' in completion:
-            return completion['text']
-        else:
-            return "응답 텍스트를 찾을 수 없습니다."
-            
-    except Exception as e:
-        return f"에러 발생: {str(e)}"
-
-# 에이전트 호출 예시
-agent_id = '2HEFECONPQ'  # 실제 에이전트 ID로 변경
-agent_alias_id = 'XSNDBWQRKS'  # 실제 에이전트 별칭 ID로 변경
-result = invoke_agent(agent_id, agent_alias_id, "갈비찜 레시피를 알려주세요.")
-print(result)
-
-
-## 스트리밍 응답을 위한 Bedrock Agent 호출 예시
-
-python
-import boto3
-import json
-
-# Bedrock Agent Runtime 클라이언트 생성
-bedrock_agent_runtime = boto3.client(
-    service_name='bedrock-agent-runtime',
-    region_name='us-west-2'  # 사용 중인 리전으로 변경
-)
-
-# 에이전트 스트리밍 호출
-def invoke_agent_streaming(agent_id, agent_alias_id, input_text):
-    try:
-        # 스트리밍 응답 요청
-        response = bedrock_agent_runtime.invoke_agent_streaming(
-            agentId=agent_id,
-            agentAliasId=agent_alias_id,
-            sessionId='test-session-002',  # 세션 ID는 고유한 값으로 설정
-            inputText=input_text
-        )
+        completion = ""
+        for event in response.get("completion"):
+            if 'chunk' in event:
+                chunk = event["chunk"]
+                chunk_text = chunk["bytes"].decode()
+                completion += chunk_text
+                
+                # 첫 번째 단어 시간 측정
+                if first_word_time is None and chunk_text.strip():
+                    first_word_time = time.time() - start_time
+                
+                # 스트리밍 모드일 때 실시간 출력
+                if streaming:
+                    print(chunk_text, end="", flush=True)
         
-        # 스트리밍 응답 처리
-        for event in response.get('completion'):
-            # 청크 타입 확인
-            chunk_type = event.get('chunkType')
-            
-            if chunk_type == 'text':
-                # 텍스트 청크 처리
-                text = event.get('text', '')
-                print(text, end='', flush=True)  # 실시간으로 출력
-            elif chunk_type == 'trace':
-                # 트레이스 정보 처리 (선택 사항)
-                trace = json.loads(event.get('trace', '{}'))
-                print(f"\n[Trace]: {trace}")
+        return completion, first_word_time
         
-        print("\n스트리밍 완료")
-            
-    except Exception as e:
-        print(f"에러 발생: {str(e)}")
+    except ClientError as e:
+        logger.error(f"Agent 호출 실패: {e}")
+        raise
 
-# 에이전트 스트리밍 호출 예시
-# agent_id = '2HEFECONPQ'  # 실제 에이전트 ID로 변경
-# agent_alias_id = 'XSNDBWQRKS'  # 실제 에이전트 별칭 ID로 변경
-# invoke_agent_streaming(agent_id, agent_alias_id, "갈비찜 레시피를 알려주세요.")
+# 사용 예시
+if __name__ == "__main__":
+    agent_id = '2HEFECONPQ'
+    alias_id = 'XSNDBWQRKS'
+
+    session_id = "unique_session_id"
+    prompt = "갈비찜 레시피를 알려주세요."
+    
+    # 스트리밍 모드
+    print("=== 스트리밍 모드 ===")
+    start_time = time.time()
+    response_streaming, first_word_time_streaming = invoke_bedrock_agent(agent_id, alias_id, prompt, session_id, streaming=True)
+    total_time_streaming = time.time() - start_time
+    
+    print(f"\n첫 번째 단어 출력 시간: {first_word_time_streaming:.2f}초")
+    print(f"전체 응답 시간: {total_time_streaming:.2f}초")
+
+
+    # 일반 모드 (스트리밍 비활성화)
+    print("\n")
+    print("=== 일반 모드 ===")
+    start_time = time.time()
+    response, first_word_time = invoke_bedrock_agent(agent_id, alias_id, prompt, session_id, streaming=False)
+    total_time = time.time() - start_time
+    
+    print(f"첫 번째 단어 출력 시간: {first_word_time:.2f}초")
+    print(f"전체 응답 시간: {total_time:.2f}초")
+    print(f"응답: {response}")
+    
+    print("\n" + "="*50 + "\n")
+    
+
+    
+
 
