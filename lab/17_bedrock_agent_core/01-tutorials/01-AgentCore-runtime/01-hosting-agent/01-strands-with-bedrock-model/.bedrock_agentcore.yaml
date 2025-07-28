@@ -1,0 +1,30 @@
+default_agent: agentcore_strands
+agents:
+  agentcore_strands:
+    name: agentcore_strands
+    entrypoint: /home/ubuntu/Self-Study-Generative-AI/lab/17_bedrock_agent_core/01-tutorials/01-AgentCore-runtime/01-hosting-agent/01-strands-with-bedrock-model/strands_claude.py
+    platform: linux/arm64
+    container_runtime: docker
+    aws:
+      execution_role: arn:aws:iam::057716757052:role/agentcore-agentcore_strands-role
+      execution_role_auto_create: false
+      account: '057716757052'
+      region: us-east-1
+      ecr_repository: 057716757052.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-agentcore_strands
+      ecr_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+    bedrock_agentcore:
+      agent_id: agentcore_strands-ynPdP96lTV
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:057716757052:runtime/agentcore_strands-ynPdP96lTV
+      agent_session_id: 0332991c-8e3a-4660-8e5f-d0083e700896
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    authorizer_configuration: null
+    oauth_configuration: null

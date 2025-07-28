@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "../../../../../../../amazon-bedrock-agentcore-samples"
+		},
+		{
+			"path": "../../../../../.."
+		}
+	],
+	"settings": {}
+}
