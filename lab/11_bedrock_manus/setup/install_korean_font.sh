@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# 자동 승인을 위한 환경변수 설정
+export DEBIAN_FRONTEND=noninteractive
+export APT_LISTCHANGES_FRONTEND=none
+
 # 스크립트 실행 시작 메시지
 echo "한글 폰트 설치 및 matplotlib 설정을 시작합니다..."
 
@@ -7,7 +11,7 @@ echo "한글 폰트 설치 및 matplotlib 설정을 시작합니다..."
 echo "나눔 폰트 설치 중..."
 if command -v apt-get > /dev/null; then
     # Ubuntu/Debian 계열
-    sudo apt-get update
+    sudo apt-get update -y
     sudo apt-get install -y fonts-nanum
 elif command -v yum > /dev/null; then
     # CentOS/RHEL 계열

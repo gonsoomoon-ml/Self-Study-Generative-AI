@@ -3,6 +3,10 @@
 # conda 초기화
 eval "$(conda shell.bash hook)"
 
+# 자동 승인을 위한 환경변수 설정
+export DEBIAN_FRONTEND=noninteractive
+export APT_LISTCHANGES_FRONTEND=none
+
 #####################################
 # Check if an argument is provided
 #####################################
@@ -63,9 +67,9 @@ ls
 
 pip install -r requirements.txt
 sh install_korean_font.sh
-sudo apt-get install pandoc -y
-sudo apt-get install texlive -y
-sudo apt-get install texlive-xetex -y
+sudo apt-get install -y pandoc
+sudo apt-get install -y texlive
+sudo apt-get install -y texlive-xetex
 
 # wait for  seconds
 echo "## Finish installing requirements.txt"
