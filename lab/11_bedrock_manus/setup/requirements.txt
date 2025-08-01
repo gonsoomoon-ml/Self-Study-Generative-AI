@@ -1,5 +1,5 @@
 boto3==1.38.8
-langgraph==0.4.1
+langgraph==0.6.2
 langchain==0.3.24
 langchain-community==0.3.22
 langchain-experimental==0.3.4
