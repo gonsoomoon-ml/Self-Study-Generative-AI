@@ -368,7 +368,8 @@ def get_llm_by_type(llm_type: LLMType):
             # model_id=bedrock_info.get_model_id(model_name="Claude-V3-Haiku"),
             # model_id=bedrock_info.get_model_id(model_name="Nova-Lite"),
             # model_id=bedrock_info.get_model_id(model_name="Claude-V3-7-Sonnet-CRI"),
-            model_id=bedrock_info.get_model_id(model_name="Claude-V3-5-V-2-Sonnet-CRI"),
+            # model_id=bedrock_info.get_model_id(model_name="Claude-V3-5-V-2-Sonnet-CRI"),
+            model_id=bedrock_info.get_model_id(model_name="Claude-V3-Sonnet"),
             bedrock_client=boto3_bedrock,
             stream=True,
             callbacks=[StreamingStdOutCallbackHandler()],
@@ -381,7 +382,9 @@ def get_llm_by_type(llm_type: LLMType):
     elif llm_type == "vision":
         llm = bedrock_model(
             #model_id=bedrock_info.get_model_id(model_name="Claude-V3-7-Sonnet-CRI"),
-            model_id=bedrock_info.get_model_id(model_name="Claude-V3-5-V-2-Sonnet-CRI"),
+            # model_id=bedrock_info.get_model_id(model_name="Claude-V3-5-V-2-Sonnet-CRI"),
+            # model_id=bedrock_info.get_model_id(model_name="Claude-V3-5-V-2-Sonnet-CRI"),
+            model_id=bedrock_info.get_model_id(model_name="Claude-V3-Sonnet"),
             bedrock_client=boto3_bedrock,
             stream=True,
             callbacks=[StreamingStdOutCallbackHandler()],
