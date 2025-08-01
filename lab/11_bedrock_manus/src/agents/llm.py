@@ -26,7 +26,7 @@ Supported models:
 "Claude-V1": "anthropic.claude-v1",
 "Claude-V2": "anthropic.claude-v2",
 "Claude-V2-1": "anthropic.claude-v2:1",
-"Claude-V3-Sonnet": "anthropic.claude-3-sonnet-20240229-v1:0",
+"Claude-V3-Sonnet": "us.anthropic.claude-3-sonnet-20240229-v1:0",
 "Claude-V3-Haiku": "anthropic.claude-3-haiku-20240307-v1:0",
 "Claude-V3-Opus": "anthropic.claude-3-sonnet-20240229-v1:0",
 "Claude-V3-5-Sonnet": "anthropic.claude-3-5-sonnet-20240620-v1:0",
@@ -356,7 +356,7 @@ def get_llm_by_type(llm_type: LLMType):
             stream=True,
             callbacks=[StreamingStdOutCallbackHandler()],
             inference_config={
-                'maxTokens': 8192*3,
+                'maxTokens': 4096,  # 8192*3에서 4096으로 수정
                 #'stopSequences': ["\n\nHuman"],
                 'temperature': 0.01,
             }
@@ -374,7 +374,7 @@ def get_llm_by_type(llm_type: LLMType):
             stream=True,
             callbacks=[StreamingStdOutCallbackHandler()],
             inference_config={
-                'maxTokens': 8192,
+                'maxTokens': 4096,  # 8192에서 4096으로 수정
                 #'stopSequences': ["\n\nHuman"],
                 'temperature': 0.01,
             }
@@ -389,7 +389,7 @@ def get_llm_by_type(llm_type: LLMType):
             stream=True,
             callbacks=[StreamingStdOutCallbackHandler()],
             inference_config={
-                'maxTokens': 8192,
+                'maxTokens': 4096,  # 8192에서 4096으로 수정
                 #'stopSequences': ["\n\nHuman"],
                 'temperature': 0.01,
             }
@@ -400,7 +400,7 @@ def get_llm_by_type(llm_type: LLMType):
             model_id=bedrock_info.get_model_id(model_name="Claude-V3-5-V-2-Sonnet-CRI"),
             client=boto3_bedrock,
             model_kwargs={
-                "max_tokens": 8192,
+                "max_tokens": 4096,  # 8192에서 4096으로 수정
                 "stop_sequences": ["\n\nHuman"],
             },
             #streaming=True,
