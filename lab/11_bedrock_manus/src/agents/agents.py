@@ -5,7 +5,7 @@ from src.prompts.template import apply_prompt_template
 from src.config.agents import AGENT_LLM_MAP, AGENT_PROMPT_CACHE_MAP
 # from src.tools.research_tools import research_tool_config, process_search_tool
 from src.tools.coder_tools import coder_tool_config, process_coder_tool
-#from src.tools.browser_tools import browser_tool_config, process_browser_tool
+# from src.tools.browser_tools import browser_tool_config, process_browser_tool
 from src.tools.reporter_tools import reporter_tool_config, process_reporter_tool
 
 from src.agents.llm import llm_call_langfuse
@@ -49,7 +49,7 @@ class create_react_agent():
         
         if self.agent_name == "researcher": self.tool_config = research_tool_config
         elif self.agent_name == "coder": self.tool_config = coder_tool_config
-        elif self.agent_name == "browser": self.tool_config = browser_tool_config
+        # elif self.agent_name == "browser": self.tool_config = browser_tool_config
         elif self.agent_name == "reporter": self.tool_config = reporter_tool_config
             
         # 반복 대화 처리를 위한 설정
@@ -94,7 +94,7 @@ class create_react_agent():
 
                         if self.agent_name == "researcher": tool_result_message = process_search_tool(tool)
                         elif self.agent_name == "coder": tool_result_message = process_coder_tool(tool)
-                        #elif self.agent_name == "browser": tool_result_message = process_browser_tool(tool)
+                        # elif self.agent_name == "browser": tool_result_message = process_browser_tool(tool)
                         elif self.agent_name == "reporter": tool_result_message = process_reporter_tool(tool)
 
                         messages.append(tool_result_message)
@@ -137,7 +137,7 @@ class create_react_agent_langfuse():
         
         if self.agent_name == "researcher": self.tool_config = research_tool_config
         elif self.agent_name == "coder": self.tool_config = coder_tool_config
-        elif self.agent_name == "browser": self.tool_config = browser_tool_config
+        # elif self.agent_name == "browser": self.tool_config = browser_tool_config
         elif self.agent_name == "reporter": self.tool_config = reporter_tool_config
             
         # 반복 대화 처리를 위한 설정
@@ -185,7 +185,7 @@ class create_react_agent_langfuse():
 
                         if self.agent_name == "researcher": tool_result_message = process_search_tool(tool)
                         elif self.agent_name == "coder": tool_result_message = process_coder_tool(tool)
-                        #elif self.agent_name == "browser": tool_result_message = process_browser_tool(tool)
+                        # elif self.agent_name == "browser": tool_result_message = process_browser_tool(tool)
                         elif self.agent_name == "reporter": tool_result_message = process_reporter_tool(tool)
 
                         messages.append(tool_result_message)
