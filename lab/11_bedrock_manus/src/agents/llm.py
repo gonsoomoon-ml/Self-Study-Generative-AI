@@ -370,6 +370,7 @@ def get_llm_by_type(llm_type: LLMType):
             # model_id=bedrock_info.get_model_id(model_name="Claude-V3-7-Sonnet-CRI"),
             # model_id=bedrock_info.get_model_id(model_name="Claude-V3-5-V-2-Sonnet-CRI"),
             model_id=bedrock_info.get_model_id(model_name="Claude-V3-Sonnet"),
+            # model_id=bedrock_info.get_model_id(model_name="Claude-V4-0-Sonnet-CRI"),
             bedrock_client=boto3_bedrock,
             stream=True,
             callbacks=[StreamingStdOutCallbackHandler()],
