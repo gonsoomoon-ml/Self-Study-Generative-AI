@@ -1,0 +1,30 @@
+# K-Style 이커머스 고객 지원 에이전트 - 의존성 패키지
+# ==========================================================
+
+# 핵심 AI/ML 프레임워크
+strands-agents>=0.7.0
+strands-agents-tools
+boto3>=1.39.15
+bedrock_agentcore
+ddgs
+
+# 웹 애플리케이션
+streamlit>=1.29.0
+plotly>=5.17.0
+pandas>=2.1.0
+pillow>=10.0.0
+
+# 개발 도구
+jupyter>=1.0.0
+jupyterlab>=4.0.0
+ipykernel>=6.25.0
+
+# 유틸리티
+requests>=2.31.0
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# 추가 패키지 (선택사항)
+# numpy>=1.24.0
+# matplotlib>=3.7.0
+# seaborn>=0.12.0

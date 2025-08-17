@@ -1,0 +1,38 @@
+[project]
+name = "ecommerce-customer-support-agent"
+version = "0.1.0"
+description = "Korean Fashion & Beauty E-commerce Customer Support Agent using Amazon Bedrock AgentCore"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "strands-agents[litellm]>=0.7.0",
+    "strands-agents-tools>=0.2.2",
+    "uv>=0.8.3",
+    "boto3>=1.39.15",
+    "botocore>=1.40.8",
+    "langchain[aws]>=0.3.27",
+    "langgraph>=0.5.4",
+    "langsmith[otel]>=0.4.8",
+    "duckduckgo-search>=8.1.1",
+    "langchain-community>=0.3.27",
+    "opentelemetry-instrumentation-langchain>=0.43.1",
+    "bedrock-agentcore>=0.1.2",
+    "bedrock-agentcore-starter-toolkit>=0.1.5",
+    "aws-opentelemetry-distro~=0.10.1",
+    "ddgs",
+    "ipython>=8.37.0",
+    "ipykernel>=6.25.0",
+    "pandas>=2.1.0",
+    "jupyterlab>=4.0.0",
+    "openpyxl>=3.1.5",
+    "jupyter>=1.0.0",
+    "requests>=2.31.0",
+    "streamlit>=1.29.0",
+    "streamlit-cognito-auth>=0.1.0",
+    "python-dotenv>=1.0.0",
+    "google-auth>=2.23.0",
+    "google-api-python-client>=2.100.0",
+    "plotly>=5.17.0",
+    "pillow>=10.0.0",
+    "pyyaml>=6.0",
+]

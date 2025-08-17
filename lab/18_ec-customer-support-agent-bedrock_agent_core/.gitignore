@@ -1,0 +1,157 @@
+# =============================================================================
+# K-Style 이커머스 고객 지원 에이전트 - .gitignore
+# 보안 및 개발 환경 관련 파일 제외
+# =============================================================================
+
+# ----- Python 가상환경 -----
+.venv/
+venv/
+env/
+ENV/
+
+# ----- Python 캐시 및 컴파일된 파일 -----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ----- Jupyter Notebook -----
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# ----- 환경 변수 및 설정 파일 -----
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.staging
+config.ini
+secrets.json
+credentials.json
+aws_credentials.json
+
+# ----- AWS 관련 보안 파일 -----
+.aws/
+aws.config
+aws.credentials
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# ----- API 키 및 토큰 -----
+api_keys.txt
+tokens.txt
+secrets.txt
+*.key
+*.token
+
+# ----- 데이터베이스 -----
+*.db
+*.sqlite
+*.sqlite3
+database/
+data/local/
+
+# ----- 로그 파일 -----
+*.log
+logs/
+log/
+
+# ----- 임시 파일 -----
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# ----- IDE 및 에디터 -----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ----- UV 패키지 매니저 -----
+uv.lock
+.uv/
+
+# ----- 테스트 커버리지 -----
+.coverage
+htmlcov/
+.tox/
+.pytest_cache/
+.mypy_cache/
+
+# ----- OS 생성 파일 -----
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ----- 프로젝트 특화 -----
+# AgentCore 관련
+agentcore_config.json
+agentcore_secrets.json
+memory_id.txt
+gateway_id.txt
+runtime_id.txt
+
+# Streamlit 관련
+.streamlit/
+
+# 모델 파일 (대용량)
+*.model
+*.pkl
+*.pickle
+models/
+checkpoints/
+
+# 데이터 파일 (민감한 정보 포함 가능)
+customer_data/
+user_data/
+personal_data/
+*.csv
+*.xlsx
+*.json
+
+# ----- 백업 파일 -----
+*.bak
+*.backup
+backup/
+backups/
+
+# ----- 잘못 생성된 폴더 -----
+remove/
+temp_venv/
+test_env/
+
+# ----- 기타 보안 관련 -----
+*.pwd
+*.pass
+password.txt
+private_key.txt
+secret_key.txt

@@ -1,0 +1,34 @@
+default_agent: ecommerce_test_dc5ab978
+agents:
+  ecommerce_test_dc5ab978:
+    name: ecommerce_test_dc5ab978
+    entrypoint: /home/ubuntu/Self-Study-Generative-AI/lab/18_ec-customer-support-agent-bedrock_agent_core/use_cases/customer_support/notebooks/lab_helpers/lab4_runtime.py
+    platform: linux/arm64
+    container_runtime: docker
+    aws:
+      execution_role: arn:aws:iam::057716757052:role/EcommerceCustomerSupportBedrockAgentCoreRole-us-east-1
+      execution_role_auto_create: false
+      account: '057716757052'
+      region: us-east-1
+      ecr_repository: 057716757052.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-ecommerce_test_dc5ab978
+      ecr_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+    bedrock_agentcore:
+      agent_id: ecommerce_test_dc5ab978-RlBdN4Ev0H
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:057716757052:runtime/ecommerce_test_dc5ab978-RlBdN4Ev0H
+      agent_session_id: d1fc93ab-977e-4698-85dc-b8e527c8ebc1
+    codebuild:
+      project_name: bedrock-agentcore-ecommerce_test_dc5ab978-builder
+      execution_role: arn:aws:iam::057716757052:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-810d6e6241
+      source_bucket: bedrock-agentcore-codebuild-sources-057716757052-us-east-1
+    authorizer_configuration:
+      customJWTAuthorizer:
+        allowedClients:
+        - 7f70nm2in9r2c6tekhsocmrtf6
+        discoveryUrl: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_Cd8tqfyBz/.well-known/openid-configuration
+    oauth_configuration: null
