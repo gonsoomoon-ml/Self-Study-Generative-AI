@@ -110,7 +110,7 @@ class llm_call():
             if self.llm.inference_config["maxTokens"] <= reasoning_budget_tokens:
                 # Make it just one token more than the reasoning budget
                 adjusted_max_tokens = reasoning_budget_tokens + 1
-                print(f'Info: Extended Thinking enabled increasing maxTokens from {self.llm.inference_config["maxTokens"]} to {adjusted_max_tokens} to exceed reasoning budget')
+                # print(f'Info: Extended Thinking enabled increasing maxTokens from {self.llm.inference_config["maxTokens"]} to {adjusted_max_tokens} to exceed reasoning budget')
                 self.llm.inference_config["maxTokens"] = adjusted_max_tokens
 
             self.llm.additional_model_request_fields = reasoning_config
@@ -132,6 +132,7 @@ class llm_call():
             
         return response, ai_message
 
+import sys
 import boto3
 import json
 from langfuse.decorators import observe, langfuse_context
@@ -191,7 +192,7 @@ class llm_call_langfuse():
             if self.llm.inference_config["maxTokens"] <= reasoning_budget_tokens:
                 # Make it just one token more than the reasoning budget
                 adjusted_max_tokens = reasoning_budget_tokens + 1
-                print(f'Info: Extended Thinking enabled increasing maxTokens from {self.llm.inference_config["maxTokens"]} to {adjusted_max_tokens} to exceed reasoning budget')
+                # print(f'Info: Extended Thinking enabled increasing maxTokens from {self.llm.inference_config["maxTokens"]} to {adjusted_max_tokens} to exceed reasoning budget')
                 self.llm.inference_config["maxTokens"] = adjusted_max_tokens
 
             self.llm.inference_config["temperature"] = 1.0 # 추론 모드에서는 1.0 이외는 에러 발생 함.
@@ -261,18 +262,19 @@ class llm_call_langfuse():
             # metadata=kwargs_clone
         )
         ##############################3
-        # 2. model call with error handling
+        # 2. model call with error handling (including response parsing)
         ##############################3
         import time
         
-        max_attempts = 3
-        delay_seconds = 60
+        max_attempts = 10
+        delay_seconds = 120  # 기본 대기시간을 120초로 증가
         response = None
         ai_message = None
         last_error = None
         
         for attempt in range(max_attempts):
             try:
+                # LLM 호출
                 response, ai_message = self.chain(
                     llm=self.llm,
                     system_prompts=system_prompts,
@@ -280,59 +282,74 @@ class llm_call_langfuse():
                     tool_config=tool_config,
                     verbose=self.verbose
                 )
-                # 성공하면 반복문 종료
+                
+                # 응답 파싱 및 Langfuse 기록
+                response_text = response["text"]
+                reasoning_text = response["reasoning"]
+                token_usage = response["token_usage"]
+                input_tokens = token_usage.get("inputTokens", 0)
+                output_tokens = token_usage.get("outputTokens", 0)
+                total_tokens = token_usage.get("totalTokens", 0)
+
+                langfuse_context.update_current_observation(
+                    output=response_text,
+                    usage_details={
+                        "input": input_tokens,
+                        "output": output_tokens,
+                        "total": total_tokens,
+                    },
+                    metadata={
+                        "reasoning_text": reasoning_text, 
+                    }
+                )
+                
+                # 모든 처리가 성공하면 반복문 종료
                 break
                 
             except (ClientError, Exception) as e:
                 last_error = e
-                error_message = f"Attempt {attempt + 1}/{max_attempts}: ERROR: Can't invoke '{modelId}'. Reason: {e}"
-                print(error_message)
                 
-                # 마지막 시도가 아니면 대기 후 재시도
+                # Throttling 에러 특별 처리
+                if isinstance(e, ClientError):
+                    error_code = e.response.get('Error', {}).get('Code', '')
+                    error_message_detail = e.response.get('Error', {}).get('Message', '')
+                    
+                    if error_code == 'ThrottlingException' or 'Too many requests' in str(e):
+                        error_message = f"Attempt {attempt + 1}/{max_attempts}: Rate limit exceeded. Waiting {delay_seconds}s before retry..."
+                        print(error_message)
+                        
+                        # 마지막 시도가 아니면 더 긴 대기 후 재시도
+                        if attempt < max_attempts - 1:
+                            extended_delay = delay_seconds * (attempt + 2)  # 더 강한 지수 백오프
+                            print(f"Waiting {extended_delay} seconds due to throttling...")
+                            time.sleep(extended_delay)
+                            continue
+                    else:
+                        error_message = f"Attempt {attempt + 1}/{max_attempts}: ERROR: Can't invoke '{modelId}'. Code: {error_code}, Message: {error_message_detail}"
+                        print(error_message)
+                else:
+                    # 응답 파싱 에러도 포함
+                    if 'NoneType' in str(e) or 'parse' in str(e).lower():
+                        error_message = f"Attempt {attempt + 1}/{max_attempts}: ERROR: Can't parse response. Reason: {type(e).__name__}: {e}"
+                    else:
+                        error_message = f"Attempt {attempt + 1}/{max_attempts}: ERROR: Can't invoke '{modelId}'. Reason: {e}"
+                    print(error_message)
+                
+                # 마지막 시도가 아니면 대기 후 재시도 (일반 에러에도 긴 대기)
                 if attempt < max_attempts - 1:
-                    time.sleep(delay_seconds)
+                    general_delay = delay_seconds + (attempt * 30)  # 30초씩 추가 대기
+                    print(f"Waiting {general_delay} seconds before retry...")
+                    time.sleep(general_delay)
                     continue
                 
-                # 마지막 시도에서 실패한 경우
-                final_error_message = f"ERROR: Can't invoke '{modelId}' after {max_attempts} attempts. Last error: {last_error}"
+                # 마지막 시도에서 실패한 경우 - 프로그램 종료
+                final_error_message = f"CRITICAL: Can't process '{modelId}' after {max_attempts} attempts. Last error: {last_error}"
                 langfuse_context.update_current_observation(level="ERROR", status_message=final_error_message)
-                print("Error in exception during calling chain: ", final_error_message)
-                return {"text": final_error_message}, {"error": final_error_message}
-    
-
-        ##############################3
-        # 3. extract response metadata
-        ##############################3
-        # Langfuse에 출력 텍스트, 토큰 사용량, 응답 메타데이터를 기록합니다.
-        try:
-            response_text = response["text"]
-            reasoning_text = response["reasoning"]
-            print("## response in wrapped_bedrock_converse: \n", json.dumps(response, indent=2, ensure_ascii=False))
-
-            token_usage = response["token_usage"]
-            input_tokens = token_usage.get("inputTokens", 0)
-            output_tokens = token_usage.get("outputTokens", 0)
-            total_tokens = token_usage.get("totalTokens", 0)
-
-            langfuse_context.update_current_observation(
-                output=response_text,
-                usage_details={
-                    "input": input_tokens,
-                    "output": output_tokens,
-                    "total": total_tokens,
-                },
-                metadata={
-                    "reasoning_text": reasoning_text, 
-                }
-            )
-
-        except (ClientError, Exception) as e:
-            print("## response in except in adding to langfuse: \n", response) 
-            error_message = f"ERROR: Can't parse:  Reason: {e}"
-            langfuse_context.update_current_observation(level="ERROR", status_message=error_message)
-            print(error_message)
-            # Always return a dict with 'text' key to avoid KeyError downstream
-            return {"text": error_message}, {"error": error_message}
+                print("CRITICAL ERROR:", final_error_message)
+                print(f"🚨 프로그램을 종료합니다. {max_attempts}번의 재시도 후에도 LLM 호출 또는 응답 처리에 실패했습니다.")
+                
+                # 프로그램 종료
+                sys.exit(1)
 
         # return {"text": response_text}, ai_message
         return response, ai_message
@@ -350,32 +367,51 @@ def get_llm_by_type(llm_type: LLMType):
     )
 
     if llm_type == "reasoning":
+        model_id = bedrock_info.get_model_id(model_name="Claude-V3-7-Sonnet-CRI")
+        print("## model_id: ", model_id)
         llm = bedrock_model(
-            model_id=bedrock_info.get_model_id(model_name="Claude-V3-7-Sonnet-CRI"),
+            model_id=model_id,
+            # model_id=bedrock_info.get_model_id(model_name="Claude-V3-5-V-2-Sonnet-CRI"),
             bedrock_client=boto3_bedrock,
             stream=True,
             callbacks=[StreamingStdOutCallbackHandler()],
             inference_config={
-                'maxTokens': 4096,  # 8192*3에서 4096으로 수정
+                'maxTokens': 8192,  # 4096에서 8192로 증가
                 #'stopSequences': ["\n\nHuman"],
                 'temperature': 0.01,
             }
         )
         
     elif llm_type == "basic":
+        model_id = bedrock_info.get_model_id(model_name="Claude-V3-Sonnet")
+        # model_id=bedrock_info.get_model_id(model_name="Nova-Pro-CRI"),
+        # model_id=bedrock_info.get_model_id(model_name="Claude-V3-5-Haiku"),
+        # model_id=bedrock_info.get_model_id(model_name="Claude-V3-7-Sonnet-CRI"),
+        # model_id=bedrock_info.get_model_id(model_name="Claude-V3-5-V-2-Sonnet-CRI"),
+        # model_id=bedrock_info.get_model_id(model_name="Claude-V4-0-Sonnet-CRI"),
+
+        print("## model_id: ", model_id)
         llm = bedrock_model(
-            # model_id=bedrock_info.get_model_id(model_name="Nova-Pro-CRI"),
-            # model_id=bedrock_info.get_model_id(model_name="Claude-V3-Haiku"),
-            # model_id=bedrock_info.get_model_id(model_name="Nova-Lite"),
-            # model_id=bedrock_info.get_model_id(model_name="Claude-V3-7-Sonnet-CRI"),
-            # model_id=bedrock_info.get_model_id(model_name="Claude-V3-5-V-2-Sonnet-CRI"),
-            model_id=bedrock_info.get_model_id(model_name="Claude-V3-Sonnet"),
-            # model_id=bedrock_info.get_model_id(model_name="Claude-V4-0-Sonnet-CRI"),
+            model_id=model_id,
             bedrock_client=boto3_bedrock,
             stream=True,
             callbacks=[StreamingStdOutCallbackHandler()],
             inference_config={
-                'maxTokens': 4096,  # 8192에서 4096으로 수정
+                'maxTokens': 8192,  # 8192에서 4096으로 수정
+                #'stopSequences': ["\n\nHuman"],
+                'temperature': 0.01,
+            }
+        )        
+    elif llm_type == "advanced":
+        model_id=bedrock_info.get_model_id(model_name="Claude-V4-0-Sonnet-CRI")
+        print("## model_id: ", model_id)
+        llm = bedrock_model(
+            model_id=model_id,
+            bedrock_client=boto3_bedrock,
+            stream=True,
+            callbacks=[StreamingStdOutCallbackHandler()],
+            inference_config={
+                'maxTokens': 8192,
                 #'stopSequences': ["\n\nHuman"],
                 'temperature': 0.01,
             }
@@ -390,7 +426,7 @@ def get_llm_by_type(llm_type: LLMType):
             stream=True,
             callbacks=[StreamingStdOutCallbackHandler()],
             inference_config={
-                'maxTokens': 4096,  # 8192에서 4096으로 수정
+                'maxTokens': 8192,  # 8192에서 4096으로 수정
                 #'stopSequences': ["\n\nHuman"],
                 'temperature': 0.01,
             }
@@ -401,7 +437,7 @@ def get_llm_by_type(llm_type: LLMType):
             model_id=bedrock_info.get_model_id(model_name="Claude-V3-5-V-2-Sonnet-CRI"),
             client=boto3_bedrock,
             model_kwargs={
-                "max_tokens": 4096,  # 8192에서 4096으로 수정
+                "max_tokens": 8192,  # 4096에서 8192로 증가
                 "stop_sequences": ["\n\nHuman"],
             },
             #streaming=True,

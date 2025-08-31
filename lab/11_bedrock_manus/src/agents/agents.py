@@ -3,10 +3,11 @@ import logging
 import json
 from src.prompts.template import apply_prompt_template
 from src.config.agents import AGENT_LLM_MAP, AGENT_PROMPT_CACHE_MAP
-# from src.tools.research_tools import research_tool_config, process_search_tool
+from src.tools.research_tools import research_tool_config, process_search_tool
 from src.tools.coder_tools import coder_tool_config, process_coder_tool
 # from src.tools.browser_tools import browser_tool_config, process_browser_tool
 from src.tools.reporter_tools import reporter_tool_config, process_reporter_tool
+from src.tools.validator_tools import validator_tool_config, process_validator_tool
 
 from src.agents.llm import llm_call_langfuse
 
@@ -49,6 +50,7 @@ class create_react_agent():
         
         if self.agent_name == "researcher": self.tool_config = research_tool_config
         elif self.agent_name == "coder": self.tool_config = coder_tool_config
+        elif self.agent_name == "validator": self.tool_config = validator_tool_config
         # elif self.agent_name == "browser": self.tool_config = browser_tool_config
         elif self.agent_name == "reporter": self.tool_config = reporter_tool_config
             
@@ -66,7 +68,7 @@ class create_react_agent():
         # 도구 사용이 종료될 때까지 반복
         while not self.final_response and self.turn < self.MAX_TURNS:
             self.turn += 1
-            print(f"--- 대화 턴 {self.turn} ---")
+            logger.info(f"{Colors.YELLOW}🔄 --- {self.agent_name} 대화 턴 {self.turn} ---{Colors.END}")
             response, ai_message = self.llm_caller.invoke(
                 agent_name=self.agent_name,
                 messages=messages,
@@ -80,7 +82,8 @@ class create_react_agent():
             # 도구 사용 요청 확인
             stop_reason = response.get("stop_reason") or response.get("stopReason")
             if stop_reason is None:
-                print("response에 stop_reason이 없습니다:", json.dumps(response, indent=2, ensure_ascii=False))
+                # print("response에 stop_reason이 없습니다:", json.dumps(response, indent=2, ensure_ascii=False))
+                pass
             if stop_reason == "tool_use":
                 tool_requests_found = False
 
@@ -90,30 +93,44 @@ class create_react_agent():
                         tool = content['toolUse']
                         tool_requests_found = True
 
-                        logger.info(f"{Colors.BOLD}\nToolUse - Tool Name: {tool['name']}, Input: {tool['input']}{Colors.END}")
+                        # ReAct 단계별 행동 설명
+                        tool_descriptions = {
+                            "search_tool": "🔍 검색 수행 중",
+                            "read_file_tool": "📖 파일 읽기 중",
+                            "write_file_tool": "📝 파일 쓰기 중", 
+                            "python_repl_tool": "🐍 파이썬 코드 실행 중",
+                            "crawl_tool": "🌐 웹 크롤링 중",
+                            "bash_tool": "⚡ 시스템 명령 실행 중"
+                        }
+                        
+                        action_desc = tool_descriptions.get(tool['name'], f"🔧 {tool['name']} 실행 중")
+                        logger.info(f"{Colors.YELLOW}🤖 ReAct Action: {action_desc}{Colors.END}")
+                        logger.info(f"{Colors.BOLD}ToolUse - Tool Name: {tool['name']}, Input: {tool['input']}{Colors.END}")
 
                         if self.agent_name == "researcher": tool_result_message = process_search_tool(tool)
                         elif self.agent_name == "coder": tool_result_message = process_coder_tool(tool)
+                        elif self.agent_name == "validator": tool_result_message = process_validator_tool(tool)
                         # elif self.agent_name == "browser": tool_result_message = process_browser_tool(tool)
                         elif self.agent_name == "reporter": tool_result_message = process_reporter_tool(tool)
 
                         messages.append(tool_result_message)
+                        logger.info(f"{Colors.GREEN}✅ ReAct Observation: 도구 실행 완료{Colors.END}")
                         logger.info(f"{Colors.BOLD}ToolUse - 도구 실행 결과를 대화에 추가했습니다.{Colors.END}")
 
                 # 도구 요청이 없으면 루프 종료
                 if not tool_requests_found:
-                    print("도구 요청을 찾을 수 없습니다.")
-                    logger.info(f"{Colors.UNDERLINE}ToolUse - 도구 요청을 찾을 수 없습니다.{Colors.END}")
+                    # print("도구 요청을 찾을 수 없습니다.")
+                    # logger.info(f"{Colors.UNDERLINE}ToolUse - 도구 요청을 찾을 수 없습니다.{Colors.END}")
                     self.final_response = True
             else:
                 # 도구 사용이 요청되지 않았으면 최종 응답으로 간주
                 self.final_response = True
-                logger.info(f"{Colors.UNDERLINE}ToolUse - 최종 응답을 받았습니다.{Colors.END}")
-                print("최종 응답을 받았습니다.")
+                # logger.info(f"{Colors.UNDERLINE}ToolUse - 최종 응답을 받았습니다.{Colors.END}")
+                # print("최종 응답을 받았습니다.")
 
-        print("\n=== 대화 완료 ===")
-        print("최종 응답:\n", response)
-        print("메시지:\n", ai_message)
+        # print("\n=== 대화 완료 ===")
+        # print("최종 응답:\n", response)
+        # print("메시지:\n", ai_message)
         
         return ai_message
     
@@ -125,7 +142,7 @@ class create_react_agent_langfuse():
 
         self.agent_name = kwargs["agent_name"]
         self.llm = get_llm_by_type(AGENT_LLM_MAP[self.agent_name])
-        print("## Agent Name: ", self.agent_name, " , ", AGENT_LLM_MAP[self.agent_name])
+        # print("## Agent Name: ", self.agent_name, " , ", AGENT_LLM_MAP[self.agent_name])
         self.llm.stream = True
         # self.llm_caller = llm_call(llm=self.llm, verbose=False, tracking=False)
         self.llm_caller = llm_call_langfuse(llm=self.llm, verbose=False, tracking=False)
@@ -137,6 +154,7 @@ class create_react_agent_langfuse():
         
         if self.agent_name == "researcher": self.tool_config = research_tool_config
         elif self.agent_name == "coder": self.tool_config = coder_tool_config
+        elif self.agent_name == "validator": self.tool_config = validator_tool_config
         # elif self.agent_name == "browser": self.tool_config = browser_tool_config
         elif self.agent_name == "reporter": self.tool_config = reporter_tool_config
             
@@ -155,7 +173,7 @@ class create_react_agent_langfuse():
         # 도구 사용이 종료될 때까지 반복
         while not self.final_response and self.turn < self.MAX_TURNS:
             self.turn += 1
-            print(f"--- 대화 턴 {self.turn} ---")
+            logger.info(f"{Colors.YELLOW}🔄 --- {self.agent_name} 대화 턴 {self.turn} ---{Colors.END}")
             response, ai_message = self.llm_caller.invoke(
                 agent_name=self.agent_name,
                 messages=messages,
@@ -171,7 +189,8 @@ class create_react_agent_langfuse():
             # 도구 사용 요청 확인
             stop_reason = response.get("stop_reason") or response.get("stopReason")
             if stop_reason is None:
-                print("response에 stop_reason이 없습니다:", json.dumps(response, indent=2, ensure_ascii=False))
+                # print("response에 stop_reason이 없습니다:", json.dumps(response, indent=2, ensure_ascii=False))
+                pass
             if stop_reason == "tool_use":
                 tool_requests_found = False
 
@@ -181,30 +200,44 @@ class create_react_agent_langfuse():
                         tool = content['toolUse']
                         tool_requests_found = True
 
-                        logger.info(f"{Colors.BOLD}\nToolUse - Tool Name: {tool['name']}, Input: {tool['input']}{Colors.END}")
+                        # ReAct 단계별 행동 설명
+                        tool_descriptions = {
+                            "search_tool": "🔍 검색 수행 중",
+                            "read_file_tool": "📖 파일 읽기 중",
+                            "write_file_tool": "📝 파일 쓰기 중", 
+                            "python_repl_tool": "🐍 파이썬 코드 실행 중",
+                            "crawl_tool": "🌐 웹 크롤링 중",
+                            "bash_tool": "⚡ 시스템 명령 실행 중"
+                        }
+                        
+                        action_desc = tool_descriptions.get(tool['name'], f"🔧 {tool['name']} 실행 중")
+                        logger.info(f"{Colors.YELLOW}🤖 ReAct Action: {action_desc}{Colors.END}")
+                        logger.info(f"{Colors.BOLD}ToolUse - Tool Name: {tool['name']}, Input: {tool['input']}{Colors.END}")
 
                         if self.agent_name == "researcher": tool_result_message = process_search_tool(tool)
                         elif self.agent_name == "coder": tool_result_message = process_coder_tool(tool)
+                        elif self.agent_name == "validator": tool_result_message = process_validator_tool(tool)
                         # elif self.agent_name == "browser": tool_result_message = process_browser_tool(tool)
                         elif self.agent_name == "reporter": tool_result_message = process_reporter_tool(tool)
 
                         messages.append(tool_result_message)
+                        logger.info(f"{Colors.GREEN}✅ ReAct Observation: 도구 실행 완료{Colors.END}")
                         logger.info(f"{Colors.BOLD}ToolUse - 도구 실행 결과를 대화에 추가했습니다.{Colors.END}")
 
                 # 도구 요청이 없으면 루프 종료
                 if not tool_requests_found:
-                    print("도구 요청을 찾을 수 없습니다.")
-                    logger.info(f"{Colors.UNDERLINE}ToolUse - 도구 요청을 찾을 수 없습니다.{Colors.END}")
+                    # print("도구 요청을 찾을 수 없습니다.")
+                    # logger.info(f"{Colors.UNDERLINE}ToolUse - 도구 요청을 찾을 수 없습니다.{Colors.END}")
                     self.final_response = True
             else:
                 # 도구 사용이 요청되지 않았으면 최종 응답으로 간주
                 self.final_response = True
-                logger.info(f"{Colors.UNDERLINE}ToolUse - 최종 응답을 받았습니다.{Colors.END}")
-                print("최종 응답을 받았습니다.")
+                # logger.info(f"{Colors.UNDERLINE}ToolUse - 최종 응답을 받았습니다.{Colors.END}")
+                # print("최종 응답을 받았습니다.")
 
-        print("\n=== 대화 완료 ===")
-        print("최종 응답:\n", response)
-        print("메시지:\n", ai_message)
+        # print("\n=== 대화 완료 ===")
+        # print("최종 응답:\n", response)
+        # print("메시지:\n", ai_message)
         
         return ai_message
 

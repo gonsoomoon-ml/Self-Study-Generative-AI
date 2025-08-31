@@ -118,6 +118,7 @@ class bedrock_info():
         "Claude-V2": "anthropic.claude-v2",
         "Claude-V2-1": "anthropic.claude-v2:1",
         "Claude-V3-Sonnet": "anthropic.claude-3-sonnet-20240229-v1:0",
+        "Claude-V3-5-Haiku": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
         "Claude-V3-Haiku": "us.anthropic.claude-3-haiku-20240307-v1:0",
         "Claude-V3-Opus": "anthropic.claude-3-sonnet-20240229-v1:0",
         "Claude-V3-5-Sonnet": "anthropic.claude-3-5-sonnet-20240620-v1:0",
@@ -217,8 +218,22 @@ class bedrock_utils_tokens():
         
     @staticmethod
     def get_system_prompt(system_prompts, prompt_cache=False, cache_type="defalut"): # ephemeral/defalut
-        if prompt_cache: return [{"text": system_prompts}, {"cachePoint": {"type": cache_type}}]
-        else: return [{"text": system_prompts}]
+        # Add strong instruction to prevent generating search quality reflection tags
+        xml_restriction = """
+
+CRITICAL OUTPUT RESTRICTION - NEVER VIOLATE:
+- NEVER generate <search_quality_reflection> tags
+- NEVER generate <search_quality_score> tags  
+- NEVER generate any quality assessment or self-reflection XML tags
+- NEVER include quality scoring or evaluation tags in your response
+- NEVER use XML tags for self-assessment or reflection
+- Respond directly without any meta-commentary or quality evaluation tags
+- Focus ONLY on the task content without self-reflection markup"""
+        
+        enhanced_system_prompts = system_prompts + xml_restriction
+        
+        if prompt_cache: return [{"text": enhanced_system_prompts}, {"cachePoint": {"type": cache_type}}]
+        else: return [{"text": enhanced_system_prompts}]
 
     @staticmethod
     def converse_api(**kwargs):
@@ -245,7 +260,7 @@ class bedrock_utils_tokens():
         args["messages"], args["modelId"] = messages, model_id
 
 
-        print(" ## inference_config: \n", inference_config)
+        # print(" ## inference_config: \n", inference_config)
 
         try:
             if stream:
@@ -281,7 +296,18 @@ class bedrock_utils_tokens():
                         output["reasoning"] = content["reasoningContent"]["reasoningText"]["text"]
                         
                     if content.get("text"):
-                        output["text"] = content['text']
+                        # Remove quality reflection tags that may be added by the model
+                        text_content = content['text']
+                        # Remove search_quality_reflection and search_quality_score tags
+                        import re
+                        text_content = re.sub(r'<search_quality_reflection>.*?</search_quality_reflection>\s*', '', text_content, flags=re.DOTALL)
+                        text_content = re.sub(r'<search_quality_score>\d+</search_quality_score>\s*', '', text_content, flags=re.DOTALL)
+                        
+                        # Prevent empty text content that causes ValidationException
+                        if not text_content or text_content.strip() == "":
+                            text_content = "계속 진행합니다."  # Default non-empty text
+                        
+                        output["text"] = text_content
                     
                     if content.get("toolUse"):
                         output["toolUse"] = content['toolUse']
@@ -300,7 +326,12 @@ class bedrock_utils_tokens():
                 if verbose:
                     for content in message['content']:
                         if content.get("text"):
-                            print(f"Text: {content['text']}")
+                            # Apply filtering before printing 
+                            import re
+                            filtered_text = content['text']
+                            filtered_text = re.sub(r'<search_quality_reflection>.*?</search_quality_reflection>\s*', '', filtered_text, flags=re.DOTALL)
+                            filtered_text = re.sub(r'<search_quality_score>\d+</search_quality_score>\s*', '', filtered_text, flags=re.DOTALL)
+                            print(f"Text: {filtered_text}")
                         elif content.get("toolUse"):
                             print(f"toolUseId: {content['toolUse']['toolUseId']}")
                             print(f"name: {content['toolUse']['name']}")
@@ -329,7 +360,8 @@ class bedrock_utils_tokens():
                             if "text" in delta["reasoningContent"]:
                                 output["reasoning"] += delta["reasoningContent"]["text"]
                                 #print("\033[94m" + reasoning_text + "\033[0m", end="")
-                                print("\033[94m" + delta["reasoningContent"]["text"] + "\033[0m", end="")
+                                # Completely disable reasoning output to prevent quality reflection tags
+                                pass
                             elif 'signature' in delta["reasoningContent"]:
                                 output["signature"] += delta["reasoningContent"]["signature"]
                             else:
@@ -351,7 +383,13 @@ class bedrock_utils_tokens():
                             tool_use = {}
                         else:
                             if output["text"] != "":
-                                message['content'].append({'text': output["text"]})
+                                # Remove quality reflection tags from streaming text
+                                import re
+                                text_content = output["text"]
+                                text_content = re.sub(r'<search_quality_reflection>.*?</search_quality_reflection>\s*', '', text_content, flags=re.DOTALL)
+                                text_content = re.sub(r'<search_quality_score>\d+</search_quality_score>\s*', '', text_content, flags=re.DOTALL)
+                                output["text"] = text_content
+                                message['content'].append({'text': text_content})
                             if output["reasoning"] != "":
                                 message['content'].append({'reasoningContent': {"reasoningText": {"text": output["reasoning"], "signature": output["signature"]}}})
                     elif 'messageStop' in event:
@@ -401,8 +439,22 @@ class bedrock_utils():
         
     @staticmethod
     def get_system_prompt(system_prompts, prompt_cache=False, cache_type="defalut"): # ephemeral/defalut
-        if prompt_cache: return [{"text": system_prompts}, {"cachePoint": {"type": cache_type}}]
-        else: return [{"text": system_prompts}]
+        # Add strong instruction to prevent generating search quality reflection tags
+        xml_restriction = """
+
+CRITICAL OUTPUT RESTRICTION - NEVER VIOLATE:
+- NEVER generate <search_quality_reflection> tags
+- NEVER generate <search_quality_score> tags  
+- NEVER generate any quality assessment or self-reflection XML tags
+- NEVER include quality scoring or evaluation tags in your response
+- NEVER use XML tags for self-assessment or reflection
+- Respond directly without any meta-commentary or quality evaluation tags
+- Focus ONLY on the task content without self-reflection markup"""
+        
+        enhanced_system_prompts = system_prompts + xml_restriction
+        
+        if prompt_cache: return [{"text": enhanced_system_prompts}, {"cachePoint": {"type": cache_type}}]
+        else: return [{"text": enhanced_system_prompts}]
 
     @staticmethod
     def converse_api(**kwargs):
@@ -461,7 +513,18 @@ class bedrock_utils():
                         output["reasoning"] = content["reasoningContent"]["reasoningText"]["text"]
                         
                     if content.get("text"):
-                        output["text"] = content['text']
+                        # Remove quality reflection tags that may be added by the model
+                        text_content = content['text']
+                        # Remove search_quality_reflection and search_quality_score tags
+                        import re
+                        text_content = re.sub(r'<search_quality_reflection>.*?</search_quality_reflection>\s*', '', text_content, flags=re.DOTALL)
+                        text_content = re.sub(r'<search_quality_score>\d+</search_quality_score>\s*', '', text_content, flags=re.DOTALL)
+                        
+                        # Prevent empty text content that causes ValidationException
+                        if not text_content or text_content.strip() == "":
+                            text_content = "계속 진행합니다."  # Default non-empty text
+                        
+                        output["text"] = text_content
                     
                     if content.get("toolUse"):
                         output["toolUse"] = content['toolUse']
@@ -469,7 +532,12 @@ class bedrock_utils():
                 if verbose:
                     for content in message['content']:
                         if content.get("text"):
-                            print(f"Text: {content['text']}")
+                            # Apply filtering before printing 
+                            import re
+                            filtered_text = content['text']
+                            filtered_text = re.sub(r'<search_quality_reflection>.*?</search_quality_reflection>\s*', '', filtered_text, flags=re.DOTALL)
+                            filtered_text = re.sub(r'<search_quality_score>\d+</search_quality_score>\s*', '', filtered_text, flags=re.DOTALL)
+                            print(f"Text: {filtered_text}")
                         elif content.get("toolUse"):
                             print(f"toolUseId: {content['toolUse']['toolUseId']}")
                             print(f"name: {content['toolUse']['name']}")
@@ -508,7 +576,8 @@ class bedrock_utils():
                             if "text" in delta["reasoningContent"]:
                                 output["reasoning"] += delta["reasoningContent"]["text"]
                                 #print("\033[94m" + reasoning_text + "\033[0m", end="")
-                                print("\033[94m" + delta["reasoningContent"]["text"] + "\033[0m", end="")
+                                # Completely disable reasoning output to prevent quality reflection tags
+                                pass
                             elif 'signature' in delta["reasoningContent"]:
                                 output["signature"] += delta["reasoningContent"]["signature"]
                             else:
@@ -530,7 +599,13 @@ class bedrock_utils():
                             tool_use = {}
                         else:
                             if output["text"] != "":
-                                message['content'].append({'text': output["text"]})
+                                # Remove quality reflection tags from streaming text
+                                import re
+                                text_content = output["text"]
+                                text_content = re.sub(r'<search_quality_reflection>.*?</search_quality_reflection>\s*', '', text_content, flags=re.DOTALL)
+                                text_content = re.sub(r'<search_quality_score>\d+</search_quality_score>\s*', '', text_content, flags=re.DOTALL)
+                                output["text"] = text_content
+                                message['content'].append({'text': text_content})
                             if output["reasoning"] != "":
                                 message['content'].append({'reasoningContent': {"reasoningText": {"text": output["reasoning"], "signature": output["signature"]}}})
                     elif 'messageStop' in event:

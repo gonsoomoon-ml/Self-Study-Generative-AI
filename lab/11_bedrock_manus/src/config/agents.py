@@ -1,7 +1,7 @@
 from typing import Literal, Tuple
 
 # Define available LLM types
-LLMType = Literal["basic", "reasoning", "vision"]
+LLMType = Literal["basic", "reasoning", "vision", "advanced"]
 CACHEType = Tuple[bool, Literal["default", "ephemeral"]]
 
 # Define agent-LLM mapping
@@ -27,45 +27,39 @@ CACHEType = Tuple[bool, Literal["default", "ephemeral"]]
 #     "reporter": "reasoning"
 # }
 
-# Middle Quality
-# AGENT_LLM_MAP: dict[str, LLMType] = {
-#     "coordinator": "basic",
-#     "planner": "basic",
-#     "supervisor": "basic",
-#     "researcher": "basic",
-#     "coder": "basic",
-#     "browser": "vision",
-#     "reporter": "reasoning"
-# }
+
 
 # Low  Quality
 AGENT_LLM_MAP: dict[str, LLMType] = {
-    "coordinator": "basic",
-    "planner": "basic",
-    "supervisor": "basic",
+    "coordinator": "reasoning",
+    "planner": "advanced",
+    "supervisor": "reasoning",
+    "coder": "reasoning",
+    "validator": "reasoning",
+    "reporter": "reasoning",
     "researcher": "basic",
-    "coder": "basic",
-    "browser": "vision",
-    "reporter": "basic"
-}
-
-AGENT_PROMPT_CACHE_MAP: dict[bool, CACHEType] = {
-    "coordinator": (False, "default"),
-    "planner": (False, "default"),
-    "supervisor": (False, "default"),
-    "researcher": (False, "default"),
-    "coder": (False, "default"),
-    "browser": (False, "default"),
-    "reporter": (False, "default")
+    "browser": "vision"
 }
 
 # AGENT_PROMPT_CACHE_MAP: dict[bool, CACHEType] = {
 #     "coordinator": (False, "default"),
-#     "planner": (True, "default"),
-#     "supervisor": (True, "default"),
+#     "planner": (False, "default"),
+#     "supervisor": (False, "default"),
 #     "researcher": (False, "default"),
 #     "coder": (False, "default"),
+#     "validator": (False, "default"),
 #     "browser": (False, "default"),
-#     "reporter": (True, "default")
+#     "reporter": (False, "default")
 # }
+
+AGENT_PROMPT_CACHE_MAP: dict[bool, CACHEType] = {
+    "coordinator": (False, "default"),
+    "planner": (True, "default"),
+    "supervisor": (True, "default"),
+    "researcher": (False, "default"),
+    "coder": (False, "default"),
+    "validator": (False, "default"),
+    "browser": (False, "default"),
+    "reporter": (True, "default")
+}
 

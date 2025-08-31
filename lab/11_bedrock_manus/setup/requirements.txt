@@ -26,3 +26,5 @@ lovelyplots==1.0.2
 weasyprint==65.1
 streamlit==1.45.0
 langchain-mcp-adapters==0.1.0
+reportlab==4.2.5
+fpdf2==2.8.1

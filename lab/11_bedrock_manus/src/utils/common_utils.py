@@ -12,6 +12,12 @@ logging.basicConfig()
 logger = logging.getLogger('retry-bedrock-invocation')
 logger.setLevel(logging.INFO)
 
+def get_logger(name: str = None) -> logging.Logger:
+    """Get a logger with the specified name"""
+    if name:
+        return logging.getLogger(name)
+    return logger
+
 def retry(total_try_cnt=5, sleep_in_sec=5, retryable_exceptions=(ClientError,)):
     def decorator(func):
         @functools.wraps(func)

@@ -343,8 +343,8 @@ class llm_call_langfuse():
         ##############################3
         import time
         
-        max_attempts = 3
-        delay_seconds = 1
+        max_attempts = 10
+        delay_seconds = 120  # 기본 대기시간을 120초로 증가
         response = None
         ai_message = None
         last_error = None
@@ -366,9 +366,11 @@ class llm_call_langfuse():
                 error_message = f"Attempt {attempt + 1}/{max_attempts}: ERROR: Can't invoke '{modelId}'. Reason: {e}"
                 print(error_message)
                 
-                # 마지막 시도가 아니면 대기 후 재시도
+                # 마지막 시도가 아니면 대기 후 재시도 (일반 에러에도 긴 대기)
                 if attempt < max_attempts - 1:
-                    time.sleep(delay_seconds)
+                    general_delay = delay_seconds + (attempt * 30)  # 30초씩 추가 대기
+                    print(f"Waiting {general_delay} seconds before retry...")
+                    time.sleep(general_delay)
                     continue
                 
                 # 마지막 시도에서 실패한 경우

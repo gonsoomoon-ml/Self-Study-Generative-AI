@@ -32,19 +32,43 @@ class Colors:
 
 import subprocess
 import sys
+import os
 
 class PythonREPL:
     def __init__(self):
-        pass
+        # 콘다 환경 Python 경로 설정
+        self.python_executable = os.getenv('PYTHON_EXECUTABLE', sys.executable)
+        
+        # 콘다 환경 정보 로깅
+        conda_env = os.getenv('CONDA_ENV_NAME', 'None')
+        conda_prefix = os.getenv('CONDA_PREFIX', 'None')
+        # logger.info(f"{Colors.BLUE}Python REPL initialized with Conda environment:{Colors.END}")
+        # logger.info(f"{Colors.BLUE}  - Environment Name: {conda_env}{Colors.END}")
+        # logger.info(f"{Colors.BLUE}  - Python Executable: {self.python_executable}{Colors.END}")
+        # logger.info(f"{Colors.BLUE}  - Conda Prefix: {conda_prefix}{Colors.END}")
         
     def run(self, command):
         try:
-            # 입력된 명령어 실행
+            # 콘다 환경 설정
+            env = os.environ.copy()
+            conda_prefix = os.getenv('CONDA_PREFIX')
+            if conda_prefix:
+                env['CONDA_PREFIX'] = conda_prefix
+                env['PATH'] = f"{conda_prefix}/bin:{env.get('PATH', '')}"
+                # logger.info(f"{Colors.YELLOW}Executing Python code in Conda environment: {os.getenv('CONDA_ENV_NAME', 'default')}{Colors.END}")
+            else:
+                # logger.info(f"{Colors.YELLOW}Executing Python code in system environment{Colors.END}")
+                pass
+            
+            # logger.info(f"{Colors.YELLOW}Using Python executable: {self.python_executable}{Colors.END}")
+            
+            # 입력된 명령어 실행 (콘다 환경의 Python 사용)
             result = subprocess.run(
-                [sys.executable, "-c", command],
+                [self.python_executable, "-c", command],
                 capture_output=True,
                 text=True,
-                timeout=600  # 타임아웃 설정
+                timeout=600,  # 타임아웃 설정
+                env=env  # 콘다 환경 전달
             )
             
             # 결과 반환

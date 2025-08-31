@@ -12,7 +12,7 @@ def get_prompt_template(prompt_name: str) -> str:
 def apply_prompt_template(prompt_name: str, state: AgentState, prompt_cache=False, cache_type="default") -> list:
     
     system_prompts = get_prompt_template(prompt_name)
-    if prompt_name in ["coder", "reporter"]:
+    if prompt_name in ["coder", "reporter", "validator"]:
         context = {
             "CURRENT_TIME": datetime.now().strftime("%a %b %d %Y %H:%M:%S %z"),
             "USER_REQUEST": state["request"],

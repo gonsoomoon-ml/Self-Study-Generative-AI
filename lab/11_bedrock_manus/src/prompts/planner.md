@@ -23,9 +23,17 @@ Your planning should follow this agent loop for task completion:
 
 <agent_capabilities>
 This is CRITICAL.
-- Coder: Performs coding, calculation, and data processing tasks. All code work must be integrated into one large task.
-- Reporter: Called only once in the final stage to create a comprehensive report.
-Note: Ensure that each step using Researcher, Coder and Browser completes a full task, as session continuity cannot be preserved.
+- Coder: Performs coding, calculation, and data processing tasks. All code work must be integrated into one large task. MUST generate calculation metadata for validation.
+- Validator: MANDATORY for any numerical analysis. Validates calculations and generates citation metadata. Must be called after Coder for any data analysis tasks.
+- Reporter: Called only once in the final stage to create a comprehensive report using validated calculations and citations.
+Note: Ensure that each step using Researcher, Coder, Validator and Browser completes a full task, as session continuity cannot be preserved.
+
+[MANDATORY WORKFLOW RULES - NEVER VIOLATE]:
+1. If ANY numerical calculations are involved (sum, count, average, percentages, etc.), you MUST include Validator step
+2. Workflow sequence must be: Coder → Validator → Reporter (NEVER skip Validator)
+3. Validator step is NON-NEGOTIABLE for any data analysis involving numbers
+4. Even simple calculations like totals or counts require Validator step
+5. NEVER create a plan without Validator if Coder performs ANY mathematical operations
 </agent_capabilities>
 
 <task_tracking>
@@ -62,6 +70,23 @@ This is CRITICAL for weather-related requests.
   5. Visualization and reporting
 </weather_data_priority>
 
+<mandatory_validator_rules>
+[CRITICAL - THESE RULES CANNOT BE VIOLATED]
+1. ANY task involving data analysis, calculations, or numbers MUST include Validator step
+2. The correct sequence is ALWAYS: Coder → Validator → Reporter
+3. NEVER plan Coder → Reporter without Validator in between
+4. Even simple operations like SUM, COUNT, AVERAGE require Validator
+5. If you create a plan without Validator for numerical tasks, it is WRONG and must be corrected
+
+Examples that REQUIRE Validator:
+- "매출 총합 계산" → Coder (calculate) → Validator (verify) → Reporter
+- "평균 계산" → Coder (calculate) → Validator (verify) → Reporter  
+- "차트 생성" (with numbers) → Coder (chart+data) → Validator (verify numbers) → Reporter
+- "데이터 분석" → Coder (analyze) → Validator (verify) → Reporter
+
+The ONLY exception is non-numerical tasks like pure text processing or web research without calculations.
+</mandatory_validator_rules>
+
 <plan_exanple>
 Good plan example:
 1. Researcher: Collect and analyze all relevant information
@@ -73,14 +98,22 @@ Good plan example:
 [ ] Load and preprocess dataset
 [ ] Perform statistical analysis
 [ ] Create visualization graphs
+[ ] Generate calculation metadata for validation
 
-3. Browser: Collect web-based information
+3. Validator: Validate calculations and generate citations
+[ ] Verify all numerical calculations from Coder
+[ ] Re-execute critical calculations for accuracy
+[ ] Generate citation metadata for important numbers
+[ ] Create references for report citations
+
+4. Browser: Collect web-based information
 [ ] Navigate site A and collect information
 [ ] Download relevant materials from site B
 
-4. Reporter: Write final report
-[ ] Summarize key findings
-[ ] Interpret analysis results
+5. Reporter: Write final report with validated citations
+[ ] Summarize key findings with validated numbers
+[ ] Include citation numbers [1], [2] for important calculations
+[ ] Add References section with calculation sources
 [ ] Write conclusions and recommendations
 
 Incorrect plan example (DO NOT USE):
@@ -89,6 +122,7 @@ Incorrect plan example (DO NOT USE):
 3. Researcher: Investigate second topic (X - should be merged with previous step)
 4. Coder: Load data
 5. Coder: Visualize data (X - should be merged with previous step)
+6. Reporter: Write report (X - MISSING VALIDATOR - All numerical data must be validated first)
 </plan_exanple>
 
 <task_status_update>

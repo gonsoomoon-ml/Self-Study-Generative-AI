@@ -1,0 +1,28 @@
+
+==================================================
+## Analysis Stage: Weather_Data_Analysis_and_Product_Sales_Impact
+## Execution Time: 2025-08-31 09:57:42
+--------------------------------------------------
+Result Description: 
+온라인 Moon 마켓 신선식품 판매 데이터 분석 완료
+분석 기간: 2025년 5월 1일 ~ 2025년 5월 14일
+데이터 건수: 836 행
+분석 내용: 날씨(강우, 온도)가 제품 판매에 미치는 영향 분석
+주요 발견사항: 
+1. 비 오는 날과 맑은 날의 카테고리별 판매 영향 파악
+2. 온도 구간별 제품 판매량 차이 분석
+3. 날씨 기반 마케팅 전략 도출
+
+Weather Data File: ./artifacts/weather_data_20250831_093109.json
+--------------------------------------------------
+Generated Files:
+- ./artifacts/daily_sales_weather.png : 일별 판매량 및 매출액 추이 (날씨 정보 포함) 차트
+- ./artifacts/category_sales.png : 카테고리별 매출액 차트
+- ./artifacts/top10_products.png : 상위 10개 제품 매출액 차트
+- ./artifacts/weather_impact.png : 날씨 유형별 일평균 매출액 차트
+- ./artifacts/temperature_impact.png : 온도 구간별 일평균 매출액 차트
+- ./artifacts/product_weather_impact.png : 상위 5개 제품의 날씨 유형별 평균 판매량 차트
+- ./artifacts/product_temperature_impact.png : 상위 5개 제품의 온도 구간별 평균 판매량 차트
+- ./artifacts/category_weather_impact.png : 상위 5개 카테고리의 날씨 유형별 일평균 매출액 차트
+- ./artifacts/all_results.txt : 전체 분석 결과 누적 파일
+==================================================

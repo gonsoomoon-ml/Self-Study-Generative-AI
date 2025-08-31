@@ -1,3 +1,4 @@
+import os
 from typing import Dict, Any, List
 from src.tools.python_repl import handle_python_repl_tool
 from src.tools.bash_tool import handle_bash_tool
@@ -78,8 +79,9 @@ def process_reporter_tool(tool) -> str:
             "content": [{"json": {"text": results}}]
         }
     else:
-        print (f"Unknown tool: {tool_name}")
+        # print (f"Unknown tool: {tool_name}")
+        pass
         
-    resutls = {"role": "user","content": [{"toolResult": tool_result}]}
+    results = {"role": "user","content": [{"toolResult": tool_result}]}
     
-    return resutls
+    return results
