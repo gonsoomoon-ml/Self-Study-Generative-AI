@@ -1,115 +1,312 @@
 # 이커머스 고객 지원 멀티 에이전트 시스템
 
-## 개요
-Strands Agent SDK를 사용하여 이커머스 고객 지원 문의를 처리하는 멀티 에이전트 아키텍처의 개념 증명(PoC) 프로젝트입니다. 모든 에이전트가 한국어로 응답합니다.
+## 📋 개요
 
-## 아키텍처
+Strands Agent SDK를 사용하여 이커머스 고객 지원 문의를 처리하는 **멀티 에이전트 아키텍처**의 개념 증명(PoC) 프로젝트입니다.
 
-```
-고객 문의
-      ↓
-┌─────────────────────┐
-│  오케스트레이터      │  ← 문의를 적절한 서브 에이전트로 라우팅
-└─────────────────────┘
-      ↓         ↓
-      ↓         └──────────────────┐
-      ↓                            ↓
-┌──────────────┐          ┌───────────────┐
-│ 서브-에이전트-01│         │ 서브-에이전트-02│
-│   주문/배송   │          │   반품/결제    │
-└──────────────┘          └───────────────┘
-      ↓                            ↓
-   도구:                        도구:
-- 주문 상태 확인            - 반품 처리
-- 배송 추적                 - 환불 상태 확인
-                            - 교환 처리
-```
+### 주요 특징
+- ✅ **완전한 한국어 지원**: 모든 에이전트와 출력이 한국어로 제공
+- ✅ **두 가지 아키텍처 패턴**: Agent-Tool 패턴 & Hybrid 패턴
+- ✅ **실제 Strands SDK 구현**: 실제 AWS Bedrock Claude 모델 사용
+- ✅ **프로덕션 준비 구조**: 확장 가능하고 유지보수 쉬운 설계
 
-## 구성 요소
+---
 
-### 1. 오케스트레이터 에이전트 (`orchestrator_agent.py`)
-- **역할**: 고객 문의를 분석하고 적절한 전문 상담원에게 전달하는 메인 진입점
-- **라우팅 로직**:
-  - 주문/배송/추적 관련 문의 → 서브-에이전트-01
-  - 반품/교환/환불/결제 관련 문의 → 서브-에이전트-02
-
-### 2. 서브-에이전트-01: 주문/배송 상담원 (`sub_agent_orders.py`)
-- **담당 업무**: 주문 상태 조회, 배송 추적, 배송 정보 안내
-- **도구**:
-  - `check_order_status(order_id)`: 주문 상태를 확인합니다
-  - `track_delivery(tracking_number)`: 배송 위치를 추적합니다
-- **시스템 프롬프트**: 한국어로 친절하게 응답하도록 설정됨
-
-### 3. 서브-에이전트-02: 반품/결제 상담원 (`sub_agent_returns.py`)
-- **담당 업무**: 반품 요청, 교환 절차, 환불 상태, 결제 문제 처리
-- **도구**:
-  - `process_return(order_id, reason)`: 반품 요청을 처리합니다
-  - `check_refund_status(order_id)`: 환불 상태를 확인합니다
-  - `process_exchange(order_id, new_item)`: 교환 요청을 처리합니다
-- **시스템 프롬프트**: 한국어로 친절하게 응답하도록 설정됨
-
-## 폴더 구조
+## 🏗️ 프로젝트 구조
 
 ```
 21_customer_chat/
-├── agent_tool_pattern/        # 원본 Orchestrator + Tools 패턴
-│   ├── orchestrator_agent.py
-│   ├── sub_agent_orders.py
-│   ├── sub_agent_returns.py
+├── agent_tool_pattern/          # 패턴 1: Orchestrator + Tools
+│   ├── orchestrator_agent.py   # 메인 라우터 에이전트
+│   ├── sub_agent_orders.py     # 주문/배송 전문 에이전트
+│   ├── sub_agent_returns.py    # 반품/결제 전문 에이전트
+│   ├── main.py                 # 테스트 실행 스크립트
+│   └── README.md
+│
+├── hybrid_pattern/              # 패턴 2: Graph + Hierarchical ⭐ 추천
+│   ├── graphs/                 # 그래프 워크플로우
+│   │   ├── main_graph.py      # 메인 그래프 (분류 → 라우팅)
+│   │   ├── order_graph.py     # 주문/배송 서브그래프
+│   │   └── return_graph.py    # 반품/환불 서브그래프
+│   ├── agents/                 # 전문 에이전트들
+│   │   ├── classifier_agent.py  # 문의 분류
+│   │   ├── orders_agent.py      # 주문 처리
+│   │   ├── shipping_agent.py    # 배송 관리
+│   │   ├── returns_agent.py     # 반품 처리
+│   │   └── payment_agent.py     # 결제/환불
+│   ├── tools/                  # 도구 함수들
+│   │   ├── order_tools.py
+│   │   ├── shipping_tools.py
+│   │   └── payment_tools.py
+│   ├── hierarchies/            # 계층적 승인 시스템
+│   │   └── approval_hierarchy.py
 │   ├── main.py
 │   └── README.md
-├── hybrid/                     # Graph + Hierarchical Hybrid 패턴 ⭐
-│   ├── graphs/                # 그래프 정의
-│   ├── agents/                # 에이전트들
-│   ├── tools/                 # 도구 함수들
-│   ├── hierarchies/           # 계층적 구조
-│   ├── main.py
-│   └── README.md
-├── setup/                      # 환경 설정
-├── ARCHITECTURE_PATTERNS.md   # 모든 패턴 설명
-├── RECOMMENDED_PATTERN.md     # 추천 패턴 가이드 ⭐
-└── README.md                  # 이 파일
+│
+├── setup/                       # 환경 설정
+├── ARCHITECTURE_PATTERNS.md    # 모든 패턴 상세 설명
+├── RECOMMENDED_PATTERN.md      # 추천 패턴 구현 가이드 ⭐
+└── README.md                   # 이 파일
 ```
 
-## 설치 및 설정
+---
 
-### 1. Python 환경 생성
+## 🎯 두 가지 패턴 비교
+
+### 패턴 1️⃣: Agent-Tool 패턴 (간단한 라우팅)
+
+**구조:**
+```
+     고객 문의
+         ↓
+  ┌──────────────┐
+  │ Orchestrator │  ← 문의 분류 및 라우팅
+  └──────────────┘
+         ↓
+    ┌────┴────┐
+    ↓         ↓
+┌────────┐ ┌─────────┐
+│ 주문/배송│ │ 반품/결제│
+│ 에이전트 │ │ 에이전트 │
+└────────┘ └─────────┘
+    ↓         ↓
+   도구      도구
+```
+
+**특징:**
+- ✅ 구현이 간단함
+- ✅ 이해하기 쉬움
+- ✅ 빠른 프로토타이핑
+- ❌ 복잡한 비즈니스 로직 처리 어려움
+- ❌ 조건부 분기 제한적
+- ❌ 에이전트 간 협력 제한적
+
+**적합한 경우:**
+- 간단한 문의 라우팅
+- PoC 및 데모
+- 복잡하지 않은 워크플로우
+
+---
+
+### 패턴 2️⃣: Hybrid 패턴 (Graph + Hierarchical) ⭐ **추천**
+
+**구조:**
+```
+                고객 문의
+                    ↓
+            ┌──────────────┐
+            │ 분류 에이전트  │
+            └───────┬───────┘
+                    ↓
+        ┌───────────┴───────────┐
+        ↓                       ↓
+  ┌──────────┐          ┌──────────┐
+  │ 주문 그래프│          │ 반품 그래프│
+  └──────────┘          └──────────┘
+        ↓                       ↓
+  ┌──────────┐          ┌──────────┐
+  │ 주문 에이전트│        │ 반품 에이전트│
+  │ 배송 에이전트│        │ 결제 에이전트│
+  └──────────┘          └──────────┘
+        ↓                       ↓
+  ┌─────────────────────────────┐
+  │    계층적 승인 시스템          │
+  │ 일반상담원 → 관리자 → 이사     │
+  └───────────┬─────────────────┘
+              ↓
+         최종 응답
+```
+
+**특징:**
+- ✅ 복잡한 비즈니스 로직 처리
+- ✅ 조건부 워크플로우 (주문 상태에 따른 다른 처리)
+- ✅ 계층적 승인 (환불 금액에 따른 자동 에스컬레이션)
+- ✅ 여러 에이전트 간 순차적 협력
+- ✅ 상태 공유 및 컨텍스트 전달
+- ✅ 프로덕션 환경에 적합
+
+**적합한 경우:**
+- 복잡한 고객 지원 시나리오
+- 승인 프로세스가 필요한 경우
+- 여러 단계의 처리가 필요한 경우
+- 실제 프로덕션 환경
+
+**주요 기능:**
+
+1. **조건부 분기**
+   ```
+   주문 상태 = "배송 전" → 즉시 취소 → 환불
+   주문 상태 = "배송 중" → 배송 중지 시도 → 관리자 승인
+   주문 상태 = "배송 완료" → 반품 프로세스
+   ```
+
+2. **계층적 승인**
+   ```
+   환불 50,000원 이하 → 일반 상담원
+   환불 50,000~100,000원 → 관리자 승인
+   환불 100,000원 이상 → 이사 승인
+   ```
+
+3. **멀티 에이전트 협력**
+   ```
+   분류 → 주문 → 배송 → 결제 → 승인 → 최종 응답
+   ```
+
+---
+
+## 🚀 설치 및 실행
+
+### 사전 요구사항
+
+- **Python 3.11 이상**
+- **AWS 계정** (Bedrock 액세스 권한 필요)
+- **AWS 자격 증명 설정** (`aws configure` 또는 환경 변수)
+- **Git**
+
+### 방법 1: 자동 설치 (추천) ⭐
+
 ```bash
+# 1. setup 디렉토리로 이동
 cd setup
+
+# 2. 환경 생성 스크립트 실행
 ./create_env.sh customer_chat 3.11
+
+# 3. 상위 디렉토리로 돌아가기
 cd ..
 ```
 
-이 스크립트는 다음을 자동으로 수행합니다:
-- UV 패키지 매니저를 설치/확인합니다
-- Python 3.11 가상 환경을 생성합니다
-- Strands Agent SDK 및 필요한 모든 패키지를 설치합니다
-- Jupyter 커널을 등록합니다
-- 루트 디렉토리에 심링크를 생성합니다
+**스크립트가 자동으로 수행하는 작업:**
+- ✅ UV 패키지 매니저 설치/확인
+- ✅ Python 3.11 가상 환경 생성 (`.venv`)
+- ✅ Strands Agent SDK 설치
+- ✅ 모든 필수 의존성 설치 (boto3, asyncio 등)
+- ✅ Jupyter 커널 등록
+- ✅ 프로젝트 루트에 심링크 생성
 
-### 2. 설치 확인
+### 방법 2: 수동 설치
+
+#### Step 1: UV 패키지 매니저 설치
+
 ```bash
-uv run python --version
-uv pip list
+# macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 또는 pip 사용
+pip install uv
 ```
 
-## 사용 방법
+#### Step 2: 가상 환경 생성
 
-### 1️⃣ Orchestrator + Tools 패턴 (원본)
+```bash
+# setup 디렉토리로 이동
+cd setup
+
+# Python 3.11로 가상 환경 생성
+uv venv --python 3.11
+
+# 가상 환경 활성화
+# Linux/macOS:
+source .venv/bin/activate
+
+# Windows:
+.venv\Scripts\activate
+```
+
+#### Step 3: 의존성 설치
+
+```bash
+# pyproject.toml에서 의존성 설치
+uv pip install -e .
+
+# 또는 개별 설치
+uv pip install strands boto3 botocore
+```
+
+#### Step 4: Jupyter 커널 등록 (선택사항)
+
+```bash
+uv pip install ipykernel
+python -m ipykernel install --user --name customer_chat --display-name "customer_chat"
+```
+
+#### Step 5: 심링크 생성 (선택사항)
+
+```bash
+# 프로젝트 루트로 돌아가기
+cd ..
+
+# 심링크 생성 (편의를 위해)
+ln -s setup/.venv .venv
+ln -s setup/pyproject.toml pyproject.toml
+ln -s setup/uv.lock uv.lock
+```
+
+### 설치 확인
+
+```bash
+# Python 버전 확인
+uv run python --version
+# 출력: Python 3.11.x
+
+# Strands SDK 설치 확인
+uv pip list | grep strands
+# 출력: strands  x.x.x
+
+# AWS 자격 증명 확인
+uv run python -c "import boto3; print(boto3.client('bedrock').list_foundation_models()['modelSummaries'][0])"
+```
+
+### 문제 해결
+
+**UV를 찾을 수 없는 경우:**
+```bash
+# PATH에 UV 추가
+export PATH="$HOME/.cargo/bin:$PATH"
+
+# 또는 pip로 설치
+pip install uv
+```
+
+**가상 환경 활성화 안 되는 경우:**
+```bash
+# 직접 Python 실행
+uv run python your_script.py
+
+# 또는 활성화 스크립트 확인
+ls setup/.venv/bin/activate
+```
+
+**AWS 자격 증명 오류:**
+```bash
+# AWS CLI 설정
+aws configure
+
+# 또는 환경 변수 설정
+export AWS_ACCESS_KEY_ID=your_key
+export AWS_SECRET_ACCESS_KEY=your_secret
+export AWS_DEFAULT_REGION=us-east-1
+```
+
+**패키지 설치 오류:**
+```bash
+# 캐시 정리 후 재설치
+uv cache clean
+uv pip install -e . --force-reinstall
+```
+
+---
+
+## 💻 사용 방법
+
+### Agent-Tool 패턴 실행
+
 ```bash
 cd agent_tool_pattern
 uv run python main.py
 ```
 
-### 2️⃣ Graph + Hierarchical Hybrid 패턴 ⭐ (추천)
-```bash
-cd hybrid
-uv run python main.py
-```
-
-### 코드에서 직접 사용:
-
-**Orchestrator 패턴:**
+**코드에서 사용:**
 ```python
 from agent_tool_pattern.orchestrator_agent import handle_customer_query
 
@@ -117,40 +314,85 @@ response = handle_customer_query("주문번호 ORD12345는 어디에 있나요?"
 print(response)
 ```
 
-**Hybrid 패턴:**
+### Hybrid 패턴 실행 ⭐ 추천
+
+```bash
+cd hybrid_pattern
+uv run python main.py
+```
+
+**코드에서 사용:**
 ```python
-from hybrid.graphs.main_graph import execute_customer_support
+import asyncio
+from hybrid_pattern.graphs.main_graph import execute_customer_support
 
-result = await execute_customer_support("주문 취소하고 환불 받고 싶어요")
-print(result)
+async def main():
+    result = await execute_customer_support("주문 취소하고 환불 받고 싶어요")
+
+    print(f"카테고리: {result['카테고리']}")
+    print(f"상태: {result['상태']}")
+    print(f"사용된 그래프: {result['사용된_그래프']}")
+    print(f"메시지: {result['메시지']}")
+
+asyncio.run(main())
 ```
 
-## Sample Queries (한국어)
+---
 
-**주문 및 배송 문의:**
-- "주문번호 ORD12345는 어디에 있나요? 아직 받지 못했어요."
-- "운송장번호 TRK987654로 택배 추적해주실 수 있나요?"
+## 📊 테스트 시나리오
 
-**반품 및 결제 문의:**
-- "주문번호 ORD67890 상품이 안 맞아서 반품하고 싶어요."
-- "주문번호 ORD11111 환불이 처리되었나요?"
-- "주문번호 ORD22222를 다른 사이즈로 교환하고 싶습니다."
+### Agent-Tool 패턴 테스트
 
-## 예상 사용 사례
+**주문/배송 문의:**
+```python
+"주문번호 ORD12345는 어디에 있나요? 아직 받지 못했어요."
+"운송장번호 TRK987654로 택배 추적해주실 수 있나요?"
+```
 
-일반적인 이커머스 고객 지원에서 이 시스템이 처리할 수 있는 문의:
-- 배송 지연 문의
-- 주문 내역 확인
-- 환불 요청
-- 교환/반품 절차 안내
-- 배송 추적
-- 결제 문제
+**반품/결제 문의:**
+```python
+"주문번호 ORD67890 상품이 안 맞아서 반품하고 싶어요."
+"주문번호 ORD11111 환불이 처리되었나요?"
+"주문번호 ORD22222를 다른 사이즈로 교환하고 싶습니다."
+```
 
-## 실행 예시 (한국어 응답)
+### Hybrid 패턴 테스트
+
+프로젝트에 포함된 4가지 실제 시나리오:
+
+1. **주문 취소 (배송 전)**
+   - 문의: "주문번호 ORD12345를 취소하고 환불 받고 싶어요"
+   - 흐름: 분류 → 주문그래프 → 주문에이전트 → 관리자 승인
+   - 결과: ✅ 성공
+
+2. **주문 취소 (배송 중)**
+   - 문의: "배송 중인 주문을 취소하고 싶은데 가능한가요?"
+   - 흐름: 분류 → 주문그래프 → 주문+배송 에이전트 → 관리자 승인
+   - 결과: ✅ 성공 (배송 중지 또는 수령 거부 안내)
+
+3. **반품 요청**
+   - 문의: "주문번호 ORD67890 상품이 불량이라서 반품하고 싶어요"
+   - 흐름: 분류 → 반품그래프 → 반품 에이전트
+   - 결과: ✅ 성공
+
+4. **고액 환불**
+   - 문의: "15만원 주문을 환불 받고 싶어요"
+   - 흐름: 분류 → 반품그래프 → 반품+결제 에이전트 → 이사 승인
+   - 결과: ✅ 성공 (120,000원 → 이사 레벨 에스컬레이션)
+
+---
+
+## 🎨 실행 예시
+
+### Agent-Tool 패턴 출력
 
 ```
+============================================================
 [오케스트레이터] 고객 문의 접수: 주문번호 ORD12345는 어디에 있나요?
+============================================================
 [오케스트레이터] 주문/배송 상담원으로 전달 중
+
+[Sub-Agent-01: Orders] Handling query: 주문번호 ORD12345는 어디에 있나요?
 [도구] 주문 상태 확인 중 - 주문번호: ORD12345
 
 응답: 주문번호 ORD12345의 배송 상황을 확인해드렸습니다!
@@ -162,61 +404,285 @@ print(result)
 실시간 배송 위치를 확인해드릴 수 있습니다.
 ```
 
-## 주요 기능
+### Hybrid 패턴 출력
 
-- ✅ **한국어 지원**: 모든 에이전트가 자연스러운 한국어로 응답
-- ✅ **멀티 에이전트 아키텍처**: 오케스트레이터가 적절한 서브 에이전트로 자동 라우팅
-- ✅ **AWS Bedrock 통합**: Claude Sonnet 4 모델 사용
-- ✅ **도구 호출**: 각 에이전트가 전문 도구를 사용하여 정보 조회 및 처리
-- ✅ **실시간 응답**: AWS Bedrock을 통한 실시간 LLM 추론
+```
+================================================================================
+[메인 그래프] 고객 문의 처리 시작
+문의: 주문 취소하고 환불 받고 싶어요
+================================================================================
 
-## 참고 사항
+[단계 1] 분류 에이전트 호출
+[분류 에이전트] 문의 분석 중...
+[분류 에이전트] 분류 결과: 취소
 
-이 프로젝트는 멀티 에이전트 아키텍처를 시연하는 **개념 증명(PoC)** 입니다.
+[단계 2] 서브 그래프 라우팅
+[단계 2] 라우팅 대상: 주문_그래프
 
-프로덕션 환경에서는 다음 사항을 추가로 구현해야 합니다:
-1. 실제 백엔드 API/데이터베이스 연동
-2. 적절한 에러 핸들링
-3. 세션 관리 구현
-4. 로깅 및 모니터링 추가
-5. 인증 및 권한 관리
-6. 대화 히스토리 및 컨텍스트 관리 구현
+[단계 3] 서브 그래프 실행 중...
 
-## 기술 스택
+============================================================
+[주문 그래프] 실행 시작
+============================================================
 
-- **Strands Agent SDK**: 멀티 에이전트 프레임워크
-- **AWS Bedrock**: Claude Sonnet 4 모델 호스팅
-- **Python 3.11**: 개발 언어
-- **UV**: 패키지 매니저
+[단계 1] 주문 에이전트 호출
+[도구] 주문 상태 확인 중 - 주문번호: ORD12345
+[단계 1] 주문 에이전트 응답 완료
 
-## 아키텍처 패턴 및 확장
+[단계 3] 에스컬레이션 필요: 관리자 레벨
 
-### 현재 구현: Orchestrator + Tools 패턴 (PoC)
+============================================================
+[주문 그래프] 처리 완료
+============================================================
 
-현재 구현은 **Orchestrator + Tools** 패턴을 사용합니다. 이는 개념 증명(PoC)으로는 적합하지만, 실제 프로덕션 환경에서는 제한사항이 있습니다.
+[단계 4] 최종 응답 생성
 
-### 🎯 **프로덕션 추천: Graph + Hierarchical Hybrid 패턴**
+================================================================================
+[메인 그래프] 처리 완료
+================================================================================
 
-실제 이커머스 고객 지원에서는 복잡한 조건부 분기, 에스컬레이션, 여러 에이전트 간 협력이 필요합니다.
+결과:
+  - 카테고리: 취소
+  - 상태: 완료
+  - 메시지: 고객 문의가 성공적으로 처리되었습니다.
+  - 사용된 그래프: 주문_그래프
+```
 
-**왜 Graph + Hierarchical이 더 나은가?**
-👉 자세한 분석은 [RECOMMENDED_PATTERN.md](./RECOMMENDED_PATTERN.md) 참고
+---
 
-**주요 이점**:
-- ✅ 조건부 워크플로우 (배송 상태에 따른 다른 처리)
-- ✅ 에스컬레이션 (관리자 승인 필요한 경우)
-- ✅ 복잡한 비즈니스 로직 표현
-- ✅ 에이전트 간 상태 공유 및 협력
+## ✨ 주요 기능
 
-### 📚 아키텍처 문서
+### 공통 기능
 
-- **[RECOMMENDED_PATTERN.md](./RECOMMENDED_PATTERN.md)** ⭐ - 추천 패턴 및 구현 가이드
-- **[ARCHITECTURE_PATTERNS.md](./ARCHITECTURE_PATTERNS.md)** - 모든 패턴 종합 설명
+- ✅ **완전한 한국어 지원**: 모든 출력이 한국어로 표시
+- ✅ **실제 LLM 응답**: AWS Bedrock Claude Sonnet 4.5 사용
+- ✅ **도구 통합**: @tool 데코레이터를 통한 함수 호출
+- ✅ **Strands SDK**: 실제 SDK 구현
 
-**지원되는 패턴**:
+### Agent-Tool 패턴 특화
+
+- ✅ **간단한 라우팅**: 문의 유형에 따른 즉시 라우팅
+- ✅ **전문 에이전트**: 주문/배송, 반품/결제 전문가
+- ✅ **빠른 응답**: 단순한 플로우로 빠른 처리
+
+### Hybrid 패턴 특화
+
+- ✅ **조건부 워크플로우**: 상태에 따른 다른 처리
+- ✅ **계층적 승인**: 자동 에스컬레이션 시스템
+- ✅ **멀티 에이전트 협력**: 여러 에이전트 순차 실행
+- ✅ **상태 공유**: 컨텍스트를 통한 정보 전달
+- ✅ **복잡한 비즈니스 로직**: 실제 프로덕션 시나리오 처리
+
+---
+
+## 📚 아키텍처 문서
+
+### 필독 문서
+
+1. **[RECOMMENDED_PATTERN.md](./RECOMMENDED_PATTERN.md)** ⭐⭐⭐
+   - 왜 Hybrid 패턴을 추천하는가
+   - 상세한 구현 가이드
+   - 실제 코드 예제
+   - 단계별 구현 방법
+
+2. **[ARCHITECTURE_PATTERNS.md](./ARCHITECTURE_PATTERNS.md)** ⭐⭐
+   - 모든 멀티 에이전트 패턴 설명
+   - 각 패턴의 장단점 비교
+   - 사용 사례 및 예제
+
+3. **[hybrid_pattern/README.md](./hybrid_pattern/README.md)** ⭐
+   - Hybrid 패턴 상세 문서
+   - 전체 아키텍처 다이어그램
+   - 실행 방법 및 예제
+   - 테스트 케이스
+
+### 지원되는 패턴들
+
 - 🔄 **Agent-to-Agent (A2A)**: 에이전트 간 직접 통신
 - 🐝 **Swarm**: 병렬 처리 및 협력
 - 📊 **Graph-Based**: 조건부 워크플로우 ⭐⭐⭐
 - 🏢 **Hierarchical**: 계층적 의사결정 ⭐⭐⭐
 - 📋 **Workflow**: 순차적 프로세스
-- 🎯 **Hybrid**: 여러 패턴 조합 ⭐⭐⭐
+- 🎯 **Hybrid**: 여러 패턴 조합 ⭐⭐⭐ (추천)
+
+---
+
+## 🔧 기술 스택
+
+### 핵심 기술
+- **Python 3.11+**: 개발 언어
+- **Strands Agent SDK**: 멀티 에이전트 프레임워크
+- **AWS Bedrock**: Claude Sonnet 4.5 모델 호스팅
+- **UV**: 빠른 Python 패키지 매니저
+
+### 주요 의존성
+```
+strands>=0.1.0
+boto3>=1.34.0
+asyncio
+```
+
+---
+
+## 🎯 사용 사례
+
+### 일반적인 이커머스 시나리오
+
+1. **주문 관리**
+   - 주문 상태 조회
+   - 주문 변경/취소
+   - 배송 추적
+
+2. **반품/교환**
+   - 반품 신청
+   - 교환 절차
+   - 반품 라벨 발급
+
+3. **결제/환불**
+   - 환불 신청
+   - 환불 상태 확인
+   - 결제 문제 해결
+
+4. **고객 지원**
+   - 배송 지연 문의
+   - 상품 문의
+   - 정책 안내
+
+---
+
+## 📈 성능 및 확장성
+
+### Agent-Tool 패턴
+- **응답 시간**: ~2-3초 (단순 문의)
+- **동시 처리**: 제한적 (순차 처리)
+- **확장성**: 새 에이전트 추가 시 라우팅 로직 수정 필요
+
+### Hybrid 패턴
+- **응답 시간**: ~3-5초 (복잡한 문의)
+- **동시 처리**: 가능 (비동기 처리)
+- **확장성**: 높음 (새 그래프/에이전트 독립 추가 가능)
+
+---
+
+## 🔮 향후 개선 사항
+
+### 단기 (1-2주)
+- [ ] 실제 데이터베이스 연동
+- [ ] 세션 관리 구현
+- [ ] 에러 처리 강화
+- [ ] 로깅 시스템 개선
+
+### 중기 (1-2개월)
+- [ ] 실제 Strands Graph API 통합
+- [ ] 승인 프로세스 구현 (이메일/Slack)
+- [ ] 대화 히스토리 관리
+- [ ] 성능 최적화
+
+### 장기 (3-6개월)
+- [ ] 더 많은 도메인 추가
+- [ ] A/B 테스트 프레임워크
+- [ ] 실시간 모니터링 대시보드
+- [ ] 고객 만족도 피드백 시스템
+
+---
+
+## ⚠️ 주의사항
+
+이 프로젝트는 **개념 증명(PoC)** 입니다.
+
+프로덕션 환경에서는 다음을 추가로 구현해야 합니다:
+
+1. ✅ **보안**
+   - 인증 및 권한 관리
+   - 개인정보 보호
+   - API 키 관리
+
+2. ✅ **안정성**
+   - 에러 처리 및 재시도 로직
+   - 타임아웃 관리
+   - 폴백 메커니즘
+
+3. ✅ **모니터링**
+   - 로깅 및 추적
+   - 성능 메트릭
+   - 알람 시스템
+
+4. ✅ **데이터**
+   - 실제 백엔드 API 연동
+   - 데이터베이스 통합
+   - 캐싱 전략
+
+5. ✅ **사용자 경험**
+   - 세션 관리
+   - 대화 컨텍스트 유지
+   - 멀티턴 대화 지원
+
+---
+
+## 🤝 기여 방법
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+---
+
+## 📄 라이선스
+
+이 프로젝트는 교육 및 데모 목적으로 제작되었습니다.
+
+---
+
+## 👥 작성자
+
+AWS Bedrock Agent Core 팀
+
+**문의**: [GitHub Issues](https://github.com/aws-samples/bedrock-agentcore/issues)
+
+---
+
+## 🔗 관련 링크
+
+- [AWS Bedrock 문서](https://docs.aws.amazon.com/bedrock/)
+- [Strands SDK GitHub](https://github.com/aws-samples/bedrock-agentcore)
+- [Claude API 문서](https://docs.anthropic.com/claude/reference)
+
+---
+
+## 📖 빠른 시작 가이드
+
+### 1분 만에 시작하기
+
+```bash
+# 1. 환경 설정
+cd setup && ./create_env.sh customer_chat 3.11 && cd ..
+
+# 2. Agent-Tool 패턴 테스트
+cd agent_tool_pattern && uv run python main.py
+
+# 3. Hybrid 패턴 테스트 (추천)
+cd ../hybrid_pattern && uv run python main.py
+```
+
+### 추천 학습 경로
+
+1. **Agent-Tool 패턴부터 시작** (이해하기 쉬움)
+   - `agent_tool_pattern/main.py` 실행
+   - 코드 구조 파악
+   - 간단한 수정 시도
+
+2. **Hybrid 패턴 학습** (실전 적용)
+   - `hybrid_pattern/README.md` 읽기
+   - 아키텍처 다이어그램 이해
+   - `hybrid_pattern/main.py` 실행
+
+3. **문서 심화 학습**
+   - `RECOMMENDED_PATTERN.md` 정독
+   - `ARCHITECTURE_PATTERNS.md` 참고
+   - 실제 시나리오에 적용
+
+---
+
+**🎉 즐거운 코딩 되세요!**
