@@ -24,7 +24,7 @@
 ### 생성될 리소스
 
 - ✅ VPC (10.0.0.0/16)
-- ✅ Subnets 4개 (Private 2개, Public 2개, Multi-AZ)
+- ✅ Subnets 2개 (Private 1개, Public 1개, Single-AZ: us-east-1a)
 - ✅ Internet Gateway
 - ✅ NAT Gateway
 - ✅ Route Tables
@@ -51,10 +51,9 @@ cat > parameters/prod-params.json <<EOF
     {"ParameterKey": "Environment", "ParameterValue": "prod"},
     {"ParameterKey": "ProjectName", "ParameterValue": "bedrock-manus"},
     {"ParameterKey": "VpcCidr", "ParameterValue": "10.0.0.0/16"},
-    {"ParameterKey": "PrivateSubnetACidr", "ParameterValue": "10.0.1.0/24"},
-    {"ParameterKey": "PrivateSubnetBCidr", "ParameterValue": "10.0.2.0/24"},
-    {"ParameterKey": "PublicSubnetACidr", "ParameterValue": "10.0.11.0/24"},
-    {"ParameterKey": "PublicSubnetBCidr", "ParameterValue": "10.0.12.0/24"},
+    {"ParameterKey": "PrivateSubnetCidr", "ParameterValue": "10.0.1.0/24"},
+    {"ParameterKey": "PublicSubnetCidr", "ParameterValue": "10.0.11.0/24"},
+    {"ParameterKey": "AvailabilityZone", "ParameterValue": "us-east-1a"},
     {"ParameterKey": "S3BucketName", "ParameterValue": "bedrock-logs-prod-REPLACE_WITH_ACCOUNT_ID"}
   ]
 }
@@ -333,8 +332,8 @@ cat ../deployment.env
 
 - [ ] CloudFormation 스택 상태: `CREATE_COMPLETE`
 - [ ] VPC ID 확인됨
-- [ ] Private Subnets 2개 생성됨 (us-east-1a, us-east-1c)
-- [ ] Public Subnets 2개 생성됨
+- [ ] Private Subnet 생성됨 (us-east-1a)
+- [ ] Public Subnet 생성됨 (us-east-1a)
 - [ ] NAT Gateway 상태: `available`
 - [ ] VPC Endpoints 6개 모두 상태: `available`
 - [ ] Security Groups 4개 생성됨

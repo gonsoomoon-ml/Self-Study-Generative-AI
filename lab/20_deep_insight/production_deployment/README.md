@@ -11,7 +11,7 @@
 **주요 특징**:
 - ✅ Infrastructure as Code (CloudFormation)
 - ✅ VPC Private 모드 지원
-- ✅ Multi-AZ 고가용성
+- ✅ Single-AZ 배포 (간결하고 비용 효율적)
 - ✅ 단계별 배포 가이드
 - ✅ 자동화 스크립트
 - ✅ 프로덕션 보안 best practices
@@ -151,27 +151,28 @@ pip install bedrock_agentcore_starter_toolkit
     ┌────────────────────┴────────────────────┐
     │              VPC (10.0.0.0/16)          │
     │                                          │
-    │  ┌──────────────┐    ┌──────────────┐  │
-    │  │ Public       │    │ Public       │  │
-    │  │ Subnet A     │    │ Subnet B     │  │
-    │  │  (us-east-1a)│    │  (us-east-1c)│  │
-    │  │  NAT GW ─────┼────┼──────────────┼──┼───> ECR/S3
-    │  └──────────────┘    └──────────────┘  │
+    │  ┌──────────────────────────────────┐  │
+    │  │ Public Subnet (us-east-1a)       │  │
+    │  │                                   │  │
+    │  │  NAT Gateway ─────────────────────┼──┼───> ECR/S3
+    │  └──────────────────────────────────┘  │
     │                                          │
-    │  ┌──────────────┐    ┌──────────────┐  │
-    │  │ Private      │    │ Private      │  │
-    │  │ Subnet A     │    │ Subnet B     │  │
-    │  │  (us-east-1a)│    │  (us-east-1c)│  │
-    │  │ ┌──────────┐ │    │ ┌──────────┐ │  │
-    │  │ │ Internal │◄├────┤►│ Fargate  │ │  │
-    │  │ │   ALB    │ │    │ │ Container│ │  │
-    │  │ └────▲─────┘ │    │ └──────────┘ │  │
-    │  └──────┼────────┘    └──────────────┘  │
-    │         │                                │
-    │  ┌──────▼──────────┐                    │
-    │  │ VPC Endpoints   │                    │
-    │  │ (AgentCore,ECR) │                    │
-    │  └─────────────────┘                    │
+    │  ┌──────────────────────────────────┐  │
+    │  │ Private Subnet (us-east-1a)      │  │
+    │  │                                   │  │
+    │  │  ┌──────────────────────────┐    │  │
+    │  │  │ Internal ALB             │    │  │
+    │  │  └────────┬─────────────────┘    │  │
+    │  │           │                       │  │
+    │  │  ┌────────▼─────────────────┐    │  │
+    │  │  │ Fargate Container        │    │  │
+    │  │  └──────────────────────────┘    │  │
+    │  └──────────────────────────────────┘  │
+    │                                          │
+    │  ┌──────────────────────────────────┐  │
+    │  │ VPC Endpoints                    │  │
+    │  │ (AgentCore, ECR, S3, Logs)       │  │
+    │  └──────────────────────────────────┘  │
     └─────────────────────────────────────────┘
              ▲
              │ (VPC Private Connection)
@@ -189,10 +190,10 @@ pip install bedrock_agentcore_starter_toolkit
 ```
 
 **주요 특징**:
-- ✅ **Private Subnets**: Fargate 컨테이너는 Private에서만 실행
+- ✅ **Private Subnet**: Fargate 컨테이너는 Private에서만 실행
 - ✅ **Internal ALB**: 외부 인터넷 접근 불가
 - ✅ **VPC Endpoints**: AWS 서비스에 Private 연결
-- ✅ **Multi-AZ**: 고가용성을 위한 2개 AZ 배포
+- ✅ **Single-AZ**: 간결하고 비용 효율적인 구성 (us-east-1a)
 
 ---
 
