@@ -72,14 +72,24 @@ check_resource \
     "aws ec2 describe-vpcs --vpc-ids $VPC_ID --region $AWS_REGION"
 
 check_resource \
-    "Private Subnet exists" \
-    "$PRIVATE_SUBNET_ID" \
-    "aws ec2 describe-subnets --subnet-ids $PRIVATE_SUBNET_ID --region $AWS_REGION"
+    "Private Subnet 1 exists" \
+    "$PRIVATE_SUBNET_1_ID" \
+    "aws ec2 describe-subnets --subnet-ids $PRIVATE_SUBNET_1_ID --region $AWS_REGION"
 
 check_resource \
-    "Public Subnet exists" \
-    "$PUBLIC_SUBNET_ID" \
-    "aws ec2 describe-subnets --subnet-ids $PUBLIC_SUBNET_ID --region $AWS_REGION"
+    "Private Subnet 2 exists" \
+    "$PRIVATE_SUBNET_2_ID" \
+    "aws ec2 describe-subnets --subnet-ids $PRIVATE_SUBNET_2_ID --region $AWS_REGION"
+
+check_resource \
+    "Public Subnet 1 exists" \
+    "$PUBLIC_SUBNET_1_ID" \
+    "aws ec2 describe-subnets --subnet-ids $PUBLIC_SUBNET_1_ID --region $AWS_REGION"
+
+check_resource \
+    "Public Subnet 2 exists" \
+    "$PUBLIC_SUBNET_2_ID" \
+    "aws ec2 describe-subnets --subnet-ids $PUBLIC_SUBNET_2_ID --region $AWS_REGION"
 
 # Check NAT Gateway
 NAT_GW_ID=$(aws ec2 describe-nat-gateways \
