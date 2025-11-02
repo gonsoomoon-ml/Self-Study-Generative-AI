@@ -503,22 +503,155 @@ TASK_ROLE_ARN=arn:aws:iam::123456789012:role/deep-insight-task-role-prod
 
 **🎉 Phase 1 Infrastructure 배포 성공!**
 
-### C6. 다음 단계
+### C6. Phase 2: Fargate Runtime 배포 (CloudFormation + Docker)
 
-**⏳ Phase 2, 3, 4는 Phase 1 완료 후 진행 예정**:
+**소요 시간**: 10-15분
 
-1. **Phase 2: Fargate Runtime**
-   - ECR Repository 생성
-   - Docker 이미지 빌드 및 푸시
-   - ECS Cluster 생성
-   - Task Definition 등록
+#### C6.1 Docker 및 스크립트 확인
 
-2. **Phase 3: AgentCore Runtime**
+```bash
+# Docker 설치 확인
+docker --version
+
+# Phase 2 스크립트 실행 권한 부여
+chmod +x scripts/phase2/*.sh
+
+# fargate-runtime 디렉토리 확인
+ls -la ../fargate-runtime/
+```
+
+#### C6.2 Phase 2 배포 실행
+
+**단일 스크립트로 전체 프로세스 자동화**:
+
+```bash
+./scripts/phase2/deploy.sh prod
+```
+
+**자동 실행 단계**:
+
+1. **사전 확인** (1분)
+   - Phase 1 .env 파일 로드
+   - AWS CLI, Docker 설치 확인
+   - fargate-runtime 디렉토리 확인
+
+2. **ECR Repository 생성** (1분)
+   - deep-insight-fargate-runtime-prod
+   - 이미 존재하면 재사용
+
+3. **Docker 이미지 빌드** (5-10분)
+   - Python 3.12 + 한글 폰트 + 필수 패키지
+   - dynamic_executor_v2.py 포함
+   - 두 개 태그: v20251102-083000, latest
+
+4. **ECR 푸시** (1-2분)
+   - ECR 로그인
+   - 이미지 푸시 (약 700MB)
+
+5. **CloudFormation 배포** (2-3분)
+   - ECR Repository (이미 생성됨, CloudFormation 관리로 전환)
+   - ECS Cluster (Container Insights 활성화)
+   - ECS Task Definition (2 vCPU, 4GB RAM)
+   - CloudWatch Log Group (7일 보관)
+   - .env 파일에 Phase 2 outputs 추가
+
+**예상 출력 (마지막 부분)**:
+```
+✓ .env file updated: /path/to/.env
+
+============================================
+Deployment Summary
+============================================
+
+Docker Image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/deep-insight-fargate-runtime-prod:latest
+Image Tag: v20251102-083527
+
+# Phase 2 Outputs
+ECR_REPOSITORY_URI=123456789012.dkr.ecr.us-east-1.amazonaws.com/deep-insight-fargate-runtime-prod
+ECR_REPOSITORY_NAME=deep-insight-fargate-runtime-prod
+ECS_CLUSTER_ARN=arn:aws:ecs:us-east-1:123456789012:cluster/deep-insight-cluster-prod
+ECS_CLUSTER_NAME=deep-insight-cluster-prod
+TASK_DEFINITION_ARN=arn:aws:ecs:us-east-1:123456789012:task-definition/deep-insight-fargate-task-prod:1
+LOG_GROUP_NAME=/ecs/deep-insight-fargate-prod
+
+Next Steps:
+  1. Run verification: ./scripts/phase2/verify.sh
+  2. Test Fargate task: ./scripts/phase2/test-task.sh
+  3. Proceed to Phase 3: AgentCore Runtime deployment
+```
+
+#### C6.3 Phase 2 검증
+
+```bash
+./scripts/phase2/verify.sh
+```
+
+**예상 출력**:
+```
+============================================
+Phase 2: Fargate Runtime Verification
+============================================
+
+1. Checking ECR Repository...
+
+  ECR Repository exists                              ✓ OK
+  Docker images in repository                        ✓ OK (2)
+  Latest tag exists                                  ✓ OK
+
+2. Checking ECS Cluster...
+
+  ECS Cluster exists                                 ✓ OK
+  ECS Cluster status                                 ✓ ACTIVE
+  Container Insights                                 ✓ Enabled
+
+3. Checking Task Definition...
+
+  Task Definition exists                             ✓ OK
+  Task Definition status                             ✓ ACTIVE
+  Network mode                                       ✓ awsvpc
+  Requires compatibilities                           ✓ FARGATE
+
+4. Checking CloudWatch Logs...
+
+  CloudWatch Log Group exists                        ✓ OK
+  Log retention                                      ✓ 7 days
+
+============================================
+Verification Summary
+============================================
+
+Total Checks:  12
+Passed:        12
+
+✓ All checks passed!
+
+Next Steps:
+  1. Test Fargate task: ./scripts/phase2/test-task.sh
+  2. Proceed to Phase 3: AgentCore Runtime deployment
+```
+
+#### C6.4 Phase 2 배포 완료!
+
+**✅ Phase 2 체크리스트**:
+- [x] ECR Repository 생성 완료
+- [x] Docker 이미지 빌드 및 푸시 완료 (2개 태그)
+- [x] ECS Cluster 생성 완료 (Container Insights 활성화)
+- [x] Task Definition 등록 완료 (ACTIVE 상태)
+- [x] CloudWatch Log Group 생성 완료 (7일 보관)
+- [x] `.env` 파일에 Phase 2 outputs 추가 완료
+
+**🎉 Phase 2 Fargate Runtime 배포 성공!**
+
+### C7. 다음 단계
+
+**⏳ Phase 3-4는 Phase 2 완료 후 진행 예정**:
+
+1. **Phase 3: AgentCore Runtime**
    - `.bedrock_agentcore.yaml` 생성 (VPC 모드)
    - Runtime 배포
    - ENI 생성 확인
 
-3. **Phase 4: Testing**
+2. **Phase 4: Testing**
    - 네트워크 연결 테스트
    - AgentCore Job 실행
    - PDF 보고서 생성 테스트
@@ -742,10 +875,60 @@ aws ec2 describe-vpc-endpoints \
 
 ### 리소스 정리 (CloudFormation 스택 삭제)
 
-사용하지 않을 때는 CloudFormation 스택을 삭제하여 모든 리소스를 한 번에 정리:
+사용하지 않을 때는 cleanup 스크립트 또는 CloudFormation 스택 삭제로 모든 리소스를 정리:
+
+#### 방법 1: Cleanup 스크립트 사용 (권장)
 
 ```bash
 cd production_deployment
+
+# Phase 2 정리 (Interactive 모드)
+./scripts/phase2/cleanup.sh prod
+
+# Phase 2 정리 (Force 모드, 확인 없이 자동 삭제)
+./scripts/phase2/cleanup.sh prod --force
+
+# Phase 1 정리 (Interactive 모드)
+./scripts/phase1/cleanup.sh prod
+
+# Phase 1 정리 (Force 모드)
+./scripts/phase1/cleanup.sh prod --force
+```
+
+**Cleanup 스크립트 특징**:
+- ✅ 안전한 Interactive 모드 (단계별 확인)
+- ✅ Fast Force 모드 (자동 삭제)
+- ✅ 실행 중인 Task 자동 정지
+- ✅ ECR 이미지 자동 삭제
+- ✅ .env 파일 선택적 정리
+- ✅ 에러 발생 시 상세 로그 출력
+
+**Phase 2 정리 (2-5분)**:
+- ECR Repository 및 Docker 이미지
+- ECS Cluster 및 실행 중인 Task
+- Task Definitions (선택 사항)
+- CloudWatch Log Group
+- CloudFormation Stack
+- .env Phase 2 섹션 (선택 사항)
+
+**Phase 1 정리 (10-20분)**:
+- VPC Endpoints (5-10분)
+- NAT Gateway (2-3분)
+- ALB, Security Groups, Subnets
+- IAM Roles
+- CloudFormation Stack (parent + 5 nested stacks)
+- S3 Bucket (선택 사항)
+- .env 파일 (선택 사항)
+
+#### 방법 2: 수동 CloudFormation 삭제
+
+```bash
+cd production_deployment
+
+# Phase 2 스택 삭제
+aws cloudformation delete-stack \
+  --stack-name deep-insight-fargate-prod \
+  --region us-east-1
 
 # Phase 1 스택 삭제
 aws cloudformation delete-stack \
@@ -765,13 +948,10 @@ aws cloudformation wait stack-delete-complete \
   --region us-east-1
 ```
 
-**예상 삭제 시간**: 10-15분
-- VPC Endpoints 삭제: 5-10분
-- NAT Gateway 삭제: 2-3분
-- 기타 리소스: 1-2분
-
 **⚠️ 주의사항**:
+- **Phase 2 먼저 삭제**: Phase 1은 Phase 2의 의존성이므로 순서 중요
 - CloudFormation 스택 삭제 시 모든 리소스가 삭제됩니다
+- 수동 삭제 시 실행 중인 ECS Task가 있으면 삭제 실패 가능
 - `.env` 파일은 삭제되지 않으므로 수동 삭제 필요
 - 재배포 시 `.env` 파일이 자동으로 다시 생성됩니다
 

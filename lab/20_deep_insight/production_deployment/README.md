@@ -18,8 +18,9 @@
 - ✅ **보안 Best Practices**: Private Subnets, Security Groups, IAM 최소 권한
 
 **현재 상태**:
-- ✅ **Phase 1 완료**: VPC 인프라 (CloudFormation)
-- ⏳ **Phase 2-4 준비 중**: Fargate, AgentCore Runtime, Testing
+- ✅ **Phase 1 완료**: VPC 인프라 (CloudFormation + Nested Stacks)
+- ✅ **Phase 2 완료**: Fargate Runtime (CloudFormation + Docker)
+- ⏳ **Phase 3-4 준비 중**: AgentCore Runtime, Testing
 
 ---
 
@@ -35,19 +36,27 @@ production_deployment/
 │
 ├── cloudformation/                               # ☁️ CloudFormation 템플릿
 │   ├── phase1-main.yaml                          # ✅ Parent Stack (Orchestrator)
-│   ├── nested/                                   # 📦 Nested Stacks
+│   ├── phase2-fargate.yaml                       # ✅ Fargate Runtime (ECR, ECS, Task Definition)
+│   ├── nested/                                   # 📦 Phase 1 Nested Stacks
 │   │   ├── network.yaml                          # ✅ VPC, Subnets, NAT Gateway, Routes (304줄)
 │   │   ├── security-groups.yaml                  # ✅ 4 Security Groups + 15 Rules (263줄)
 │   │   ├── vpc-endpoints.yaml                    # ✅ 6 VPC Endpoints (Bedrock, ECR, Logs, S3) (179줄)
 │   │   ├── alb.yaml                              # ✅ ALB, Target Group, Listener (121줄)
 │   │   └── iam.yaml                              # ✅ Task Role, Execution Role (127줄)
 │   └── parameters/
-│       └── phase1-prod-params.json               # ✅ Production 환경 파라미터
+│       ├── phase1-prod-params.json               # ✅ Phase 1 파라미터
+│       └── phase2-prod-params.json               # ✅ Phase 2 파라미터 (템플릿)
 │
 ├── scripts/                                      # 🔧 자동화 스크립트
-│   └── phase1/
-│       ├── deploy.sh                             # ✅ S3 업로드 + CloudFormation 배포
-│       └── verify.sh                             # ✅ Phase 1 검증 스크립트 (8KB)
+│   ├── phase1/
+│   │   ├── deploy.sh                             # ✅ Phase 1 배포
+│   │   ├── verify.sh                             # ✅ Phase 1 검증
+│   │   ├── monitor.sh                            # ✅ 배포 모니터링
+│   │   └── cleanup.sh                            # ✅ 리소스 정리
+│   └── phase2/
+│       ├── deploy.sh                             # ✅ Phase 2 배포 (Docker 빌드 + ECR 푸시)
+│       ├── verify.sh                             # ✅ Phase 2 검증
+│       └── cleanup.sh                            # ✅ 리소스 정리
 │
 ├── docs/                                         # 📚 상세 가이드
 │   ├── 00_OVERVIEW.md                            # 전체 아키텍처 및 개요
@@ -152,17 +161,23 @@ Passed:        15
 ./scripts/phase1/verify.sh
 ```
 
-#### ⏳ Phase 2: Fargate Runtime (예정)
+#### ✅ Phase 2: Fargate Runtime (완료)
 → **[02_FARGATE_RUNTIME.md](./docs/02_FARGATE_RUNTIME.md)**
 
-**예정 작업** (15-20분):
-- ECR Repository 생성
-- Docker 이미지 빌드 (Python 3.12 + 한글 폰트)
-- ECR에 푸시
-- ECS Task Definition 등록
-- 테스트 Task 실행
+**생성 리소스** (5-10분):
+- ECR Repository (이미지 스캔, AES256 암호화)
+- Docker 이미지 (Python 3.12 + 한글 폰트 + 필수 패키지)
+- ECS Cluster (Container Insights 활성화)
+- ECS Task Definition (2 vCPU, 4GB RAM)
+- CloudWatch Log Group (7일 보관)
 
-**현재 상태**: Phase 1 완료 후 진행 예정
+**배포 방법**:
+```bash
+./scripts/phase2/deploy.sh prod
+./scripts/phase2/verify.sh
+```
+
+**특징**: Docker 빌드 + ECR 푸시 + CloudFormation 배포를 deploy.sh 하나로 자동화
 
 #### ⏳ Phase 3: AgentCore Runtime (예정)
 → **[03_AGENTCORE_RUNTIME.md](./docs/03_AGENTCORE_RUNTIME.md)**
@@ -243,7 +258,9 @@ Passed:        15
 
 ---
 
-## 📊 비용 (Phase 1, 월간)
+## 📊 비용 (월간 예상)
+
+### Phase 1: 인프라
 
 | 리소스 | 수량 | 비용 (USD/월) | 비고 |
 |--------|------|--------------|------|
@@ -251,33 +268,55 @@ Passed:        15
 | VPC Endpoints (Interface) | 5 | ~$36.00 | $0.01/시간/endpoint |
 | VPC Endpoint (Gateway) | 1 | $0 | S3 무료 |
 | ALB | 1 | ~$16.00 | $0.0225/시간 |
-| **총합** | - | **~$84.40/월** | 24/7 실행 시 |
+| **Phase 1 총합** | - | **~$84.40/월** | 24/7 실행 시 |
+
+### Phase 2: Fargate Runtime
+
+| 리소스 | 수량 | 비용 (USD/월) | 비고 |
+|--------|------|--------------|------|
+| ECR Repository | 1 | ~$0.10 | 저장 용량에 따라 |
+| ECS Cluster | 1 | $0 | 클러스터 자체는 무료 |
+| Fargate Task | 변동 | ~$0.04/시간 | 실행 중일 때만 과금 |
+| CloudWatch Logs | 1 | ~$0.50 | 로그 저장 및 ingestion |
+| **Phase 2 총합** | - | **~$0.60/월** | Task 미실행 시 |
+
+### 전체 비용
+
+| Phase | 비용 (USD/월) |
+|-------|--------------|
+| Phase 1 (인프라) | ~$84.40 |
+| Phase 2 (Runtime, Task 미실행) | ~$0.60 |
+| **전체 총합 (Task 미실행)** | **~$85.00/월** |
+
+**Fargate Task 실행 시 추가 비용**:
+- 2 vCPU, 4GB RAM: $0.04/시간
+- 24/7 실행 시: $29/월 추가
+- On-demand 실행 권장 (필요할 때만)
 
 **비용 절감 팁**:
 - 개발/테스트 환경: 사용 후 스택 삭제
 - NAT Gateway 대안: VPC Endpoints만 사용
-- 정리 명령어: `aws cloudformation delete-stack --stack-name deep-insight-infrastructure-prod`
+- Fargate Task: On-demand 실행 (24/7 실행 불필요)
+- 정리 명령어:
+  ```bash
+  ./scripts/phase2/cleanup.sh prod  # Phase 2 정리
+  ./scripts/phase1/cleanup.sh prod  # Phase 1 정리
+  ```
 
 ---
 
 ## 🔧 주요 명령어
 
-### 배포
+### Phase 1: 인프라 배포
 
 ```bash
-# Phase 1 배포
+# 배포 (30-40분)
 ./scripts/phase1/deploy.sh prod
 
-# 배포 상태 모니터링
-watch -n 10 "aws cloudformation describe-stacks \
-  --stack-name deep-insight-infrastructure-prod \
-  --query 'Stacks[0].StackStatus' --output text"
-```
+# 실시간 모니터링 (선택 사항)
+./scripts/phase1/monitor.sh prod
 
-### 검증
-
-```bash
-# 자동 검증 (15개 체크)
+# 검증 (23개 체크)
 ./scripts/phase1/verify.sh
 
 # 수동 확인
@@ -285,20 +324,41 @@ cat .env
 aws cloudformation describe-stacks --stack-name deep-insight-infrastructure-prod
 ```
 
+### Phase 2: Fargate Runtime 배포
+
+```bash
+# Docker 설치 확인
+docker --version
+
+# 배포 (10-15분: Docker 빌드 + ECR 푸시 + CloudFormation)
+./scripts/phase2/deploy.sh prod
+
+# 검증 (12개 체크)
+./scripts/phase2/verify.sh
+
+# ECR 이미지 확인
+aws ecr list-images \
+  --repository-name deep-insight-fargate-runtime-prod \
+  --region us-east-1
+```
+
 ### 정리
 
 ```bash
-# CloudFormation 스택 삭제 (모든 리소스 한 번에 정리)
+# Phase 2 정리
+./scripts/phase2/cleanup.sh prod  # 또는 --force
+
+# Phase 1 정리
+./scripts/phase1/cleanup.sh prod  # 또는 --force
+
+# 수동 정리 (CloudFormation)
+aws cloudformation delete-stack \
+  --stack-name deep-insight-fargate-prod \
+  --region us-east-1
+
 aws cloudformation delete-stack \
   --stack-name deep-insight-infrastructure-prod \
   --region us-east-1
-
-# 삭제 완료 대기
-aws cloudformation wait stack-delete-complete \
-  --stack-name deep-insight-infrastructure-prod
-
-# .env 파일 삭제
-rm .env
 ```
 
 ---
