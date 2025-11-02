@@ -537,7 +537,7 @@ export AWS_PROFILE=production
 
 # 2. Phase 1부터 순차적으로 진행
 cd production_deployment
-# ... (01_INFRASTRUCTURE.md부터 시작)
+# ... (STEP_BY_STEP_GUIDE.md부터 시작)
 ```
 
 ### 3. CI/CD 파이프라인 (고급)

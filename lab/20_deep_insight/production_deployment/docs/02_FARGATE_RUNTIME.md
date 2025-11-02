@@ -2,7 +2,7 @@
 
 > **소요 시간**: 15-20분
 > **난이도**: 중급
-> **사전 요구사항**: Phase 1 완료 ([01_INFRASTRUCTURE.md](./01_INFRASTRUCTURE.md))
+> **사전 요구사항**: Phase 1 완료 ([STEP_BY_STEP_GUIDE.md](../STEP_BY_STEP_GUIDE.md))
 
 ---
 

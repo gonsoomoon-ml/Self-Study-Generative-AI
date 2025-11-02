@@ -1,20 +1,24 @@
 # Bedrock Manus - 프로덕션 배포 가이드
 
-> **Bedrock AgentCore Multi-Agent System**을 프로덕션 환경에 배포하기 위한 완전한 가이드
+> **Bedrock AgentCore Multi-Agent System**을 프로덕션 AWS 환경에 배포하기 위한 CloudFormation 기반 완전한 가이드
 
 ---
 
 ## 🎯 개요
 
-이 디렉토리는 Bedrock Manus Multi-Agent System을 프로덕션 AWS 환경에 배포하기 위한 모든 리소스를 포함합니다.
+이 디렉토리는 Bedrock Manus Multi-Agent System을 프로덕션 AWS 환경에 배포하기 위한 **Phase 1 인프라**를 CloudFormation으로 구현한 것입니다.
 
 **주요 특징**:
-- ✅ Infrastructure as Code (CloudFormation)
-- ✅ VPC Private 모드 지원
-- ✅ Single-AZ 배포 (간결하고 비용 효율적)
-- ✅ 단계별 배포 가이드
-- ✅ 자동화 스크립트
-- ✅ 프로덕션 보안 best practices
+- ✅ **Infrastructure as Code**: CloudFormation으로 재현 가능한 인프라
+- ✅ **VPC Private 모드**: Bedrock AgentCore VPC Endpoint 지원
+- ✅ **Single-AZ 배포**: 간결하고 비용 효율적 (us-east-1a)
+- ✅ **자동화 스크립트**: Deploy & Verify 스크립트 제공
+- ✅ **자동 검증**: 15개 리소스 자동 확인
+- ✅ **보안 Best Practices**: Private Subnets, Security Groups, IAM 최소 권한
+
+**현재 상태**:
+- ✅ **Phase 1 완료**: VPC 인프라 (CloudFormation)
+- ⏳ **Phase 2-4 준비 중**: Fargate, AgentCore Runtime, Testing
 
 ---
 
@@ -22,364 +26,332 @@
 
 ```
 production_deployment/
-├── README.md                     # 이 파일
-├── STATUS.md                     # 배포 진행 상황 추적
 │
-├── docs/                         # 📚 단계별 배포 가이드
-│   ├── 00_OVERVIEW.md            # 전체 개요 및 아키텍처
-│   ├── 01_INFRASTRUCTURE.md      # Phase 1: 인프라 배포
-│   ├── 02_FARGATE_RUNTIME.md     # Phase 2: Fargate Runtime 배포
-│   ├── 03_AGENTCORE_RUNTIME.md   # Phase 3: AgentCore Runtime 생성
-│   └── 04_TESTING.md             # Phase 4: 테스트 및 검증
+├── 📚 README.md                                  # 이 파일 (메인 가이드)
+├── 📖 DEPLOYMENT_WORKFLOW.md                     # 두 계정 배포 워크플로우
+├── 📖 STEP_BY_STEP_GUIDE.md                      # Phase 1 단계별 가이드
+├── 📖 CLOUDFORMATION_GUIDE.md                    # CloudFormation 상세 가이드
 │
-├── cloudformation/               # ☁️ CloudFormation 템플릿
-│   └── infrastructure.yaml       # (생성 예정) VPC, ALB, Fargate, VPC Endpoints
+├── cloudformation/                               # ☁️ CloudFormation 템플릿
+│   ├── phase1-infrastructure.yaml                # ✅ VPC, Security Groups, VPC Endpoints, ALB, IAM (22KB)
+│   └── parameters/
+│       └── phase1-prod-params.json               # ✅ Production 환경 파라미터
 │
-├── parameters/                   # ⚙️ 환경별 파라미터
-│   ├── dev-params.json           # (생성 예정) Development 환경
-│   ├── staging-params.json       # (생성 예정) Staging 환경
-│   └── prod-params.json          # (생성 예정) Production 환경
+├── scripts/                                      # 🔧 자동화 스크립트
+│   └── phase1/
+│       ├── deploy.sh                             # ✅ Phase 1 CloudFormation 배포 (12KB)
+│       └── verify.sh                             # ✅ Phase 1 검증 스크립트 (8KB)
 │
-├── scripts/                      # 🔧 자동화 스크립트
-│   ├── deploy.sh                 # (생성 예정) 전체 배포 오케스트레이션
-│   ├── deploy-fargate-runtime.sh # (생성 예정) Fargate Docker 빌드/푸시
-│   └── cleanup.sh                # (생성 예정) 리소스 정리
+├── docs/                                         # 📚 상세 가이드 (71KB)
+│   ├── 00_OVERVIEW.md                            # 전체 아키텍처 및 개요
+│   ├── 02_FARGATE_RUNTIME.md                     # Phase 2 (예정)
+│   ├── 03_AGENTCORE_RUNTIME.md                   # Phase 3 (예정)
+│   └── 04_TESTING.md                             # Phase 4 (예정)
 │
-├── monitoring/                   # 📊 모니터링 및 알람
-│   └── dashboard.json            # (생성 예정) CloudWatch Dashboard
-│
-├── agentcore-runtime/            # (배포 시 생성) AgentCore Runtime 소스
-│   ├── agentcore_runtime.py
-│   ├── src/
-│   ├── .bedrock_agentcore.yaml
-│   └── invoke_agentcore_job.py
-│
-└── deployment.env                # (배포 시 생성) 환경 변수
+└── .env                                          # (배포 시 자동 생성) 리소스 ID 저장
 ```
 
 ---
 
-## 🚀 빠른 시작
+## 🚀 빠른 시작 (5분)
 
-### 1. 사전 요구사항 확인
+### 1단계: 사전 요구사항
 
 ```bash
-# AWS CLI 설치 확인
-aws --version  # v2.0 이상 필요
+# AWS CLI 확인 (v2.0 이상)
+aws --version
 
-# Docker 설치 확인 (Fargate 이미지 빌드용)
-docker --version
+# AWS 자격증명 설정
+aws configure
 
-# Python 3.12+ 확인
-python3 --version
-
-# bedrock_agentcore toolkit 설치
-pip install bedrock_agentcore_starter_toolkit
+# 계정 확인
+aws sts get-caller-identity
 ```
 
-### 2. 배포 가이드 읽기
+### 2단계: Git Clone
 
-**필수 읽기 순서**:
+```bash
+git clone https://github.com/hyeonsangjeon/aws-ai-ml-workshop-kr.git
+cd aws-ai-ml-workshop-kr/genai/aws-gen-ai-kr/20_applications/08_bedrock_manus/use_cases/05_insight_extractor_strands_sdk_workshop_phase_2/production_deployment
+```
 
-1. **[00_OVERVIEW.md](./docs/00_OVERVIEW.md)** ⭐
-   - 전체 아키텍처 이해
-   - 사전 요구사항 확인
-   - 예상 비용 검토
+### 3단계: Phase 1 배포 (30-40분)
 
-2. **[STATUS.md](./STATUS.md)**
-   - 배포 진행 상황 추적
+```bash
+# 실행 권한 부여
+chmod +x scripts/phase1/*.sh
 
-### 3. 단계별 배포 시작
+# Phase 1 배포
+./scripts/phase1/deploy.sh prod
+```
 
-배포는 **4개 Phase**로 진행됩니다:
+### 4단계: 검증 (2-3분)
 
-#### Phase 1: 인프라 배포 (30-40분)
-→ **[01_INFRASTRUCTURE.md](./docs/01_INFRASTRUCTURE.md)**
+```bash
+# 자동 검증 (15개 리소스 체크)
+./scripts/phase1/verify.sh
+```
 
-- VPC, Subnets, NAT Gateway, IGW
-- Security Groups
-- VPC Endpoints (Bedrock, ECR, S3, Logs)
-- Internal ALB
-- ECS Cluster
-- IAM Roles
+**✅ 성공 시 출력**:
+```
+Total Checks:  15
+Passed:        15
 
-**결과**: VPC ID, Subnet IDs, ALB DNS, Security Group IDs
+✓ All checks passed!
+```
 
-#### Phase 2: Fargate Runtime 배포 (15-20분)
+---
+
+## 📖 상세 가이드
+
+### 빠른 참조
+
+| 목적 | 문서 | 소요 시간 |
+|------|------|-----------|
+| **빠르게 시작** | [PHASE1_QUICKSTART.md](./PHASE1_QUICKSTART.md) | 5분 읽기 |
+| **단계별 배포** | [STEP_BY_STEP_GUIDE.md](./STEP_BY_STEP_GUIDE.md) | 10분 읽기 |
+| **두 계정 워크플로우** | [DEPLOYMENT_WORKFLOW.md](./DEPLOYMENT_WORKFLOW.md) | 15분 읽기 |
+| **CloudFormation 상세** | [CLOUDFORMATION_GUIDE.md](./CLOUDFORMATION_GUIDE.md) | 20분 읽기 |
+
+### Phase별 가이드
+
+#### ✅ Phase 1: 인프라 배포 (완료)
+→ **[STEP_BY_STEP_GUIDE.md](./STEP_BY_STEP_GUIDE.md)**
+
+**생성 리소스** (30-40분):
+- VPC (10.0.0.0/16)
+- Private Subnet (10.0.1.0/24, us-east-1a)
+- Public Subnet (10.0.11.0/24, us-east-1a)
+- NAT Gateway + Internet Gateway
+- Security Groups 4개 (AgentCore, ALB, Fargate, VPC Endpoint)
+- VPC Endpoints 6개 (Bedrock AgentCore x2, ECR API, ECR Docker, CloudWatch Logs, S3 Gateway)
+- Internal ALB + Target Group
+- IAM Roles (Task Execution, Task Role)
+
+**배포 방법**:
+```bash
+./scripts/phase1/deploy.sh prod
+./scripts/phase1/verify.sh
+```
+
+#### ⏳ Phase 2: Fargate Runtime (예정)
 → **[02_FARGATE_RUNTIME.md](./docs/02_FARGATE_RUNTIME.md)**
 
-- Docker 이미지 빌드 (Python 실행 환경)
-- ECR에 이미지 푸시
+**예정 작업** (15-20분):
+- ECR Repository 생성
+- Docker 이미지 빌드 (Python 3.12 + 한글 폰트)
+- ECR에 푸시
 - ECS Task Definition 등록
 - 테스트 Task 실행
 
-**결과**: ECR Image URI, Task Definition ARN
+**현재 상태**: Phase 1 완료 후 진행 예정
 
-#### Phase 3: AgentCore Runtime 생성 (10-15분)
+#### ⏳ Phase 3: AgentCore Runtime (예정)
 → **[03_AGENTCORE_RUNTIME.md](./docs/03_AGENTCORE_RUNTIME.md)**
 
-- AgentCore Runtime 소스 준비
-- VPC 모드 설정 파일 생성
+**예정 작업** (10-15분):
+- `.bedrock_agentcore.yaml` 생성 (VPC 모드)
 - Runtime 배포
-- Runtime 상태 확인
+- ENI 생성 확인
+- Runtime 상태 검증
 
-**결과**: Runtime ARN, ENI ID
+**현재 상태**: Phase 1 완료 후 진행 예정
 
-#### Phase 4: 테스트 및 검증 (10-30분)
+#### ⏳ Phase 4: 테스트 및 검증 (예정)
 → **[04_TESTING.md](./docs/04_TESTING.md)**
 
-- 기본 연결 테스트
+**예정 작업** (10-30분):
+- 네트워크 연결 테스트
 - 간단한 Job 실행 (총 매출액 계산)
-- 복잡한 Job 실행 (PDF 보고서 생성)
-- 성능 검증
+- 복잡한 Job 실행 (PDF 보고서)
+- 성능 검증 및 로그 확인
 
-**결과**: 프로덕션 준비 완료 확인
+**현재 상태**: Phase 1 완료 후 진행 예정
 
 ---
 
-## 🏗️ 아키텍처
+## 🏗️ 아키텍처 (Phase 1)
+
+### 네트워크 구조
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Internet                              │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                    ┌────▼─────┐
-                    │   IGW    │
-                    └────┬─────┘
-                         │
-    ┌────────────────────┴────────────────────┐
-    │              VPC (10.0.0.0/16)          │
-    │                                          │
-    │  ┌──────────────────────────────────┐  │
-    │  │ Public Subnet (us-east-1a)       │  │
-    │  │                                   │  │
-    │  │  NAT Gateway ─────────────────────┼──┼───> ECR/S3
-    │  └──────────────────────────────────┘  │
-    │                                          │
-    │  ┌──────────────────────────────────┐  │
-    │  │ Private Subnet (us-east-1a)      │  │
-    │  │                                   │  │
-    │  │  ┌──────────────────────────┐    │  │
-    │  │  │ Internal ALB             │    │  │
-    │  │  └────────┬─────────────────┘    │  │
-    │  │           │                       │  │
-    │  │  ┌────────▼─────────────────┐    │  │
-    │  │  │ Fargate Container        │    │  │
-    │  │  └──────────────────────────┘    │  │
-    │  └──────────────────────────────────┘  │
-    │                                          │
-    │  ┌──────────────────────────────────┐  │
-    │  │ VPC Endpoints                    │  │
-    │  │ (AgentCore, ECR, S3, Logs)       │  │
-    │  └──────────────────────────────────┘  │
-    └─────────────────────────────────────────┘
-             ▲
-             │ (VPC Private Connection)
-    ┌────────┴─────────┐
-    │ Bedrock          │
-    │ AgentCore        │
-    │ Runtime (VPC)    │
-    └──────────────────┘
-             ▲
-             │ (HTTPS API)
-    ┌────────┴─────────┐
-    │ Your Client      │
-    │ (Mac/EC2/Lambda) │
-    └──────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                      Internet                            │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+                  ┌────▼─────┐
+                  │   IGW    │
+                  └────┬─────┘
+                       │
+         ┌─────────────▼─────────────┐
+         │  VPC (10.0.0.0/16)        │
+         │  us-east-1a (Single-AZ)   │
+         │                            │
+         │  ┌──────────────────────┐ │
+         │  │ Public Subnet        │ │
+         │  │ 10.0.11.0/24         │ │
+         │  │                      │ │
+         │  │  ┌─────────────┐    │ │
+         │  │  │ NAT Gateway │    │ │
+         │  │  └─────────────┘    │ │
+         │  └──────────────────────┘ │
+         │           │                │
+         │  ┌────────▼─────────────┐ │
+         │  │ Private Subnet       │ │
+         │  │ 10.0.1.0/24          │ │
+         │  │                      │ │
+         │  │  ┌───────────────┐  │ │
+         │  │  │ Internal ALB  │  │ │
+         │  │  └───────────────┘  │ │
+         │  │                      │ │
+         │  │  ┌───────────────┐  │ │
+         │  │  │ VPC Endpoints │  │ │
+         │  │  │ (6개)          │  │ │
+         │  │  └───────────────┘  │ │
+         │  └──────────────────────┘ │
+         └────────────────────────────┘
 ```
 
-**주요 특징**:
-- ✅ **Private Subnet**: Fargate 컨테이너는 Private에서만 실행
-- ✅ **Internal ALB**: 외부 인터넷 접근 불가
-- ✅ **VPC Endpoints**: AWS 서비스에 Private 연결
-- ✅ **Single-AZ**: 간결하고 비용 효율적인 구성 (us-east-1a)
+### VPC Endpoints
+
+| Service | Type | 목적 |
+|---------|------|------|
+| `bedrock-agentcore-control` | Interface | AgentCore Runtime 관리 |
+| `bedrock-agentcore` | Interface | AgentCore Data Plane |
+| `ecr.api` | Interface | ECR 이미지 메타데이터 |
+| `ecr.dkr` | Interface | ECR 이미지 다운로드 |
+| `logs` | Interface | CloudWatch Logs 전송 |
+| `s3` | Gateway | S3 접근 (무료) |
 
 ---
 
-## 💰 예상 비용
+## 📊 비용 (Phase 1, 월간)
 
-### 월간 운영 비용 (us-east-1 기준)
+| 리소스 | 수량 | 비용 (USD/월) | 비고 |
+|--------|------|--------------|------|
+| NAT Gateway | 1 | ~$32.40 | $0.045/시간 |
+| VPC Endpoints (Interface) | 5 | ~$36.00 | $0.01/시간/endpoint |
+| VPC Endpoint (Gateway) | 1 | $0 | S3 무료 |
+| ALB | 1 | ~$16.00 | $0.0225/시간 |
+| **총합** | - | **~$84.40/월** | 24/7 실행 시 |
 
-| 리소스 | 사양 | 월간 비용 (USD) |
-|--------|------|----------------|
-| NAT Gateway | 1개 | ~$32.40 |
-| VPC Endpoints | 5개 (Interface) | ~$36.00 |
-| ALB | Internal | ~$16.00 |
-| Fargate | 1 vCPU, 2GB, 10시간/월 | ~$4.00 |
-| S3 | 10GB, 1,000 요청 | ~$0.50 |
-| CloudWatch Logs | 5GB/월 | ~$2.50 |
-| **합계** | | **~$91.40/월** |
-
-**비용 절감 방안**:
-- NAT Gateway 제거 (VPC Endpoints만 사용): -$32/월
-- Fargate Spot 사용: -70% (Fargate 비용)
-- Auto-scaling (미사용 시 0 Task): -$4/월
+**비용 절감 팁**:
+- 개발/테스트 환경: 사용 후 스택 삭제
+- NAT Gateway 대안: VPC Endpoints만 사용
+- 정리 명령어: `aws cloudformation delete-stack --stack-name bedrock-manus-infrastructure-prod`
 
 ---
 
-## 🔒 보안 Best Practices
+## 🔧 주요 명령어
 
-이 배포 가이드는 다음 보안 원칙을 따릅니다:
+### 배포
 
-### 1. 네트워크 격리
-- ✅ Fargate는 Private Subnet에서만 실행
-- ✅ Internal ALB (인터넷 접근 불가)
-- ✅ VPC Endpoints (인터넷 경유 없이 AWS 서비스 접근)
+```bash
+# Phase 1 배포
+./scripts/phase1/deploy.sh prod
 
-### 2. 최소 권한 원칙
-- ✅ Security Groups: 필요한 포트만 개방
-- ✅ IAM Roles: 최소 권한만 부여
-- ✅ S3 Bucket Policy: 특정 리소스만 접근 가능
+# 배포 상태 모니터링
+watch -n 10 "aws cloudformation describe-stacks \
+  --stack-name bedrock-manus-infrastructure-prod \
+  --query 'Stacks[0].StackStatus' --output text"
+```
 
-### 3. 데이터 보호
-- ✅ S3 암호화: SSE-S3 (또는 SSE-KMS)
-- ✅ CloudWatch Logs 암호화
-- ✅ VPC Flow Logs (네트워크 트래픽 모니터링)
+### 검증
 
-### 4. Secrets Management
-- ⚠️ 현재: 환경 변수 사용
-- ✅ 권장: AWS Secrets Manager 또는 Parameter Store
+```bash
+# 자동 검증 (15개 체크)
+./scripts/phase1/verify.sh
 
----
+# 수동 확인
+cat .env
+aws cloudformation describe-stacks --stack-name bedrock-manus-infrastructure-prod
+```
 
-## 📊 모니터링 & 운영
+### 정리
 
-### CloudWatch Logs
+```bash
+# CloudFormation 스택 삭제 (모든 리소스 한 번에 정리)
+aws cloudformation delete-stack \
+  --stack-name bedrock-manus-infrastructure-prod \
+  --region us-east-1
 
-- **Fargate Runtime**: `/ecs/fargate-runtime-{environment}`
-- **AgentCore Runtime**: `/aws/bedrock-agentcore/runtimes/...`
+# 삭제 완료 대기
+aws cloudformation wait stack-delete-complete \
+  --stack-name bedrock-manus-infrastructure-prod
 
-### CloudWatch Metrics
-
-- ECS Task CPU/Memory 사용률
-- ALB 요청 수, 에러율
-- VPC Endpoint 트래픽
-- S3 업로드 성공/실패
-
-### 알람 설정 (권장)
-
-- Fargate Task 실패
-- ALB 5XX 에러 증가
-- VPC Endpoint 연결 실패
-- S3 업로드 실패
+# .env 파일 삭제
+rm .env
+```
 
 ---
 
-## 🆘 트러블슈팅
+## 🛟 트러블슈팅
 
 ### 일반적인 문제
 
-**CloudFormation 스택 생성 실패**
-→ [01_INFRASTRUCTURE.md](./docs/01_INFRASTRUCTURE.md#트러블슈팅)
+1. **VPC Endpoint 생성 실패**:
+   - AZ ID 확인 (use1-az2, use1-az4, use1-az6만 지원)
+   - 해결: `cloudformation/parameters/phase1-prod-params.json`에서 AZ 변경
 
-**Docker 빌드/푸시 실패**
-→ [02_FARGATE_RUNTIME.md](./docs/02_FARGATE_RUNTIME.md#트러블슈팅)
+2. **CloudFormation 배포 실패**:
+   - 스택 이벤트 확인:
+     ```bash
+     aws cloudformation describe-stack-events \
+       --stack-name bedrock-manus-infrastructure-prod \
+       --max-items 50
+     ```
 
-**AgentCore Runtime Health Check 실패**
-→ [03_AGENTCORE_RUNTIME.md](./docs/03_AGENTCORE_RUNTIME.md#트러블슈팅)
+3. **권한 부족 에러**:
+   - 필수 IAM 권한: EC2FullAccess, ElasticLoadBalancingFullAccess, IAMFullAccess, CloudFormationFullAccess
 
-**Job 실행 에러**
-→ [04_TESTING.md](./docs/04_TESTING.md#트러블슈팅)
-
-### 로그 확인
-
-```bash
-# Fargate Runtime 로그
-aws logs tail /ecs/fargate-runtime-prod --follow
-
-# AgentCore Runtime 로그
-aws logs tail /aws/bedrock-agentcore/runtimes/... --follow
-
-# CloudFormation 스택 이벤트
-aws cloudformation describe-stack-events \
-  --stack-name bedrock-manus-infrastructure-prod
-```
+자세한 트러블슈팅은 [DEPLOYMENT_WORKFLOW.md - 트러블슈팅](./DEPLOYMENT_WORKFLOW.md#트러블슈팅) 참조
 
 ---
 
-## 📚 추가 리소스
+## 📝 다음 단계
+
+### 현재 완료
+- [x] Phase 1 CloudFormation 템플릿 생성
+- [x] Deploy/Verify 스크립트 생성
+- [x] 가이드 문서 작성 (71KB)
+
+### 향후 작업
+- [ ] Production 계정에서 Phase 1 배포 테스트
+- [ ] Phase 2 CloudFormation 템플릿 작성 (Fargate)
+- [ ] Phase 3 스크립트 작성 (AgentCore Runtime)
+- [ ] Phase 4 테스트 스크립트 작성
+
+---
+
+## 📚 참고 자료
 
 ### 공식 문서
-
-- [AWS Bedrock AgentCore 공식 문서](https://docs.aws.amazon.com/bedrock/)
-- [VPC Best Practices](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-network-best-practices.html)
-- [ECS Fargate 가이드](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/AWS_Fargate.html)
-- [CloudFormation 레퍼런스](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-reference.html)
+- [AWS Bedrock AgentCore 공식 문서](https://docs.aws.amazon.com/bedrock/latest/userguide/agentcore.html)
+- [VPC Endpoints for Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/vpc-interface-endpoints.html)
+- [CloudFormation 템플릿 레퍼런스](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-template-resource-type-ref.html)
 
 ### 프로젝트 문서
-
-- [CLAUDE.md](../CLAUDE.md) - 전체 프로젝트 히스토리
-- [README.md](../README.md) - 메인 프로젝트 README
-
----
-
-## 🔄 업데이트 및 유지보수
-
-### 배포 업데이트
-
-```bash
-# 1. Fargate Runtime 업데이트 (새 Docker 이미지)
-cd production_deployment
-./scripts/deploy-fargate-runtime.sh prod
-
-# 2. AgentCore Runtime 업데이트 (코드 변경)
-cd agentcore-runtime
-bedrock_agentcore launch
-
-# 3. 인프라 업데이트 (CloudFormation 변경)
-aws cloudformation deploy \
-  --template-file cloudformation/infrastructure.yaml \
-  --stack-name bedrock-manus-infrastructure-prod \
-  --parameter-overrides file://parameters/prod-params.json
-```
-
-### 리소스 정리
-
-```bash
-# ⚠️ 주의: 모든 리소스가 삭제됩니다!
-
-# 1. AgentCore Runtime 삭제
-bedrock_agentcore delete-runtime
-
-# 2. Fargate Tasks 중지
-aws ecs list-tasks --cluster {cluster-name} | xargs -I {} aws ecs stop-task --task {}
-
-# 3. CloudFormation 스택 삭제
-aws cloudformation delete-stack \
-  --stack-name bedrock-manus-infrastructure-prod
-
-# 4. ECR 이미지 삭제
-aws ecr batch-delete-image \
-  --repository-name fargate-runtime-prod \
-  --image-ids imageTag=latest
-
-# 5. S3 버킷 비우기 및 삭제
-aws s3 rm s3://bedrock-logs-prod-{account-id} --recursive
-aws s3 rb s3://bedrock-logs-prod-{account-id}
-```
+- [CLAUDE.md](../CLAUDE.md) - 프로젝트 작업 이력
+- [docs/00_OVERVIEW.md](./docs/00_OVERVIEW.md) - 전체 아키텍처 개요
 
 ---
 
-## 🎯 다음 단계
+## 🤝 기여
 
-1. **[00_OVERVIEW.md](./docs/00_OVERVIEW.md)** 읽기 - 전체 이해
-2. **[STATUS.md](./STATUS.md)** 확인 - 진행 상황 추적
-3. **Phase 1부터 순차 진행** - 단계별 배포
+이슈 및 개선 제안은 [GitHub Issues](https://github.com/hyeonsangjeon/aws-ai-ml-workshop-kr/issues)에 등록해 주세요.
+
+---
+
+**작성일**: 2025-11-02
+**버전**: 2.0.0 (CloudFormation Phase 1)
+**작성자**: Claude Code
+**라이선스**: MIT
 
 ---
 
 ## 📞 지원
 
-문제가 발생하면:
-
-1. 각 Phase의 트러블슈팅 섹션 참조
-2. CloudWatch Logs 확인
-3. AWS Support 케이스 생성
-4. GitHub Issues 등록
-
----
-
-**작성일**: 2025-10-20
-**마지막 업데이트**: 2025-10-20
-**버전**: 1.0.0
+질문이나 이슈가 있으면:
+1. [DEPLOYMENT_WORKFLOW.md - 트러블슈팅](./DEPLOYMENT_WORKFLOW.md#트러블슈팅) 확인
+2. [GitHub Issues](https://github.com/hyeonsangjeon/aws-ai-ml-workshop-kr/issues) 등록
+3. AWS Support 문의 (계정 관련 이슈)

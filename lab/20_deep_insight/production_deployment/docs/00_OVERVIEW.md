@@ -158,7 +158,7 @@
 전체 배포는 4단계로 진행됩니다:
 
 ### Phase 1: 인프라 배포 (30-40분)
-→ **가이드**: [01_INFRASTRUCTURE.md](./01_INFRASTRUCTURE.md)
+→ **가이드**: [STEP_BY_STEP_GUIDE.md](../STEP_BY_STEP_GUIDE.md)
 
 - CloudFormation으로 VPC, Subnets, Security Groups, ALB, ECS Cluster 생성
 - VPC Endpoints 생성 (Bedrock AgentCore, ECR, S3, Logs)
@@ -322,7 +322,7 @@ aws ec2 describe-network-interfaces \
 
 준비가 완료되었다면 다음 가이드로 진행하세요:
 
-→ **[01_INFRASTRUCTURE.md](./01_INFRASTRUCTURE.md)** - 인프라 배포 시작
+→ **[STEP_BY_STEP_GUIDE.md](../STEP_BY_STEP_GUIDE.md)** - 인프라 배포 시작
 
 ---
 
