@@ -61,7 +61,7 @@ production_deployment/
 
 ### Phase 1: Infrastructure (CloudFormation)
 
-**CloudFormation Stack**: `bedrock-manus-infrastructure-prod`
+**CloudFormation Stack**: `deep-insight-infrastructure-prod`
 
 **포함 리소스**:
 - ✅ VPC (10.0.0.0/16)
@@ -102,7 +102,7 @@ production_deployment/
 
 #### 2.1 CloudFormation 부분
 
-**CloudFormation Stack**: `bedrock-manus-fargate-prod`
+**CloudFormation Stack**: `deep-insight-fargate-prod`
 
 **포함 리소스**:
 - ✅ ECR Repository
@@ -262,7 +262,7 @@ chmod +x scripts/phase*/*.sh scripts/cleanup/*.sh
 
 # 배포 진행 상황 모니터링 (별도 터미널)
 watch -n 10 aws cloudformation describe-stacks \
-  --stack-name bedrock-manus-infrastructure-prod \
+  --stack-name deep-insight-infrastructure-prod \
   --query 'Stacks[0].StackStatus'
 
 # 배포 완료 후 검증
@@ -382,14 +382,14 @@ watch -n 10 aws cloudformation describe-stacks \
 ### 2. **롤백 용이**
 ```bash
 # 문제 발생 시 자동 롤백
-aws cloudformation delete-stack --stack-name bedrock-manus-infrastructure-prod
+aws cloudformation delete-stack --stack-name deep-insight-infrastructure-prod
 ```
 
 ### 3. **변경 관리**
 ```bash
 # Change Set으로 변경 사항 미리 확인
 aws cloudformation create-change-set \
-  --stack-name bedrock-manus-infrastructure-prod \
+  --stack-name deep-insight-infrastructure-prod \
   --template-body file://cloudformation/phase1-infrastructure.yaml \
   --change-set-name update-vpc-cidr
 ```
@@ -412,12 +412,12 @@ aws cloudformation create-change-set \
 ```bash
 # 실패 이유 확인
 aws cloudformation describe-stack-events \
-  --stack-name bedrock-manus-infrastructure-prod \
+  --stack-name deep-insight-infrastructure-prod \
   --query 'StackEvents[?ResourceStatus==`CREATE_FAILED`]' \
   --output table
 
 # 스택 삭제 후 재시도
-aws cloudformation delete-stack --stack-name bedrock-manus-infrastructure-prod
+aws cloudformation delete-stack --stack-name deep-insight-infrastructure-prod
 ./scripts/phase1/deploy.sh
 ```
 
@@ -437,7 +437,7 @@ sudo systemctl status docker
 
 # 수동으로 빌드
 cd fargate-runtime
-docker build -t bedrock-manus-fargate-runtime:latest .
+docker build -t deep-insight-fargate-runtime:latest .
 ```
 
 ---

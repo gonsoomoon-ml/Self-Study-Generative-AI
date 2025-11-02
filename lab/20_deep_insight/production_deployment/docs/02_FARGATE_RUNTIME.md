@@ -62,7 +62,7 @@ aws ecr create-repository \
   --region $AWS_REGION \
   --image-scanning-configuration scanOnPush=true \
   --encryption-configuration encryptionType=AES256 \
-  --tags Key=Environment,Value=$ENVIRONMENT Key=Project,Value=bedrock-manus
+  --tags Key=Environment,Value=$ENVIRONMENT Key=Project,Value=deep-insight
 
 # ECR URI 가져오기
 ECR_URI=$(aws ecr describe-repositories \

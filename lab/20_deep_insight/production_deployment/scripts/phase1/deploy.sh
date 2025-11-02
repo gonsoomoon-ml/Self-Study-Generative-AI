@@ -21,7 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ENVIRONMENT="${1:-prod}"
 
-STACK_NAME="bedrock-manus-infrastructure-${ENVIRONMENT}"
+STACK_NAME="deep-insight-infrastructure-${ENVIRONMENT}"
 TEMPLATE_FILE="$PROJECT_ROOT/cloudformation/phase1-infrastructure.yaml"
 PARAMS_FILE="$PROJECT_ROOT/cloudformation/parameters/phase1-${ENVIRONMENT}-params.json"
 ENV_FILE="$PROJECT_ROOT/.env"
@@ -82,7 +82,7 @@ AWS_REGION=$AWS_REGION
 AWS_ACCOUNT_ID=$AWS_ACCOUNT_ID
 
 # Project Configuration
-PROJECT_NAME=bedrock-manus
+PROJECT_NAME=deep-insight
 ENVIRONMENT=$ENVIRONMENT
 
 # Phase 1 Outputs (will be populated after deployment)
@@ -195,7 +195,7 @@ aws cloudformation deploy \
     --region "$AWS_REGION" \
     --tags \
         Environment="$ENVIRONMENT" \
-        Project=bedrock-manus \
+        Project=deep-insight \
         ManagedBy=CloudFormation \
     --no-fail-on-empty-changeset
 

@@ -147,7 +147,7 @@ cd production_deployment
 
 # 2. CloudFormation 스택 확인
 aws cloudformation describe-stacks \
-  --stack-name bedrock-manus-infrastructure-dev \
+  --stack-name deep-insight-infrastructure-dev \
   --region us-east-1
 
 # 3. 검증
@@ -155,7 +155,7 @@ aws cloudformation describe-stacks \
 
 # 4. 정리 (비용 절감)
 aws cloudformation delete-stack \
-  --stack-name bedrock-manus-infrastructure-dev \
+  --stack-name deep-insight-infrastructure-dev \
   --region us-east-1
 ```
 
@@ -359,7 +359,7 @@ chmod +x scripts/phase1/*.sh
 ```bash
 # CloudFormation 스택 상태
 watch -n 10 "aws cloudformation describe-stacks \
-  --stack-name bedrock-manus-infrastructure-prod \
+  --stack-name deep-insight-infrastructure-prod \
   --region us-east-1 \
   --query 'Stacks[0].StackStatus' \
   --output text"
@@ -466,7 +466,7 @@ AWS_REGION=us-east-1
 AWS_ACCOUNT_ID=123456789012
 
 # Project Configuration
-PROJECT_NAME=bedrock-manus
+PROJECT_NAME=deep-insight
 ENVIRONMENT=prod
 
 # VPC Configuration
@@ -481,12 +481,12 @@ AVAILABILITY_ZONE=us-east-1a
 
 # ALB Configuration
 ALB_ARN=arn:aws:elasticloadbalancing:...
-ALB_DNS=bedrock-manus-alb-prod-xxxxx.us-east-1.elb.amazonaws.com
+ALB_DNS=deep-insight-alb-prod-xxxxx.us-east-1.elb.amazonaws.com
 TARGET_GROUP_ARN=arn:aws:elasticloadbalancing:...
 
 # IAM Roles
-TASK_EXECUTION_ROLE_ARN=arn:aws:iam::123456789012:role/bedrock-manus-task-execution-role-prod
-TASK_ROLE_ARN=arn:aws:iam::123456789012:role/bedrock-manus-task-role-prod
+TASK_EXECUTION_ROLE_ARN=arn:aws:iam::123456789012:role/deep-insight-task-execution-role-prod
+TASK_ROLE_ARN=arn:aws:iam::123456789012:role/deep-insight-task-role-prod
 ```
 
 ### C5. Phase 1 배포 완료!
@@ -635,14 +635,14 @@ aws ec2 describe-availability-zones \
 
 **증상**:
 ```
-Stack bedrock-manus-infrastructure-prod is in CREATE_FAILED state
+Stack deep-insight-infrastructure-prod is in CREATE_FAILED state
 ```
 
 **해결**:
 ```bash
 # 스택 이벤트 확인 (실패 원인 파악)
 aws cloudformation describe-stack-events \
-  --stack-name bedrock-manus-infrastructure-prod \
+  --stack-name deep-insight-infrastructure-prod \
   --region us-east-1 \
   --max-items 50 \
   --query 'StackEvents[?ResourceStatus==`CREATE_FAILED`].[ResourceType,ResourceStatusReason]' \
@@ -650,12 +650,12 @@ aws cloudformation describe-stack-events \
 
 # 스택 삭제 후 재시도
 aws cloudformation delete-stack \
-  --stack-name bedrock-manus-infrastructure-prod \
+  --stack-name deep-insight-infrastructure-prod \
   --region us-east-1
 
 # 삭제 완료 대기 (약 5-10분)
 aws cloudformation wait stack-delete-complete \
-  --stack-name bedrock-manus-infrastructure-prod \
+  --stack-name deep-insight-infrastructure-prod \
   --region us-east-1
 
 # 재배포
@@ -689,7 +689,7 @@ aws service-quotas request-service-quota-increase \
 
 **증상**:
 ```
-No changes to deploy. Stack bedrock-manus-infrastructure-prod is up to date.
+No changes to deploy. Stack deep-insight-infrastructure-prod is up to date.
 ```
 
 **원인**: CloudFormation 템플릿 또는 파라미터가 변경되지 않음
@@ -748,19 +748,19 @@ cd production_deployment
 
 # Phase 1 스택 삭제
 aws cloudformation delete-stack \
-  --stack-name bedrock-manus-infrastructure-prod \
+  --stack-name deep-insight-infrastructure-prod \
   --region us-east-1
 
 # 삭제 진행 상황 모니터링
 aws cloudformation describe-stacks \
-  --stack-name bedrock-manus-infrastructure-prod \
+  --stack-name deep-insight-infrastructure-prod \
   --region us-east-1 \
   --query 'Stacks[0].StackStatus' \
   --output text
 
 # 또는 삭제 완료 대기 (블로킹)
 aws cloudformation wait stack-delete-complete \
-  --stack-name bedrock-manus-infrastructure-prod \
+  --stack-name deep-insight-infrastructure-prod \
   --region us-east-1
 ```
 

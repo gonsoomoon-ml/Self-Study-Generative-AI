@@ -367,7 +367,7 @@ aws ce get-cost-and-usage \
 {
   "Tags": {
     "Key": "Project",
-    "Values": ["bedrock-manus"]
+    "Values": ["deep-insight"]
   }
 }
 EOF

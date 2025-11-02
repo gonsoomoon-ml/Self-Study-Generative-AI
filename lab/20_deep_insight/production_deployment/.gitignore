@@ -3,9 +3,12 @@
 *.env.local
 deployment.env
 
-# CloudFormation temporary files
+# CloudFormation temporary files (with Account ID)
 cloudformation/parameters/.*.json
 cloudformation/parameters/*-temp.json
+
+# Allow prod params template (no sensitive data, uses ACCOUNT_ID placeholder)
+!cloudformation/parameters/phase1-prod-params.json
 
 # AWS credentials
 .aws/

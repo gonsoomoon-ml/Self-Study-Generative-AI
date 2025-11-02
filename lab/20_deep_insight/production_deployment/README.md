@@ -238,7 +238,7 @@ Passed:        15
 **비용 절감 팁**:
 - 개발/테스트 환경: 사용 후 스택 삭제
 - NAT Gateway 대안: VPC Endpoints만 사용
-- 정리 명령어: `aws cloudformation delete-stack --stack-name bedrock-manus-infrastructure-prod`
+- 정리 명령어: `aws cloudformation delete-stack --stack-name deep-insight-infrastructure-prod`
 
 ---
 
@@ -252,7 +252,7 @@ Passed:        15
 
 # 배포 상태 모니터링
 watch -n 10 "aws cloudformation describe-stacks \
-  --stack-name bedrock-manus-infrastructure-prod \
+  --stack-name deep-insight-infrastructure-prod \
   --query 'Stacks[0].StackStatus' --output text"
 ```
 
@@ -264,7 +264,7 @@ watch -n 10 "aws cloudformation describe-stacks \
 
 # 수동 확인
 cat .env
-aws cloudformation describe-stacks --stack-name bedrock-manus-infrastructure-prod
+aws cloudformation describe-stacks --stack-name deep-insight-infrastructure-prod
 ```
 
 ### 정리
@@ -272,12 +272,12 @@ aws cloudformation describe-stacks --stack-name bedrock-manus-infrastructure-pro
 ```bash
 # CloudFormation 스택 삭제 (모든 리소스 한 번에 정리)
 aws cloudformation delete-stack \
-  --stack-name bedrock-manus-infrastructure-prod \
+  --stack-name deep-insight-infrastructure-prod \
   --region us-east-1
 
 # 삭제 완료 대기
 aws cloudformation wait stack-delete-complete \
-  --stack-name bedrock-manus-infrastructure-prod
+  --stack-name deep-insight-infrastructure-prod
 
 # .env 파일 삭제
 rm .env
@@ -297,7 +297,7 @@ rm .env
    - 스택 이벤트 확인:
      ```bash
      aws cloudformation describe-stack-events \
-       --stack-name bedrock-manus-infrastructure-prod \
+       --stack-name deep-insight-infrastructure-prod \
        --max-items 50
      ```
 

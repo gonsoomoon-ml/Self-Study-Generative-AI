@@ -114,7 +114,7 @@ chmod +x scripts/phase1/*.sh
    - `phase1-prod-params.json`의 `ACCOUNT_ID` 플레이스홀더를 실제 Account ID로 치환
 
 3. ✅ **CloudFormation 스택 배포** (30-40분)
-   - Stack 이름: `bedrock-manus-infrastructure-prod`
+   - Stack 이름: `deep-insight-infrastructure-prod`
    - 리소스 생성 시작
 
 4. ✅ **스택 출력값 추출** (1분)
@@ -127,7 +127,7 @@ chmod +x scripts/phase1/*.sh
 ```bash
 # 스택 상태 확인 (10초마다 갱신)
 watch -n 10 "aws cloudformation describe-stacks \
-  --stack-name bedrock-manus-infrastructure-prod \
+  --stack-name deep-insight-infrastructure-prod \
   --region us-east-1 \
   --query 'Stacks[0].StackStatus' \
   --output text"
@@ -176,12 +176,12 @@ Security Groups:
 
 Load Balancer:
   ALB ARN:           arn:aws:elasticloadbalancing:us-east-1:...
-  ALB DNS:           bedrock-manus-alb-prod-xxxxx.us-east-1.elb.amazonaws.com
+  ALB DNS:           deep-insight-alb-prod-xxxxx.us-east-1.elb.amazonaws.com
   Target Group:      arn:aws:elasticloadbalancing:us-east-1:...
 
 IAM Roles:
-  Task Execution:    arn:aws:iam::123456789012:role/bedrock-manus-task-execution-role-prod
-  Task Role:         arn:aws:iam::123456789012:role/bedrock-manus-task-role-prod
+  Task Execution:    arn:aws:iam::123456789012:role/deep-insight-task-execution-role-prod
+  Task Role:         arn:aws:iam::123456789012:role/deep-insight-task-role-prod
 
 Next Steps:
   1. Run verification: ./scripts/phase1/verify.sh
@@ -278,7 +278,7 @@ AVAILABILITY_ZONE=us-east-1a
 
 # ALB Configuration
 ALB_ARN=arn:aws:elasticloadbalancing:...
-ALB_DNS=bedrock-manus-alb-prod-xxxxx.us-east-1.elb.amazonaws.com
+ALB_DNS=deep-insight-alb-prod-xxxxx.us-east-1.elb.amazonaws.com
 TARGET_GROUP_ARN=arn:aws:elasticloadbalancing:...
 
 # IAM Roles
@@ -325,12 +325,12 @@ TASK_ROLE_ARN=arn:aws:iam::123456789012:role/...
 ```bash
 # CloudFormation 스택 삭제 (모든 리소스 한 번에 정리)
 aws cloudformation delete-stack \
-  --stack-name bedrock-manus-infrastructure-prod \
+  --stack-name deep-insight-infrastructure-prod \
   --region us-east-1
 
 # 삭제 완료 대기 (10-15분)
 aws cloudformation wait stack-delete-complete \
-  --stack-name bedrock-manus-infrastructure-prod \
+  --stack-name deep-insight-infrastructure-prod \
   --region us-east-1
 
 # .env 파일 삭제
@@ -366,7 +366,7 @@ rm .env
 | **배포** | `./scripts/phase1/deploy.sh prod` |
 | **검증** | `./scripts/phase1/verify.sh` |
 | **리소스 확인** | `cat .env` |
-| **정리** | `aws cloudformation delete-stack --stack-name bedrock-manus-infrastructure-prod` |
+| **정리** | `aws cloudformation delete-stack --stack-name deep-insight-infrastructure-prod` |
 
 ---
 

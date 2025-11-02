@@ -166,7 +166,7 @@ AGENT_OBSERVABILITY_ENABLED=true
 OTEL_PYTHON_DISTRO=aws_distro
 OTEL_PYTHON_CONFIGURATOR=aws_configurator
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-OTEL_RESOURCE_ATTRIBUTES=service.name=bedrock-manus-${ENVIRONMENT}
+OTEL_RESOURCE_ATTRIBUTES=service.name=deep-insight-${ENVIRONMENT}
 EOF
 
 echo "✅ .env 파일 설정 완료"
