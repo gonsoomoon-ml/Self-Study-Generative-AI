@@ -606,11 +606,11 @@ aws ec2 describe-vpc-endpoint-services \
   --query 'ServiceDetails[0].AvailabilityZones' \
   --output table
 
-# 결과 예시:
+# 결과 예시 (실제 지원되는 AZ ID):
 # +----------+
+# | use1-az1 |
 # | use1-az2 |
 # | use1-az4 |
-# | use1-az6 |
 # +----------+
 
 # AvailabilityZone 파라미터를 지원되는 AZ로 변경
@@ -628,7 +628,8 @@ aws ec2 describe-availability-zones \
 # 결과:
 # us-east-1a → use1-az2 ✅ (지원됨)
 # us-east-1b → use1-az4 ✅ (지원됨)
-# us-east-1c → use1-az6 ✅ (지원됨)
+# us-east-1c → use1-az6 ❌ (지원 안 됨!)
+# us-east-1d → use1-az1 ✅ (지원됨)
 ```
 
 ### 문제 5: CloudFormation 스택 배포 중 실패

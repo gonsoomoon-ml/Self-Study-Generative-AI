@@ -12,7 +12,7 @@
 - ✅ **Infrastructure as Code**: CloudFormation으로 재현 가능한 인프라
 - ✅ **Nested Stacks 아키텍처**: 모듈화된 5개의 독립적인 스택
 - ✅ **VPC Private 모드**: Bedrock AgentCore VPC Endpoint 지원
-- ✅ **Multi-AZ 배포**: 고가용성 (us-east-1a, us-east-1c)
+- ✅ **Multi-AZ 배포**: 고가용성 (us-east-1a, us-east-1b)
 - ✅ **자동화 스크립트**: S3 업로드 + Deploy & Verify 스크립트 제공
 - ✅ **자동 검증**: 15개 리소스 자동 확인
 - ✅ **보안 Best Practices**: Private Subnets, Security Groups, IAM 최소 권한

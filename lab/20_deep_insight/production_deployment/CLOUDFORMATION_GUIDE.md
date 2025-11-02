@@ -115,9 +115,9 @@ production_deployment/
 **1. NetworkStack** (`nested/network.yaml`):
 - VPC (10.0.0.0/16)
 - Private Subnet 1 (10.0.1.0/24, us-east-1a)
-- Private Subnet 2 (10.0.2.0/24, us-east-1c)
+- Private Subnet 2 (10.0.2.0/24, us-east-1b)
 - Public Subnet 1 (10.0.11.0/24, us-east-1a)
-- Public Subnet 2 (10.0.12.0/24, us-east-1c)
+- Public Subnet 2 (10.0.12.0/24, us-east-1b)
 - Internet Gateway
 - NAT Gateway (in Public Subnet 1)
 - Route Tables (Private, Public)

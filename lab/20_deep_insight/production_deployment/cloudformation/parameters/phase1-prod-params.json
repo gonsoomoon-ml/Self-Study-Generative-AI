@@ -13,7 +13,7 @@
   },
   {
     "ParameterKey": "AvailabilityZone2",
-    "ParameterValue": "us-east-1c"
+    "ParameterValue": "us-east-1b"
   },
   {
     "ParameterKey": "VpcCidr",
