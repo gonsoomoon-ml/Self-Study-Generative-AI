@@ -206,7 +206,8 @@ aws cloudformation deploy \
         Environment="$ENVIRONMENT" \
         Project=deep-insight \
         ManagedBy=CloudFormation \
-    --no-fail-on-empty-changeset
+    --no-fail-on-empty-changeset \
+    --disable-rollback
 
 # Clean up temp files
 rm -f "$TEMP_PARAMS_FILE" "$FINAL_PARAMS_FILE"
