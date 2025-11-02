@@ -43,10 +43,20 @@ Parameters:
     Type: String
     Description: Task Role ARN from Phase 1
 
+  # Deployment Stage Control
+  DeployECS:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Set to 'false' for Stage 1 (ECR only), 'true' for Stage 2 (Full stack)
+
   # Docker Image
   DockerImageUri:
     Type: String
-    Description: Docker image URI in ECR (will be set by deploy script)
+    Default: 'public.ecr.aws/docker/library/hello-world:latest'
+    Description: Docker image URI in ECR (placeholder for Stage 1, real image for Stage 2)
 
   # ECS Configuration
   TaskCpu:
@@ -73,12 +83,18 @@ Parameters:
       - '30720'
     Description: Task memory in MB
 
+Conditions:
+  ShouldDeployECS: !Equals [!Ref DeployECS, 'true']
+
 Resources:
   # ============================================
   # ECR Repository
   # ============================================
+  # Created first, then Docker image is pushed, then ECS resources are created
   ECRRepository:
     Type: AWS::ECR::Repository
+    DeletionPolicy: Retain  # Prevent accidental image deletion
+    UpdateReplacePolicy: Retain
     Properties:
       RepositoryName: !Sub '${ProjectName}-fargate-runtime-${Environment}'
       ImageScanningConfiguration:
@@ -118,6 +134,7 @@ Resources:
   # ============================================
   ECSCluster:
     Type: AWS::ECS::Cluster
+    Condition: ShouldDeployECS
     Properties:
       ClusterName: !Sub '${ProjectName}-cluster-${Environment}'
       CapacityProviders:
@@ -145,6 +162,7 @@ Resources:
   # ============================================
   LogGroup:
     Type: AWS::Logs::LogGroup
+    Condition: ShouldDeployECS
     Properties:
       LogGroupName: !Sub '/ecs/${ProjectName}-fargate-${Environment}'
       RetentionInDays: 7
@@ -161,6 +179,7 @@ Resources:
   # ============================================
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
+    Condition: ShouldDeployECS
     Properties:
       Family: !Sub '${ProjectName}-fargate-task-${Environment}'
       NetworkMode: awsvpc
@@ -222,24 +241,28 @@ Outputs:
       Name: !Sub '${AWS::StackName}-ECRRepositoryName'
 
   ECSClusterArn:
+    Condition: ShouldDeployECS
     Description: ECS Cluster ARN
     Value: !GetAtt ECSCluster.Arn
     Export:
       Name: !Sub '${AWS::StackName}-ECSClusterArn'
 
   ECSClusterName:
+    Condition: ShouldDeployECS
     Description: ECS Cluster Name
     Value: !Ref ECSCluster
     Export:
       Name: !Sub '${AWS::StackName}-ECSClusterName'
 
   TaskDefinitionArn:
+    Condition: ShouldDeployECS
     Description: ECS Task Definition ARN
     Value: !Ref TaskDefinition
     Export:
       Name: !Sub '${AWS::StackName}-TaskDefinitionArn'
 
   LogGroupName:
+    Condition: ShouldDeployECS
     Description: CloudWatch Log Group Name
     Value: !Ref LogGroup
     Export:

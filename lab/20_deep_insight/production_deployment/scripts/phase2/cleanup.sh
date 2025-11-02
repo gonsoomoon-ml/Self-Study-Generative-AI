@@ -55,14 +55,16 @@ echo "Region: $AWS_REGION"
 echo ""
 
 # Warning
-echo -e "${YELLOW}⚠️  WARNING: This will delete all Phase 2 resources!${NC}"
+echo -e "${YELLOW}⚠️  WARNING: This will delete Phase 2 CloudFormation resources!${NC}"
 echo ""
 echo "Resources to be deleted:"
-echo "  - ECR Repository and all Docker images"
-echo "  - ECS Cluster (after stopping all tasks)"
-echo "  - Task Definitions (deregistered)"
-echo "  - CloudWatch Log Group"
-echo "  - CloudFormation stack"
+echo "  - CloudFormation Stack: $STACK_NAME"
+echo "    • ECS Cluster (after stopping all tasks)"
+echo "    • Task Definitions (all versions)"
+echo "    • CloudWatch Log Group"
+echo "  - ECR Repository (optional, will prompt)"
+echo ""
+echo "Note: CloudFormation manages all resources except ECR (DeletionPolicy: Retain)"
 echo ""
 
 # Confirmation (skip if --force)
@@ -148,43 +150,10 @@ else
 fi
 
 # ============================================
-# Step 3: Delete ECR images and repository
+# Step 3: Check if CloudFormation stack exists
 # ============================================
 echo ""
-echo -e "${BLUE}Step 3: Deleting ECR repository and images...${NC}"
-
-REPO_EXISTS=$(aws ecr describe-repositories \
-    --repository-names "$ECR_REPOSITORY_NAME" \
-    --region "$AWS_REGION" \
-    --query 'repositories[0].repositoryName' \
-    --output text 2>/dev/null || echo "NOT_FOUND")
-
-if [ "$REPO_EXISTS" != "NOT_FOUND" ]; then
-    # Count images
-    IMAGE_COUNT=$(aws ecr list-images \
-        --repository-name "$ECR_REPOSITORY_NAME" \
-        --region "$AWS_REGION" \
-        --query 'length(imageIds)' \
-        --output text 2>/dev/null || echo "0")
-
-    echo "Found ECR repository with $IMAGE_COUNT images"
-
-    # Delete repository (force delete will delete all images)
-    aws ecr delete-repository \
-        --repository-name "$ECR_REPOSITORY_NAME" \
-        --region "$AWS_REGION" \
-        --force > /dev/null
-
-    echo -e "${GREEN}✓ ECR repository and $IMAGE_COUNT images deleted${NC}"
-else
-    echo "ECR repository not found (may have been deleted already)"
-fi
-
-# ============================================
-# Step 4: Check if stack exists
-# ============================================
-echo ""
-echo -e "${BLUE}Step 4: Checking CloudFormation stack status...${NC}"
+echo -e "${BLUE}Step 3: Checking CloudFormation stack status...${NC}"
 
 STACK_STATUS=$(aws cloudformation describe-stacks \
     --stack-name "$STACK_NAME" \
@@ -199,10 +168,12 @@ else
     echo "Current status: $STACK_STATUS"
 
     # ============================================
-    # Step 5: Delete CloudFormation Stack
+    # Step 4: Delete CloudFormation Stack
     # ============================================
     echo ""
-    echo -e "${BLUE}Step 5: Deleting CloudFormation stack...${NC}"
+    echo -e "${BLUE}Step 4: Deleting CloudFormation stack...${NC}"
+    echo "This will delete: ECS Cluster, Task Definition, Log Group"
+    echo "Note: ECR Repository is retained (DeletionPolicy: Retain)"
     echo "This will take 2-5 minutes."
     echo ""
 
@@ -262,6 +233,51 @@ else
 fi
 
 # ============================================
+# Step 5: Clean up ECR Repository (Optional)
+# ============================================
+echo ""
+echo -e "${BLUE}Step 5: ECR Repository cleanup (optional)...${NC}"
+
+REPO_EXISTS=$(aws ecr describe-repositories \
+    --repository-names "$ECR_REPOSITORY_NAME" \
+    --region "$AWS_REGION" \
+    --query 'repositories[0].repositoryName' \
+    --output text 2>/dev/null || echo "NOT_FOUND")
+
+if [ "$REPO_EXISTS" != "NOT_FOUND" ]; then
+    IMAGE_COUNT=$(aws ecr list-images \
+        --repository-name "$ECR_REPOSITORY_NAME" \
+        --region "$AWS_REGION" \
+        --query 'length(imageIds)' \
+        --output text 2>/dev/null || echo "0")
+
+    echo "Found ECR repository: $ECR_REPOSITORY_NAME ($IMAGE_COUNT images)"
+    echo "Note: ECR is managed by CloudFormation with DeletionPolicy: Retain"
+
+    if [ "$FORCE_MODE" = false ]; then
+        read -p "Delete ECR repository and all images? (y/N): " DELETE_ECR
+        if [ "$DELETE_ECR" == "y" ] || [ "$DELETE_ECR" == "Y" ]; then
+            aws ecr delete-repository \
+                --repository-name "$ECR_REPOSITORY_NAME" \
+                --region "$AWS_REGION" \
+                --force > /dev/null
+            echo -e "${GREEN}✓ ECR repository and $IMAGE_COUNT images deleted${NC}"
+        else
+            echo -e "${YELLOW}ECR repository kept: $ECR_REPOSITORY_NAME${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚡ Force mode: Auto-deleting ECR repository${NC}"
+        aws ecr delete-repository \
+            --repository-name "$ECR_REPOSITORY_NAME" \
+            --region "$AWS_REGION" \
+            --force > /dev/null
+        echo -e "${GREEN}✓ ECR repository and $IMAGE_COUNT images deleted${NC}"
+    fi
+else
+    echo "ECR repository not found (may have been deleted already)"
+fi
+
+# ============================================
 # Step 6: Clean up .env file Phase 2 section
 # ============================================
 echo ""
@@ -287,49 +303,9 @@ else
 fi
 
 # ============================================
-# Step 7: Deregister Task Definitions (optional)
+# Note: Task Definitions are managed by CloudFormation
+# They will be deleted automatically when the stack is deleted
 # ============================================
-echo ""
-echo -e "${BLUE}Step 7: Deregistering task definitions...${NC}"
-
-TASK_DEFINITIONS=$(aws ecs list-task-definitions \
-    --family-prefix "$TASK_DEFINITION_FAMILY" \
-    --region "$AWS_REGION" \
-    --query 'taskDefinitionArns[*]' \
-    --output text 2>/dev/null || echo "")
-
-if [ -n "$TASK_DEFINITIONS" ]; then
-    TD_COUNT=$(echo "$TASK_DEFINITIONS" | wc -w)
-    echo "Found $TD_COUNT task definition(s) to deregister"
-
-    if [ "$FORCE_MODE" = false ]; then
-        read -p "Deregister all task definitions? (y/N): " DEREGISTER_TDS
-        if [ "$DEREGISTER_TDS" == "y" ] || [ "$DEREGISTER_TDS" == "Y" ]; then
-            for TD_ARN in $TASK_DEFINITIONS; do
-                echo "  Deregistering: $TD_ARN"
-                aws ecs deregister-task-definition \
-                    --task-definition "$TD_ARN" \
-                    --region "$AWS_REGION" \
-                    --output text > /dev/null
-            done
-            echo -e "${GREEN}✓ $TD_COUNT task definition(s) deregistered${NC}"
-        else
-            echo -e "${YELLOW}Task definitions kept (INACTIVE)${NC}"
-        fi
-    else
-        echo -e "${YELLOW}⚡ Force mode: Auto-deregistering task definitions${NC}"
-        for TD_ARN in $TASK_DEFINITIONS; do
-            echo "  Deregistering: $TD_ARN"
-            aws ecs deregister-task-definition \
-                --task-definition "$TD_ARN" \
-                --region "$AWS_REGION" \
-                --output text > /dev/null
-        done
-        echo -e "${GREEN}✓ $TD_COUNT task definition(s) deregistered${NC}"
-    fi
-else
-    echo "No task definitions found"
-fi
 
 # ============================================
 # Summary
@@ -344,16 +320,18 @@ echo -e "${GREEN}============================================${NC}"
 echo ""
 echo "Cleaned up:"
 echo "  ✓ CloudFormation stack: $STACK_NAME"
-echo "  ✓ ECR repository and Docker images"
-echo "  ✓ ECS Cluster (tasks stopped)"
+echo "    - ECS Cluster"
+echo "    - Task Definitions (all versions)"
+echo "    - CloudWatch Log Group"
 if [ "$FORCE_MODE" = true ]; then
-    echo "  ✓ Task definitions deregistered (auto)"
+    echo "  ✓ ECR repository and Docker images (auto-deleted)"
     echo "  ✓ .env Phase 2 section removed (auto)"
 else
-    echo "  ✓ Task definitions (if you selected 'y')"
+    echo "  ✓ ECR repository (if you selected 'y')"
     echo "  ✓ .env Phase 2 section (if you selected 'y')"
 fi
 echo ""
+echo "Note: ECR has DeletionPolicy: Retain for data protection"
 echo "Note: Phase 1 infrastructure (VPC, ALB, etc.) remains intact"
 echo ""
 echo "You can now redeploy Phase 2:"
