@@ -130,7 +130,8 @@ IMAGE_TAG="v$(date +%Y%m%d-%H%M%S)"
 DOCKER_IMAGE="$ECR_URI:$IMAGE_TAG"
 
 echo "Building: $DOCKER_IMAGE"
-docker build -t "$DOCKER_IMAGE" -t "$ECR_URI:latest" .
+echo "Note: BuildKit is required for heredoc syntax in Dockerfile"
+DOCKER_BUILDKIT=1 docker build -t "$DOCKER_IMAGE" -t "$ECR_URI:latest" .
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓${NC} Docker image built successfully"
