@@ -1,6 +1,29 @@
-# 🏗️ CloudFormation 기반 배포 가이드
+# 🏗️ CloudFormation 기반 배포 가이드 (Nested Stacks)
 
-> **목표**: CloudFormation YAML로 인프라를 코드로 관리하고, 각 Phase를 Shell 스크립트로 실행
+> **목표**: CloudFormation Nested Stacks로 모듈화된 인프라를 코드로 관리하고, 각 Phase를 Shell 스크립트로 실행
+
+---
+
+## 🎯 Nested Stacks 아키텍처
+
+이 프로젝트는 **CloudFormation Nested Stacks**를 사용하여 인프라를 모듈화합니다.
+
+### 장점
+- ✅ **모듈화**: 각 컴포넌트를 독립적으로 관리
+- ✅ **재사용성**: network.yaml을 다른 프로젝트에서 재사용 가능
+- ✅ **명확한 의존성**: Parent stack이 dependency 자동 관리
+- ✅ **업데이트 격리**: Security Group만 변경 시 해당 nested stack만 업데이트
+- ✅ **팀 협업**: 네트워크 팀, 보안 팀이 각자 스택 관리 가능
+
+### 구조
+```
+phase1-main.yaml (Parent Stack)
+├── NetworkStack           # VPC, 4 Subnets, NAT Gateway, Routes
+├── SecurityGroupsStack    # 4 Security Groups + 15 Ingress/Egress Rules
+├── VPCEndpointsStack      # Bedrock, ECR, Logs, S3 VPC Endpoints
+├── ALBStack               # Internal ALB + Target Group + Listener
+└── IAMStack               # Task Execution Role + Task Role
+```
 
 ---
 
@@ -10,7 +33,13 @@
 production_deployment/
 │
 ├── cloudformation/                    # CloudFormation 템플릿
-│   ├── phase1-infrastructure.yaml     # VPC, Subnets, SG, VPC Endpoints, ALB, IAM
+│   ├── phase1-main.yaml               # Parent Stack (Orchestrator)
+│   ├── nested/                        # Nested Stacks
+│   │   ├── network.yaml               # VPC, Subnets, NAT, Routes
+│   │   ├── security-groups.yaml       # Security Groups + Rules
+│   │   ├── vpc-endpoints.yaml         # VPC Endpoints
+│   │   ├── alb.yaml                   # ALB + Target Group
+│   │   └── iam.yaml                   # IAM Roles
 │   ├── phase2-fargate.yaml            # ECR Repository, ECS Cluster
 │   └── parameters/                    # 환경별 파라미터
 │       ├── phase1-prod-params.json
@@ -59,39 +88,90 @@ production_deployment/
 
 ## 🎯 Phase별 상세 설명
 
-### Phase 1: Infrastructure (CloudFormation)
+### Phase 1: Infrastructure (Nested CloudFormation Stacks)
 
-**CloudFormation Stack**: `deep-insight-infrastructure-prod`
+**Parent Stack**: `deep-insight-infrastructure-prod`
+**Nested Stacks**: 5개 (Network, SecurityGroups, VPCEndpoints, ALB, IAM)
+**S3 Bucket**: `deep-insight-cfn-templates-{ACCOUNT_ID}` (자동 생성)
 
-**포함 리소스**:
-- ✅ VPC (10.0.0.0/16)
-- ✅ Private Subnet (10.0.1.0/24, us-east-1a)
-- ✅ Public Subnet (10.0.11.0/24, us-east-1a)
-- ✅ Internet Gateway
-- ✅ NAT Gateway
-- ✅ Route Tables (Private, Public)
-- ✅ Security Groups 4개 (AgentCore, ALB, Fargate, VPC Endpoint)
-- ✅ VPC Endpoints 6개 (Bedrock AgentCore, ECR API, ECR Docker, Logs, S3)
-- ✅ Internal ALB + Target Group
-- ✅ IAM Roles (Task Execution Role, Task Role)
+#### 배포 프로세스
+
+1. **S3 Bucket 생성/확인** (자동)
+   - Bucket: `deep-insight-cfn-templates-{ACCOUNT_ID}`
+   - Versioning 활성화
+
+2. **Nested Templates 업로드** (자동)
+   - network.yaml → s3://.../nested/network.yaml
+   - security-groups.yaml → s3://.../nested/security-groups.yaml
+   - vpc-endpoints.yaml → s3://.../nested/vpc-endpoints.yaml
+   - alb.yaml → s3://.../nested/alb.yaml
+   - iam.yaml → s3://.../nested/iam.yaml
+
+3. **Parent Stack 배포**
+   - Parent stack이 5개 nested stacks를 순차적으로 생성
+
+#### Nested Stacks 상세
+
+**1. NetworkStack** (`nested/network.yaml`):
+- VPC (10.0.0.0/16)
+- Private Subnet 1 (10.0.1.0/24, us-east-1a)
+- Private Subnet 2 (10.0.2.0/24, us-east-1c)
+- Public Subnet 1 (10.0.11.0/24, us-east-1a)
+- Public Subnet 2 (10.0.12.0/24, us-east-1c)
+- Internet Gateway
+- NAT Gateway (in Public Subnet 1)
+- Route Tables (Private, Public)
+
+**2. SecurityGroupsStack** (`nested/security-groups.yaml`):
+- 4 Security Groups (AgentCore, ALB, Fargate, VPC Endpoint)
+- 15 Ingress/Egress Rules
+
+**3. VPCEndpointsStack** (`nested/vpc-endpoints.yaml`):
+- Bedrock AgentCore Data Plane (Interface)
+- Bedrock AgentCore Gateway (Interface)
+- ECR API (Interface)
+- ECR Docker (Interface)
+- CloudWatch Logs (Interface)
+- S3 (Gateway)
+
+**4. ALBStack** (`nested/alb.yaml`):
+- Internal Application Load Balancer (Multi-AZ)
+- Target Group (IP type, port 8080)
+- Listener (HTTP, port 80)
+
+**5. IAMStack** (`nested/iam.yaml`):
+- Task Execution Role (ECR, CloudWatch Logs 접근)
+- Task Role (S3, Bedrock 접근)
 
 **배포 명령**:
 ```bash
-./scripts/phase1/deploy.sh
+chmod +x scripts/phase1/deploy.sh
+./scripts/phase1/deploy.sh prod
 ```
 
 **소요 시간**: 30-40분 (VPC Endpoints 생성 때문)
 
+**CloudFormation Console 뷰**:
+```
+Stacks:
+├── deep-insight-infrastructure-prod (Parent)
+    ├── NetworkStack
+    ├── SecurityGroupsStack
+    ├── VPCEndpointsStack
+    ├── ALBStack
+    └── IAMStack
+```
+
 **Outputs** (다음 Phase에서 사용):
 - VpcId
-- PrivateSubnetId
-- PublicSubnetId
+- PrivateSubnet1Id, PrivateSubnet2Id
+- PublicSubnet1Id, PublicSubnet2Id
 - AgentCoreSecurityGroupId
-- AlbSecurityGroupId
+- ALBSecurityGroupId
 - FargateSecurityGroupId
-- VpcEndpointSecurityGroupId
-- AlbArn
-- AlbDnsName
+- VPCEndpointSecurityGroupId
+- ApplicationLoadBalancerArn
+- ApplicationLoadBalancerDNS
 - TargetGroupArn
 - TaskExecutionRoleArn
 - TaskRoleArn

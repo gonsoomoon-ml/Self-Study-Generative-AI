@@ -1,4 +1,4 @@
-# Bedrock Manus - 프로덕션 배포 가이드
+# Deep Insight - 프로덕션 배포 가이드
 
 > **Bedrock AgentCore Multi-Agent System**을 프로덕션 AWS 환경에 배포하기 위한 CloudFormation 기반 완전한 가이드
 
@@ -6,13 +6,14 @@
 
 ## 🎯 개요
 
-이 디렉토리는 Bedrock Manus Multi-Agent System을 프로덕션 AWS 환경에 배포하기 위한 **Phase 1 인프라**를 CloudFormation으로 구현한 것입니다.
+이 디렉토리는 Deep Insight Multi-Agent System을 프로덕션 AWS 환경에 배포하기 위한 **Phase 1 인프라**를 CloudFormation Nested Stacks로 구현한 것입니다.
 
 **주요 특징**:
 - ✅ **Infrastructure as Code**: CloudFormation으로 재현 가능한 인프라
+- ✅ **Nested Stacks 아키텍처**: 모듈화된 5개의 독립적인 스택
 - ✅ **VPC Private 모드**: Bedrock AgentCore VPC Endpoint 지원
-- ✅ **Single-AZ 배포**: 간결하고 비용 효율적 (us-east-1a)
-- ✅ **자동화 스크립트**: Deploy & Verify 스크립트 제공
+- ✅ **Multi-AZ 배포**: 고가용성 (us-east-1a, us-east-1c)
+- ✅ **자동화 스크립트**: S3 업로드 + Deploy & Verify 스크립트 제공
 - ✅ **자동 검증**: 15개 리소스 자동 확인
 - ✅ **보안 Best Practices**: Private Subnets, Security Groups, IAM 최소 권한
 
@@ -33,22 +34,39 @@ production_deployment/
 ├── 📖 CLOUDFORMATION_GUIDE.md                    # CloudFormation 상세 가이드
 │
 ├── cloudformation/                               # ☁️ CloudFormation 템플릿
-│   ├── phase1-infrastructure.yaml                # ✅ VPC, Security Groups, VPC Endpoints, ALB, IAM (22KB)
+│   ├── phase1-main.yaml                          # ✅ Parent Stack (Orchestrator)
+│   ├── nested/                                   # 📦 Nested Stacks
+│   │   ├── network.yaml                          # ✅ VPC, Subnets, NAT Gateway, Routes (304줄)
+│   │   ├── security-groups.yaml                  # ✅ 4 Security Groups + 15 Rules (263줄)
+│   │   ├── vpc-endpoints.yaml                    # ✅ 6 VPC Endpoints (Bedrock, ECR, Logs, S3) (179줄)
+│   │   ├── alb.yaml                              # ✅ ALB, Target Group, Listener (121줄)
+│   │   └── iam.yaml                              # ✅ Task Role, Execution Role (127줄)
 │   └── parameters/
 │       └── phase1-prod-params.json               # ✅ Production 환경 파라미터
 │
 ├── scripts/                                      # 🔧 자동화 스크립트
 │   └── phase1/
-│       ├── deploy.sh                             # ✅ Phase 1 CloudFormation 배포 (12KB)
+│       ├── deploy.sh                             # ✅ S3 업로드 + CloudFormation 배포
 │       └── verify.sh                             # ✅ Phase 1 검증 스크립트 (8KB)
 │
-├── docs/                                         # 📚 상세 가이드 (71KB)
+├── docs/                                         # 📚 상세 가이드
 │   ├── 00_OVERVIEW.md                            # 전체 아키텍처 및 개요
 │   ├── 02_FARGATE_RUNTIME.md                     # Phase 2 (예정)
 │   ├── 03_AGENTCORE_RUNTIME.md                   # Phase 3 (예정)
 │   └── 04_TESTING.md                             # Phase 4 (예정)
 │
 └── .env                                          # (배포 시 자동 생성) 리소스 ID 저장
+```
+
+### Nested Stacks 구조
+
+```
+phase1-main.yaml (Parent Stack)
+├── NetworkStack           # VPC, 4 Subnets, NAT, Routes
+├── SecurityGroupsStack    # 4 Security Groups + 15 Rules
+├── VPCEndpointsStack      # Bedrock, ECR, Logs, S3 Endpoints
+├── ALBStack               # Internal ALB + Target Group
+└── IAMStack               # Task Role + Execution Role
 ```
 
 ---

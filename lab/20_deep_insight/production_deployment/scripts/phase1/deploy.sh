@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Phase 1: Infrastructure Deployment
+# Phase 1: Infrastructure Deployment (Nested Stacks)
 # Deploy VPC, Subnets, Security Groups, VPC Endpoints, ALB, IAM Roles
 #
 # Usage: ./scripts/phase1/deploy.sh [environment]
@@ -22,12 +22,13 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ENVIRONMENT="${1:-prod}"
 
 STACK_NAME="deep-insight-infrastructure-${ENVIRONMENT}"
-TEMPLATE_FILE="$PROJECT_ROOT/cloudformation/phase1-infrastructure.yaml"
+TEMPLATE_FILE="$PROJECT_ROOT/cloudformation/phase1-main.yaml"
 PARAMS_FILE="$PROJECT_ROOT/cloudformation/parameters/phase1-${ENVIRONMENT}-params.json"
 ENV_FILE="$PROJECT_ROOT/.env"
+NESTED_DIR="$PROJECT_ROOT/cloudformation/nested"
 
 echo -e "${BLUE}============================================${NC}"
-echo -e "${BLUE}Phase 1: Infrastructure Deployment${NC}"
+echo -e "${BLUE}Phase 1: Infrastructure Deployment (Nested)${NC}"
 echo -e "${BLUE}============================================${NC}"
 echo ""
 echo "Environment: $ENVIRONMENT"
@@ -65,6 +66,13 @@ if [ ! -f "$TEMPLATE_FILE" ]; then
 fi
 echo -e "${GREEN}✓${NC} CloudFormation template found"
 
+# Check nested templates
+if [ ! -d "$NESTED_DIR" ]; then
+    echo -e "${RED}Error: Nested templates directory not found: $NESTED_DIR${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✓${NC} Nested templates directory found"
+
 # Check parameter file
 if [ ! -f "$PARAMS_FILE" ]; then
     echo -e "${RED}Error: Parameter file not found: $PARAMS_FILE${NC}"
@@ -73,124 +81,125 @@ if [ ! -f "$PARAMS_FILE" ]; then
 fi
 echo -e "${GREEN}✓${NC} Parameter file found"
 
-# Create .env file if doesn't exist
-if [ ! -f "$ENV_FILE" ]; then
-    echo "Creating .env file..."
-    cat > "$ENV_FILE" <<EOF
-# AWS Configuration
-AWS_REGION=$AWS_REGION
-AWS_ACCOUNT_ID=$AWS_ACCOUNT_ID
+# ============================================
+# S3 Bucket for Nested Templates
+# ============================================
+S3_BUCKET_NAME="deep-insight-cfn-templates-${AWS_ACCOUNT_ID}"
 
-# Project Configuration
-PROJECT_NAME=deep-insight
-ENVIRONMENT=$ENVIRONMENT
+echo ""
+echo -e "${YELLOW}Setting up S3 bucket for nested templates...${NC}"
 
-# Phase 1 Outputs (will be populated after deployment)
-VPC_ID=
-PRIVATE_SUBNET_ID=
-PUBLIC_SUBNET_ID=
-SG_AGENTCORE_ID=
-SG_ALB_ID=
-SG_FARGATE_ID=
-SG_VPCE_ID=
-ALB_ARN=
-ALB_DNS=
-TARGET_GROUP_ARN=
-TASK_EXECUTION_ROLE_ARN=
-TASK_ROLE_ARN=
-EOF
-    echo -e "${GREEN}✓${NC} .env file created"
+# Check if bucket exists
+if ! aws s3 ls "s3://${S3_BUCKET_NAME}" 2>/dev/null; then
+    echo "Creating S3 bucket: ${S3_BUCKET_NAME}"
+
+    if [ "$AWS_REGION" == "us-east-1" ]; then
+        aws s3 mb "s3://${S3_BUCKET_NAME}" --region "$AWS_REGION"
+    else
+        aws s3 mb "s3://${S3_BUCKET_NAME}" --region "$AWS_REGION" --create-bucket-configuration LocationConstraint="$AWS_REGION"
+    fi
+
+    # Enable versioning (best practice)
+    aws s3api put-bucket-versioning \
+        --bucket "${S3_BUCKET_NAME}" \
+        --versioning-configuration Status=Enabled
+
+    echo -e "${GREEN}✓${NC} S3 bucket created"
 else
-    echo -e "${GREEN}✓${NC} .env file exists"
+    echo -e "${GREEN}✓${NC} S3 bucket already exists"
 fi
 
-# Update Account ID in parameter file
+# ============================================
+# Upload Nested Templates to S3
+# ============================================
+echo ""
+echo -e "${YELLOW}Uploading nested templates to S3...${NC}"
+
+for template in "$NESTED_DIR"/*.yaml; do
+    template_name=$(basename "$template")
+    echo "  Uploading: $template_name"
+    aws s3 cp "$template" "s3://${S3_BUCKET_NAME}/nested/$template_name" \
+        --region "$AWS_REGION"
+done
+
+echo -e "${GREEN}✓${NC} Nested templates uploaded"
+
+# ============================================
+# Update Parameter File with Account ID
+# ============================================
 echo ""
 echo -e "${YELLOW}Updating Account ID in parameter file...${NC}"
 
-# Create temporary parameter file with Account ID replaced
-TEMP_PARAMS_FILE="$PROJECT_ROOT/cloudformation/parameters/.phase1-${ENVIRONMENT}-params-temp.json"
-sed "s/ACCOUNT_ID/${AWS_ACCOUNT_ID}/g" "$PARAMS_FILE" > "$TEMP_PARAMS_FILE"
+# Create a temporary parameter file
+TEMP_PARAMS_FILE="${PARAMS_FILE}.temp"
+cp "$PARAMS_FILE" "$TEMP_PARAMS_FILE"
+
+# Replace ACCOUNT_ID placeholder
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    sed -i '' "s/ACCOUNT_ID/${AWS_ACCOUNT_ID}/g" "$TEMP_PARAMS_FILE"
+else
+    # Linux
+    sed -i "s/ACCOUNT_ID/${AWS_ACCOUNT_ID}/g" "$TEMP_PARAMS_FILE"
+fi
 
 echo -e "${GREEN}✓${NC} Parameter file updated with Account ID: $AWS_ACCOUNT_ID"
 
-# Validate CloudFormation template
+# ============================================
+# Add NestedTemplatesBucketName Parameter
+# ============================================
+# Create updated params with nested bucket parameter
+FINAL_PARAMS_FILE="${PARAMS_FILE}.final"
+
+# Read existing params and add new one
+python3 - <<EOF
+import json
+
+# Read existing params
+with open('${TEMP_PARAMS_FILE}', 'r') as f:
+    params = json.load(f)
+
+# Add nested bucket param
+params.append({
+    "ParameterKey": "NestedTemplatesBucketName",
+    "ParameterValue": "${S3_BUCKET_NAME}"
+})
+
+# Write final params
+with open('${FINAL_PARAMS_FILE}', 'w') as f:
+    json.dump(params, f, indent=2)
+EOF
+
+echo -e "${GREEN}✓${NC} Added NestedTemplatesBucketName parameter"
+
+# ============================================
+# Validate CloudFormation Template
+# ============================================
 echo ""
 echo -e "${YELLOW}Validating CloudFormation template...${NC}"
 
 if aws cloudformation validate-template \
     --template-body file://"$TEMPLATE_FILE" \
-    --region "$AWS_REGION" \
-    > /dev/null 2>&1; then
-    echo -e "${GREEN}✓${NC} Template validation passed"
+    --region "$AWS_REGION" > /dev/null; then
+    echo -e "${GREEN}✓${NC} Template validation successful"
 else
     echo -e "${RED}Error: Template validation failed${NC}"
-    aws cloudformation validate-template \
-        --template-body file://"$TEMPLATE_FILE" \
-        --region "$AWS_REGION"
-    rm -f "$TEMP_PARAMS_FILE"
+    rm -f "$TEMP_PARAMS_FILE" "$FINAL_PARAMS_FILE"
     exit 1
 fi
 
-# Check if stack already exists
+# ============================================
+# Deploy CloudFormation Stack
+# ============================================
 echo ""
-echo -e "${YELLOW}Checking existing stack...${NC}"
-
-STACK_STATUS=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$AWS_REGION" \
-    --query 'Stacks[0].StackStatus' \
-    --output text 2>/dev/null || echo "DOES_NOT_EXIST")
-
-if [ "$STACK_STATUS" != "DOES_NOT_EXIST" ]; then
-    echo -e "${YELLOW}Warning: Stack already exists with status: $STACK_STATUS${NC}"
-    echo ""
-    read -p "Do you want to update the existing stack? (yes/no): " CONFIRM
-    if [ "$CONFIRM" != "yes" ]; then
-        echo "Deployment cancelled."
-        rm -f "$TEMP_PARAMS_FILE"
-        exit 0
-    fi
-    DEPLOY_ACTION="update"
-else
-    echo "Stack does not exist. Will create new stack."
-    DEPLOY_ACTION="create"
-fi
-
-# Deploy CloudFormation stack
+echo -e "${YELLOW}Deploying CloudFormation stack...${NC}"
+echo "This will take approximately 30-40 minutes."
 echo ""
-echo -e "${BLUE}============================================${NC}"
-echo -e "${BLUE}Deploying CloudFormation Stack...${NC}"
-echo -e "${BLUE}============================================${NC}"
-echo ""
-echo "This will create the following resources:"
-echo "  - VPC (10.0.0.0/16)"
-echo "  - Subnets (Private, Public)"
-echo "  - Internet Gateway, NAT Gateway"
-echo "  - Security Groups (4)"
-echo "  - VPC Endpoints (6)"
-echo "  - Internal ALB"
-echo "  - IAM Roles (2)"
-echo ""
-echo -e "${YELLOW}Expected deployment time: 30-40 minutes${NC}"
-echo ""
-
-# Confirm deployment
-read -p "Continue with deployment? (yes/no): " CONFIRM
-if [ "$CONFIRM" != "yes" ]; then
-    echo "Deployment cancelled."
-    rm -f "$TEMP_PARAMS_FILE"
-    exit 0
-fi
-
-# Deploy stack
-echo ""
-echo -e "${YELLOW}Starting stack deployment...${NC}"
 
 aws cloudformation deploy \
     --template-file "$TEMPLATE_FILE" \
     --stack-name "$STACK_NAME" \
-    --parameter-overrides file://"$TEMP_PARAMS_FILE" \
+    --parameter-overrides file://"$FINAL_PARAMS_FILE" \
     --capabilities CAPABILITY_NAMED_IAM \
     --region "$AWS_REGION" \
     --tags \
@@ -199,174 +208,88 @@ aws cloudformation deploy \
         ManagedBy=CloudFormation \
     --no-fail-on-empty-changeset
 
-# Clean up temp file
-rm -f "$TEMP_PARAMS_FILE"
+# Clean up temp files
+rm -f "$TEMP_PARAMS_FILE" "$FINAL_PARAMS_FILE"
 
-# Check deployment status
-FINAL_STATUS=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$AWS_REGION" \
-    --query 'Stacks[0].StackStatus' \
-    --output text 2>/dev/null)
+DEPLOY_STATUS=$?
 
-if [[ "$FINAL_STATUS" == "CREATE_COMPLETE" || "$FINAL_STATUS" == "UPDATE_COMPLETE" ]]; then
+if [ $DEPLOY_STATUS -eq 0 ]; then
     echo ""
     echo -e "${GREEN}============================================${NC}"
-    echo -e "${GREEN}✓ Stack deployment successful!${NC}"
+    echo -e "${GREEN}✓ Deployment Successful!${NC}"
     echo -e "${GREEN}============================================${NC}"
     echo ""
+
+    # Get stack outputs
+    echo -e "${YELLOW}Retrieving stack outputs...${NC}"
+
+    OUTPUTS=$(aws cloudformation describe-stacks \
+        --stack-name "$STACK_NAME" \
+        --region "$AWS_REGION" \
+        --query 'Stacks[0].Outputs' \
+        --output json)
+
+    # Parse outputs using Python
+    python3 - <<EOF "$OUTPUTS" "$ENV_FILE" "$AWS_REGION" "$AWS_ACCOUNT_ID" "$ENVIRONMENT"
+import json
+import sys
+
+outputs = json.loads(sys.argv[1])
+env_file = sys.argv[2]
+aws_region = sys.argv[3]
+aws_account_id = sys.argv[4]
+environment = sys.argv[5]
+
+# Create dictionary from outputs
+output_dict = {o['OutputKey']: o['OutputValue'] for o in outputs}
+
+# Write to .env file
+with open(env_file, 'w') as f:
+    f.write("# AWS Configuration\n")
+    f.write(f"AWS_REGION={aws_region}\n")
+    f.write(f"AWS_ACCOUNT_ID={aws_account_id}\n")
+    f.write("\n# Project Configuration\n")
+    f.write("PROJECT_NAME=deep-insight\n")
+    f.write(f"ENVIRONMENT={environment}\n")
+    f.write("\n# Phase 1 Outputs\n")
+    f.write(f"VPC_ID={output_dict.get('VpcId', '')}\n")
+    f.write(f"PRIVATE_SUBNET_1_ID={output_dict.get('PrivateSubnet1Id', '')}\n")
+    f.write(f"PRIVATE_SUBNET_2_ID={output_dict.get('PrivateSubnet2Id', '')}\n")
+    f.write(f"PUBLIC_SUBNET_1_ID={output_dict.get('PublicSubnet1Id', '')}\n")
+    f.write(f"PUBLIC_SUBNET_2_ID={output_dict.get('PublicSubnet2Id', '')}\n")
+    f.write(f"SG_AGENTCORE_ID={output_dict.get('AgentCoreSecurityGroupId', '')}\n")
+    f.write(f"SG_ALB_ID={output_dict.get('ALBSecurityGroupId', '')}\n")
+    f.write(f"SG_FARGATE_ID={output_dict.get('FargateSecurityGroupId', '')}\n")
+    f.write(f"SG_VPCE_ID={output_dict.get('VPCEndpointSecurityGroupId', '')}\n")
+    f.write(f"ALB_ARN={output_dict.get('ApplicationLoadBalancerArn', '')}\n")
+    f.write(f"ALB_DNS={output_dict.get('ApplicationLoadBalancerDNS', '')}\n")
+    f.write(f"TARGET_GROUP_ARN={output_dict.get('TargetGroupArn', '')}\n")
+    f.write(f"TASK_EXECUTION_ROLE_ARN={output_dict.get('TaskExecutionRoleArn', '')}\n")
+    f.write(f"TASK_ROLE_ARN={output_dict.get('TaskRoleArn', '')}\n")
+
+print(f"\n✓ .env file created: {env_file}")
+EOF
+
+    # Display summary
+    echo ""
+    echo -e "${BLUE}============================================${NC}"
+    echo -e "${BLUE}Deployment Summary${NC}"
+    echo -e "${BLUE}============================================${NC}"
+    cat "$ENV_FILE"
+    echo ""
+    echo -e "${GREEN}Next Steps:${NC}"
+    echo "  1. Run verification: ${YELLOW}./scripts/phase1/verify.sh${NC}"
+    echo "  2. Proceed to Phase 2: Fargate Runtime deployment"
+    echo ""
+
 else
     echo ""
     echo -e "${RED}============================================${NC}"
-    echo -e "${RED}✗ Stack deployment failed${NC}"
+    echo -e "${RED}✗ Deployment Failed${NC}"
     echo -e "${RED}============================================${NC}"
     echo ""
-    echo "Stack Status: $FINAL_STATUS"
+    echo "Check CloudFormation console for details:"
+    echo "  https://console.aws.amazon.com/cloudformation"
     echo ""
-    echo "To view error details, run:"
-    echo "  aws cloudformation describe-stack-events --stack-name $STACK_NAME --region $AWS_REGION"
     exit 1
 fi
-
-# Extract Outputs and save to .env
-echo -e "${YELLOW}Extracting stack outputs...${NC}"
-
-# Get all outputs
-VPC_ID=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$AWS_REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`VpcId`].OutputValue' \
-    --output text)
-
-PRIVATE_SUBNET_ID=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$AWS_REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`PrivateSubnetId`].OutputValue' \
-    --output text)
-
-PUBLIC_SUBNET_ID=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$AWS_REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`PublicSubnetId`].OutputValue' \
-    --output text)
-
-AVAILABILITY_ZONE=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$AWS_REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`AvailabilityZone`].OutputValue' \
-    --output text)
-
-SG_AGENTCORE_ID=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$AWS_REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`AgentCoreSecurityGroupId`].OutputValue' \
-    --output text)
-
-SG_ALB_ID=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$AWS_REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`ALBSecurityGroupId`].OutputValue' \
-    --output text)
-
-SG_FARGATE_ID=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$AWS_REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`FargateSecurityGroupId`].OutputValue' \
-    --output text)
-
-SG_VPCE_ID=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$AWS_REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`VPCEndpointSecurityGroupId`].OutputValue' \
-    --output text)
-
-ALB_ARN=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$AWS_REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`ApplicationLoadBalancerArn`].OutputValue' \
-    --output text)
-
-ALB_DNS=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$AWS_REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`ApplicationLoadBalancerDNS`].OutputValue' \
-    --output text)
-
-TARGET_GROUP_ARN=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$AWS_REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`TargetGroupArn`].OutputValue' \
-    --output text)
-
-TASK_EXECUTION_ROLE_ARN=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$AWS_REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`TaskExecutionRoleArn`].OutputValue' \
-    --output text)
-
-TASK_ROLE_ARN=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$AWS_REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`TaskRoleArn`].OutputValue' \
-    --output text)
-
-# Update .env file
-echo ""
-echo -e "${YELLOW}Updating .env file with stack outputs...${NC}"
-
-# Update values in .env file
-sed -i "s|^VPC_ID=.*|VPC_ID=$VPC_ID|" "$ENV_FILE"
-sed -i "s|^PRIVATE_SUBNET_ID=.*|PRIVATE_SUBNET_ID=$PRIVATE_SUBNET_ID|" "$ENV_FILE"
-sed -i "s|^PUBLIC_SUBNET_ID=.*|PUBLIC_SUBNET_ID=$PUBLIC_SUBNET_ID|" "$ENV_FILE"
-sed -i "s|^SG_AGENTCORE_ID=.*|SG_AGENTCORE_ID=$SG_AGENTCORE_ID|" "$ENV_FILE"
-sed -i "s|^SG_ALB_ID=.*|SG_ALB_ID=$SG_ALB_ID|" "$ENV_FILE"
-sed -i "s|^SG_FARGATE_ID=.*|SG_FARGATE_ID=$SG_FARGATE_ID|" "$ENV_FILE"
-sed -i "s|^SG_VPCE_ID=.*|SG_VPCE_ID=$SG_VPCE_ID|" "$ENV_FILE"
-sed -i "s|^ALB_ARN=.*|ALB_ARN=$ALB_ARN|" "$ENV_FILE"
-sed -i "s|^ALB_DNS=.*|ALB_DNS=$ALB_DNS|" "$ENV_FILE"
-sed -i "s|^TARGET_GROUP_ARN=.*|TARGET_GROUP_ARN=$TARGET_GROUP_ARN|" "$ENV_FILE"
-sed -i "s|^TASK_EXECUTION_ROLE_ARN=.*|TASK_EXECUTION_ROLE_ARN=$TASK_EXECUTION_ROLE_ARN|" "$ENV_FILE"
-sed -i "s|^TASK_ROLE_ARN=.*|TASK_ROLE_ARN=$TASK_ROLE_ARN|" "$ENV_FILE"
-
-# Add Availability Zone if not exists
-if ! grep -q "^AVAILABILITY_ZONE=" "$ENV_FILE"; then
-    echo "AVAILABILITY_ZONE=$AVAILABILITY_ZONE" >> "$ENV_FILE"
-else
-    sed -i "s|^AVAILABILITY_ZONE=.*|AVAILABILITY_ZONE=$AVAILABILITY_ZONE|" "$ENV_FILE"
-fi
-
-echo -e "${GREEN}✓${NC} .env file updated"
-
-# Summary
-echo ""
-echo -e "${GREEN}============================================${NC}"
-echo -e "${GREEN}Phase 1 Deployment Complete!${NC}"
-echo -e "${GREEN}============================================${NC}"
-echo ""
-echo "Created Resources:"
-echo ""
-echo -e "${BLUE}Network:${NC}"
-echo "  VPC ID:            $VPC_ID"
-echo "  Private Subnet:    $PRIVATE_SUBNET_ID ($AVAILABILITY_ZONE)"
-echo "  Public Subnet:     $PUBLIC_SUBNET_ID ($AVAILABILITY_ZONE)"
-echo ""
-echo -e "${BLUE}Security Groups:${NC}"
-echo "  AgentCore SG:      $SG_AGENTCORE_ID"
-echo "  ALB SG:            $SG_ALB_ID"
-echo "  Fargate SG:        $SG_FARGATE_ID"
-echo "  VPC Endpoint SG:   $SG_VPCE_ID"
-echo ""
-echo -e "${BLUE}Load Balancer:${NC}"
-echo "  ALB ARN:           ${ALB_ARN:0:50}..."
-echo "  ALB DNS:           $ALB_DNS"
-echo "  Target Group:      ${TARGET_GROUP_ARN:0:50}..."
-echo ""
-echo -e "${BLUE}IAM Roles:${NC}"
-echo "  Task Execution:    ${TASK_EXECUTION_ROLE_ARN:0:50}..."
-echo "  Task Role:         ${TASK_ROLE_ARN:0:50}..."
-echo ""
-echo -e "${YELLOW}Next Steps:${NC}"
-echo "  1. Run verification: ./scripts/phase1/verify.sh"
-echo "  2. Proceed to Phase 2: ./scripts/phase2/1-deploy-infrastructure.sh"
-echo ""
-echo -e "${GREEN}============================================${NC}"
