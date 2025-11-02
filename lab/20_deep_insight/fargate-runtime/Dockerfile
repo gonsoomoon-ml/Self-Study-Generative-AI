@@ -1,3 +1,4 @@
+
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -22,28 +23,8 @@ RUN apt-get update && apt-get install -y \
 # 폰트 캐시 갱신
 RUN fc-cache -f -v
 
-# Python 패키지 설치를 위한 requirements.txt 생성
-COPY <<EOF requirements.txt
-pandas>=2.3.1
-matplotlib>=3.10.5
-numpy>=1.26.4
-boto3>=1.40.10
-koreanize-matplotlib>=0.1.1
-python-dotenv>=1.1.1
-flask>=3.0.0
-requests>=2.32.0
-seaborn>=0.13.2
-pathlib>=1.0.0
-lovelyplots>=1.0.2
-weasyprint>=66.0
-markdown>=3.9
-scikit-learn>=1.7.1
-pillow>=11.3.0
-plotly>=6.3.0
-reportlab>=4.4.3
-fpdf2>=2.8.4
-matplotlib-inline>=0.1.7
-EOF
+# Python 패키지 설치를 위한 requirements.txt 복사
+COPY requirements.txt .
 
 # Python 패키지 설치
 RUN pip install --no-cache-dir -r requirements.txt
@@ -61,5 +42,6 @@ ENV PYTHONUNBUFFERED=1
 ENV ENV_NAME=production
 ENV AWS_DEFAULT_REGION=us-east-1
 
+# 컨테이너 실행 시 Python 스크립트 실행
 # 컨테이너 실행 시 Python 스크립트 실행
 CMD ["python", "-u", "dynamic_executor_v2.py"]
