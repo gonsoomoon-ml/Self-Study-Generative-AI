@@ -244,3 +244,23 @@ echo ""
 print_info "이제 루트 디렉토리에서 'uv run python main.py' 실행이 가능합니다!"
 print_info "전통적인 방식으로 활성화: source .venv/bin/activate"
 print_info "UV 권장 방식: uv run <명령어>"
+
+# 8. UV PATH를 ~/.bashrc에 영구적으로 추가
+echo ""
+print_info "UV PATH를 영구적으로 설정 중..."
+
+# .bashrc에 UV PATH가 이미 있는지 확인
+if ! grep -q 'export PATH="$HOME/.local/bin' ~/.bashrc 2>/dev/null; then
+    echo '' >> ~/.bashrc
+    echo '# UV (Python package manager) PATH' >> ~/.bashrc
+    echo 'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
+    print_success "UV PATH가 ~/.bashrc에 추가되었습니다."
+    print_warning "변경사항을 적용하려면 다음 명령어를 실행하거나 새 터미널을 여세요:"
+    echo "  source ~/.bashrc"
+else
+    print_info "UV PATH가 이미 ~/.bashrc에 설정되어 있습니다."
+fi
+
+echo ""
+print_info "현재 세션에서 즉시 사용하려면 다음 명령어를 실행하세요:"
+echo "  export PATH=\"\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH\""
