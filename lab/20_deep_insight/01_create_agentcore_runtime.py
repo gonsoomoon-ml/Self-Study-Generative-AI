@@ -91,7 +91,8 @@ def main():
     AWS_REGION = os.getenv("AWS_REGION")
     AWS_ACCOUNT_ID = os.getenv("AWS_ACCOUNT_ID")
     VPC_ID = os.getenv("VPC_ID")
-    PRIVATE_SUBNET_ID = os.getenv("PRIVATE_SUBNET_ID")  # use1-az2 (지원됨)
+    # PRIVATE_SUBNET_ID 또는 PRIVATE_SUBNET_1_ID 사용 (Phase1 deploy.sh와 호환)
+    PRIVATE_SUBNET_ID = os.getenv("PRIVATE_SUBNET_ID") or os.getenv("PRIVATE_SUBNET_1_ID")
     SG_AGENTCORE_ID = os.getenv("SG_AGENTCORE_ID")
     TASK_EXECUTION_ROLE_ARN = os.getenv("TASK_EXECUTION_ROLE_ARN")
 
