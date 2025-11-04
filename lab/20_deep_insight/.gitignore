@@ -2,6 +2,8 @@
 .env
 .env.local
 .env.*.local
+.env.development
+.env.production
 
 # AWS credentials and configuration
 credentials
@@ -36,3 +38,14 @@ Thumbs.db
 # Temporary files
 temp/
 tmp/
+
+# Backup files
+backup/
+*.backup
+*~
+
+# Generated artifacts
+artifacts/
+*.pdf
+!production_deployment/docs/*.pdf
+assets/*.pdf

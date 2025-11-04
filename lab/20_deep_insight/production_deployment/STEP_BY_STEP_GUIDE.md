@@ -350,57 +350,80 @@ ls -la ../fargate-runtime/dynamic_executor_v2.py
 ./scripts/phase2/deploy.sh prod
 ```
 
-### 5.4 배포 과정 설명
+### 5.4 배포 과정 설명 (Three-Stage 자동화)
 
-스크립트가 자동으로 다음 단계를 실행합니다:
+스크립트가 자동으로 3단계를 실행합니다:
 
-**1단계: 사전 확인** (1분)
+**사전 확인** (1분)
 ```
 Checking prerequisites...
+✓ Phase 1 .env file loaded
 ✓ AWS CLI configured
 ✓ Docker installed
-✓ CloudFormation template found
-✓ Parameter file found
+✓ CloudFormation template validated
+✓ fargate-runtime directory found
 ```
 
-**2단계: ECR Repository 생성** (1분)
+**STAGE 1: ECR Repository 생성** (1-2분)
 ```
-Step 1: Creating ECR Repository...
-✓ ECR repository created: 123456789012.dkr.ecr.us-east-1.amazonaws.com/deep-insight-fargate-runtime-prod
+============================================
+STAGE 1: Creating ECR Repository
+============================================
+
+Deploying CloudFormation stack (DeployECS=false)...
+✓ ECR Repository created via CloudFormation
+✓ DeletionPolicy: Retain (데이터 보호)
+
+ECR Repository URI: 123456789012.dkr.ecr.us-east-1.amazonaws.com/deep-insight-fargate-runtime-prod
 ```
 
-**3단계: Docker 이미지 빌드** (5-10분)
+**STAGE 2: Docker 빌드 및 푸시** (5-10분)
 ```
-Step 2: Building Docker image...
-This may take 5-10 minutes (installing system packages + Python packages)
+============================================
+STAGE 2: Building & Pushing Docker Image
+============================================
 
-Building: 123456789012.dkr.ecr.us-east-1.amazonaws.com/deep-insight-fargate-runtime-prod:v20251102-083000
-Step 1/8 : FROM python:3.12-slim
-Step 2/8 : WORKDIR /app
-Step 3/8 : RUN apt-get update && apt-get install -y fonts-nanum...
-...
-Step 8/8 : CMD ["python", "-u", "dynamic_executor_v2.py"]
+Building Docker image...
+Image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/deep-insight-fargate-runtime-prod:v20251102-083527
+This may take 5-10 minutes...
+
+Step 1/11 : FROM python:3.12-slim
+Step 2/11 : WORKDIR /app
+Step 3/11 : RUN apt-get update && apt-get install -y fonts-nanum...
+Step 4/11 : RUN fc-cache -f -v
+Step 5/11 : COPY requirements.txt .
+Step 6/11 : RUN pip install --no-cache-dir -r requirements.txt
+Step 7/11 : COPY dynamic_executor_v2.py .
+Step 8/11 : CMD ["python", "-u", "dynamic_executor_v2.py"]
 Successfully built 1234567890ab
 ✓ Docker image built successfully
-```
 
-**4단계: ECR 푸시** (1-2분)
-```
-Step 3: Pushing Docker image to ECR...
+Logging in to ECR...
 ✓ Logged in to ECR
-Pushing: v20251102-083000
-Pushing: latest
-✓ Docker image pushed to ECR
+
+Pushing Docker images to ECR...
+  - v20251102-083527
+  - latest
+✓ Docker images pushed successfully
 ```
 
-**5단계: CloudFormation 배포** (2-3분)
+**STAGE 3: Full Stack 배포** (2-3분)
 ```
-Step 6: Deploying CloudFormation stack...
+============================================
+STAGE 3: Deploying Full Stack (ECS)
+============================================
+
+Updating CloudFormation stack (DeployECS=true)...
 This will take approximately 2-3 minutes.
 
+Creating resources:
+  - ECS Cluster (Container Insights enabled)
+  - Task Definition (2 vCPU, 4GB RAM)
+  - CloudWatch Log Group (7 days retention)
+
 Waiting for changeset to be created...
-Waiting for stack create/update to complete
-✓ Stack created successfully
+Waiting for stack update to complete...
+✓ Stack updated successfully
 ```
 
 ### 5.5 배포 완료 메시지
@@ -560,23 +583,26 @@ LOG_GROUP_NAME=/ecs/deep-insight-fargate-prod
 
 ### 7.2 다음 작업
 
-**⏳ Phase 2, 3, 4는 Phase 1 완료 후 진행 예정**:
+**✅ Phase 1-2 완료!**
 
-1. **Phase 2: Fargate Runtime**
-   - ECR Repository 생성
-   - Docker 이미지 빌드 및 푸시
-   - ECS Cluster 생성
-   - Task Definition 등록
+**⏳ Phase 3-4는 향후 진행 예정**:
 
-2. **Phase 3: AgentCore Runtime**
+1. **Phase 3: AgentCore Runtime** (예정)
    - `.bedrock_agentcore.yaml` 생성 (VPC 모드)
    - Runtime 배포
    - ENI 생성 확인
 
-3. **Phase 4: Testing**
+2. **Phase 4: Testing** (예정)
    - 네트워크 연결 테스트
    - AgentCore Job 실행
    - PDF 보고서 생성 테스트
+
+**현재 배포 완료 상태**:
+- ✅ **Phase 1**: VPC, ALB, Security Groups, VPC Endpoints, IAM Roles
+- ✅ **Phase 2**: ECR, Docker Image, ECS Cluster, Task Definition, CloudWatch Logs
+  - CloudFormation Three-Stage deployment
+  - DeletionPolicy: Retain for ECR (데이터 보호)
+- ⏳ **Phase 3-4**: 향후 진행
 
 ### 7.3 리소스 정리 (테스트 환경)
 
@@ -602,14 +628,21 @@ LOG_GROUP_NAME=/ecs/deep-insight-fargate-prod
 - ✅ 안전한 Interactive 모드 (단계별 확인)
 - ✅ Fast Force 모드 (자동 삭제)
 - ✅ 실행 중인 Task 자동 정지
-- ✅ ECR 이미지 자동 삭제
+- ✅ CloudFormation-centric 정리 (자동)
+- ✅ ECR Repository 선택적 삭제 (DeletionPolicy: Retain)
 - ✅ .env 파일 선택적 정리
 
-**Phase 2 정리 (2-5분)**:
-- ECR Repository 및 Docker 이미지
-- ECS Cluster 및 실행 중인 Task
-- Task Definitions (선택 사항)
-- CloudWatch Log Group
+**Phase 2 정리 (2-10분)**:
+- 실행 중인 ECS Task 자동 정지 (30초)
+- **CloudFormation Stack 자동 삭제** (2-5분):
+  - ECS Cluster
+  - Task Definitions (모든 버전)
+  - CloudWatch Log Group
+- **ECR Repository 선택적 삭제** (10초):
+  - DeletionPolicy: Retain으로 보호됨
+  - Interactive 모드: 사용자가 y/N 선택
+  - Force 모드: 자동 삭제
+  - Docker 이미지 포함 삭제
 - .env Phase 2 섹션 (선택 사항)
 
 **Phase 1 정리 (10-20분)**:
@@ -623,10 +656,21 @@ LOG_GROUP_NAME=/ecs/deep-insight-fargate-prod
 #### 방법 2: 수동 CloudFormation 삭제
 
 ```bash
-# Phase 2 스택 삭제
+# Phase 2 스택 삭제 (ECS Cluster, Task Definitions, Log Group만 삭제됨)
 aws cloudformation delete-stack \
   --stack-name deep-insight-fargate-prod \
   --region us-east-1
+
+# 삭제 완료 대기 (2-5분)
+aws cloudformation wait stack-delete-complete \
+  --stack-name deep-insight-fargate-prod \
+  --region us-east-1
+
+# ECR Repository 삭제 (선택 사항, DeletionPolicy: Retain으로 보호됨)
+aws ecr delete-repository \
+  --repository-name deep-insight-fargate-runtime-prod \
+  --region us-east-1 \
+  --force
 
 # Phase 1 스택 삭제
 aws cloudformation delete-stack \
@@ -644,6 +688,10 @@ rm .env
 
 **⚠️ 주의사항**:
 - **Phase 2 먼저 삭제**: Phase 1은 Phase 2의 의존성이므로 순서 중요
+- **ECR Repository는 DeletionPolicy: Retain으로 보호됨**:
+  - CloudFormation 스택 삭제 시 ECR은 자동 삭제되지 않음
+  - Docker 이미지 데이터 보호를 위한 안전 장치
+  - 삭제를 원하면 수동 삭제 필요
 - 수동 삭제 시 실행 중인 ECS Task가 있으면 삭제 실패 가능
 - cleanup 스크립트는 모든 의존성을 자동으로 처리
 
@@ -666,13 +714,16 @@ rm .env
 4. Phase 1 검증 (2-3분)
    └─ 23개 항목 자동 검증
 
-5. Phase 2 배포 (10-15분)
-   └─ Docker 빌드 + ECR 푸시 + CloudFormation
+5. Phase 2 배포 (10-15분) - Three-Stage
+   ├─ STAGE 1: ECR Repository 생성 (CloudFormation, 1-2분)
+   ├─ STAGE 2: Docker 빌드 + ECR 푸시 (5-10분)
+   └─ STAGE 3: Full Stack 배포 (CloudFormation, 2-3분)
 
 6. Phase 2 검증 (2-3분)
    └─ 12개 항목 자동 검증
 
 총 소요 시간: 50-70분
+(CloudFormation Three-Stage 자동화)
 ```
 
 ### 주요 명령어

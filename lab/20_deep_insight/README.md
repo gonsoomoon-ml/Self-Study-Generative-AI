@@ -168,9 +168,9 @@ Task가 healthy 상태가 되면 성공
 ## 📊 현재 상태
 
 ### 구축 완료된 인프라
-- ✅ VPC: `vpc-<VPC_ID>` (10.100.0.0/16)
+- ✅ VPC: `vpc-05975448296a22c21` (10.100.0.0/16)
 - ✅ VPC Endpoints: Available (Data Plane + Gateway)
-- ✅ Internal ALB: Active (test-vpc-<VPC_ID>-alb)
+- ✅ Internal ALB: Active (test-vpc-private-alb)
 - ✅ Fargate Task: Running and Healthy (10.100.2.72)
 - ✅ NAT Gateway: Available
 - ✅ Security Groups: 4개 모두 구성 완료
@@ -229,8 +229,8 @@ NAT Gateway → Internet
 ## 🔧 트러블슈팅
 
 ### Task가 시작 안 됨
-- CloudWatch log group 확인: `/ecs/test-vpc-<VPC_ID>-task`
-- Task 로그 확인: `aws logs tail /ecs/test-vpc-<VPC_ID>-task --follow`
+- CloudWatch log group 확인: `/ecs/test-vpc-private-task`
+- Task 로그 확인: `aws logs tail /ecs/test-vpc-private-task --follow`
 
 ### Target이 unhealthy
 - Security group 규칙 확인
@@ -250,14 +250,14 @@ NAT Gateway → Internet
 ## 📞 참고 자료
 
 ### AWS 리소스
-- Account: `<YOUR_ACCOUNT_ID>`
+- Account: `057716757052`
 - Region: `us-east-1`
 - Cluster: `my-fargate-cluster`
 
 ### 주요 ARN
-- ALB: `arn:aws:<SERVICE>:<REGION>:<ACCOUNT>:<RESOURCE>
-- Target Group: `arn:aws:<SERVICE>:<REGION>:<ACCOUNT>:<RESOURCE>
-- Task Definition: `test-vpc-<VPC_ID>-task:3`
+- ALB: `arn:aws:elasticloadbalancing:us-east-1:057716757052:loadbalancer/app/test-vpc-private-alb/e15d1372ab65062e`
+- Target Group: `arn:aws:elasticloadbalancing:us-east-1:057716757052:targetgroup/test-vpc-private-tg/9247fbb91d2e2e75`
+- Task Definition: `test-vpc-private-task:3`
 
 ### 관련 문서
 - 한글 요약: `TEST_VPC_SUMMARY_KR.md`

@@ -58,69 +58,105 @@ ls -la .env
 ls -la ../fargate-runtime/
 ```
 
-### 단일 명령어 배포
+### 단일 명령어 배포 (Three-Stage 자동화)
 
 ```bash
-# Phase 2 배포 (모든 단계 자동화)
+# Phase 2 배포 (Three-Stage 자동 실행)
 ./scripts/phase2/deploy.sh prod
 ```
 
-### 자동 실행 단계
+**소요 시간**: 10-15분 (ECR 생성 → Docker 빌드/푸시 → ECS 배포)
 
-스크립트가 자동으로 다음 단계를 실행합니다:
+### Three-Stage 자동 실행
 
-#### 1. 사전 확인 (1분)
+스크립트가 자동으로 3단계를 실행합니다:
+
+#### 사전 확인 (1분)
 - Phase 1 .env 파일 로드
 - AWS CLI, Docker 설치 확인
 - fargate-runtime 디렉토리 확인
+- CloudFormation 템플릿 검증
 
-#### 2. ECR Repository 생성 (1분)
-- Repository: `deep-insight-fargate-runtime-prod`
-- 이미 존재하면 재사용
+#### STAGE 1: ECR Repository 생성 (1-2분)
+
+**CloudFormation 배포 (DeployECS=false)**:
+```bash
+aws cloudformation deploy \
+  --parameter-overrides DeployECS=false \
+  ...
+```
+
+**실행 내용**:
+- ECR Repository: `deep-insight-fargate-runtime-prod` 생성
 - 이미지 스캔 활성화
 - AES256 암호화
+- DeletionPolicy: Retain (데이터 보호)
+- ECR URI 가져오기
 
-#### 3. Docker 이미지 빌드 (5-10분)
+**출력 예시**:
+```
+============================================
+STAGE 1: Creating ECR Repository
+============================================
+✓ ECR Repository created via CloudFormation
+
+ECR Repository URI: 738490718699.dkr.ecr.us-east-1.amazonaws.com/deep-insight-fargate-runtime-prod
+```
+
+#### STAGE 2: Docker 빌드 및 푸시 (5-10분)
+
+**Docker 이미지 빌드**:
 - Python 3.12 + 한글 폰트 설치
 - 필수 Python 패키지 설치
 - dynamic_executor_v2.py 복사
-- 두 개 태그 생성: `v20251102-083000`, `latest`
+- 두 개 태그 생성: `v20251102-083527`, `latest`
 
 **빌드 로그 예시**:
 ```
-Step 1/8 : FROM python:3.12-slim
-Step 2/8 : WORKDIR /app
-Step 3/8 : RUN apt-get update && apt-get install -y fonts-nanum...
-Step 4/8 : RUN fc-cache -f -v
-Step 5/8 : COPY <<EOF requirements.txt
-Step 6/8 : RUN pip install --no-cache-dir -r requirements.txt
-Step 7/8 : COPY dynamic_executor_v2.py .
-Step 8/8 : CMD ["python", "-u", "dynamic_executor_v2.py"]
+============================================
+STAGE 2: Building & Pushing Docker Image
+============================================
+
+Building Docker image...
+Image: 738490718699.dkr.ecr.us-east-1.amazonaws.com/deep-insight-fargate-runtime-prod:v20251102-083527
+This may take 5-10 minutes...
+
+Step 1/11 : FROM python:3.12-slim
+Step 2/11 : WORKDIR /app
+Step 3/11 : RUN apt-get update && apt-get install -y fonts-nanum...
+Step 4/11 : RUN fc-cache -f -v
+Step 5/11 : COPY requirements.txt .
+Step 6/11 : RUN pip install --no-cache-dir -r requirements.txt
+Step 7/11 : COPY dynamic_executor_v2.py .
+Step 8/11 : CMD ["python", "-u", "dynamic_executor_v2.py"]
 Successfully built 1234567890ab
-Successfully tagged 123456789012.dkr.ecr.us-east-1.amazonaws.com/deep-insight-fargate-runtime-prod:v20251102-083527
-Successfully tagged 123456789012.dkr.ecr.us-east-1.amazonaws.com/deep-insight-fargate-runtime-prod:latest
+✓ Docker image built successfully
+
+Logging in to ECR...
+✓ Logged in to ECR
+
+Pushing Docker images to ECR...
+  - 738490718699.dkr.ecr.us-east-1.amazonaws.com/deep-insight-fargate-runtime-prod:v20251102-083527
+  - 738490718699.dkr.ecr.us-east-1.amazonaws.com/deep-insight-fargate-runtime-prod:latest
+✓ Docker images pushed successfully
 ```
 
-#### 4. ECR 푸시 (1-2분)
-- ECR 로그인
-- 이미지 푸시 (약 700MB)
+#### STAGE 3: Full Stack 배포 (2-3분)
 
-**푸시 로그 예시**:
-```
-Login Succeeded
-Pushing: v20251102-083527
-The push refers to repository [123456789012.dkr.ecr.us-east-1.amazonaws.com/deep-insight-fargate-runtime-prod]
-v20251102-083527: digest: sha256:abc123... size: 2841
-Pushing: latest
-latest: digest: sha256:abc123... size: 2841
+**CloudFormation 배포 (DeployECS=true)**:
+```bash
+aws cloudformation deploy \
+  --parameter-overrides \
+    DeployECS=true \
+    DockerImageUri=$ECR_URI:latest \
+  ...
 ```
 
-#### 5. CloudFormation 배포 (2-3분)
-- Phase 1 outputs 자동 로드
-- Docker Image URI 자동 주입
-- CloudFormation 파라미터 동적 생성
-- 템플릿 검증 및 배포
-- .env 파일에 Phase 2 outputs 추가
+**실행 내용**:
+- ECS Cluster 생성 (Container Insights 활성화)
+- Task Definition 등록 (2 vCPU, 4GB RAM)
+- CloudWatch Log Group 생성 (7일 보관)
+- .env 파일에 모든 outputs 저장
 
 **배포 완료 메시지**:
 ```
@@ -381,7 +417,7 @@ cat .env
 
 **주의**: 확인 없이 모든 리소스를 자동 삭제합니다 (2초 대기 후 시작)
 
-### Cleanup 단계 (총 7단계, 2-5분)
+### Cleanup 단계 (총 6단계, 2-10분)
 
 1. **환경 변수 로드** (1초)
    - .env 파일에서 리소스 이름 가져오기
@@ -390,37 +426,37 @@ cat .env
    - 모든 Fargate container 중지
    - 30초 대기
 
-3. **ECR Repository 삭제** (10초)
-   - 모든 Docker 이미지 포함 (force delete)
-   - 예시: 2개 이미지 삭제
-
-4. **CloudFormation 상태 확인** (5초)
+3. **CloudFormation 상태 확인** (5초)
    - 스택 존재 여부 확인
 
-5. **CloudFormation Stack 삭제** (2-5분)
-   - Task Definition
-   - ECS Cluster
-   - CloudWatch Log Group
+4. **CloudFormation Stack 삭제** (2-5분) ⭐
+   - **자동 삭제**: ECS Cluster, Task Definitions (모든 버전), CloudWatch Log Group
+   - **보호됨**: ECR Repository (DeletionPolicy: Retain)
    - 실시간 진행 상황 표시
+   - Timeout: 10분
+
+5. **ECR Repository 정리** (선택 사항, 10초)
+   - **CloudFormation이 보호**: DeletionPolicy: Retain으로 설정됨
+   - 사용자가 수동으로 삭제 여부 선택 (Interactive 모드)
+   - Force 모드: 자동 삭제
+   - 모든 Docker 이미지 포함 삭제 (force delete)
 
 6. **.env 파일 정리** (선택 사항, 1초)
    - Phase 2 섹션만 제거
    - Phase 1 섹션은 유지
 
-7. **Task Definition Deregister** (선택 사항, 5초)
-   - 모든 버전 deregister
-   - INACTIVE 상태로 변경
-
 ### 정리되는 리소스
 
 | 리소스 | 이름 | 삭제 방법 |
 |--------|------|-----------|
-| ECR Repository | deep-insight-fargate-runtime-prod | 자동 (force) |
-| Docker 이미지 | 모든 태그 | 자동 |
-| ECS Cluster | deep-insight-cluster-prod | CloudFormation |
-| Task Definitions | 모든 버전 | 선택 사항 |
-| CloudWatch Log Group | /ecs/deep-insight-fargate-prod | CloudFormation |
-| CloudFormation Stack | deep-insight-fargate-prod | 자동 |
+| **CloudFormation이 관리** | | |
+| ECS Cluster | deep-insight-cluster-prod | ✅ 자동 (CloudFormation) |
+| Task Definitions | 모든 버전 | ✅ 자동 (CloudFormation) |
+| CloudWatch Log Group | /ecs/deep-insight-fargate-prod | ✅ 자동 (CloudFormation) |
+| CloudFormation Stack | deep-insight-fargate-prod | ✅ 자동 |
+| **DeletionPolicy: Retain** | | |
+| ECR Repository | deep-insight-fargate-runtime-prod | ⚠️ 선택 사항 (수동) |
+| Docker 이미지 | 모든 태그 | ⚠️ ECR과 함께 삭제 가능 |
 
 ### Cleanup 성공 예시
 
@@ -431,11 +467,13 @@ cat .env
 
 Cleaned up:
   ✓ CloudFormation stack: deep-insight-fargate-prod
-  ✓ ECR repository and Docker images
-  ✓ ECS Cluster (tasks stopped)
-  ✓ Task definitions (if you selected 'y')
+    - ECS Cluster
+    - Task Definitions (all versions)
+    - CloudWatch Log Group
+  ✓ ECR repository (if you selected 'y')
   ✓ .env Phase 2 section removed (if you selected 'y')
 
+Note: ECR has DeletionPolicy: Retain for data protection
 Note: Phase 1 infrastructure (VPC, ALB, etc.) remains intact
 
 You can now redeploy Phase 2:
@@ -444,8 +482,14 @@ You can now redeploy Phase 2:
 
 ### 주의사항
 
-⚠️ **중요**:
-- Phase 1 인프라 (VPC, ALB 등)는 그대로 유지됩니다
+⚠️ **중요 - DeletionPolicy: Retain**:
+- **ECR Repository는 CloudFormation이 보호**합니다
+- Stack 삭제 시 ECR은 자동 삭제되지 않음
+- Docker 이미지 데이터 보호를 위한 안전 장치
+- 삭제를 원하면 cleanup 스크립트에서 'y' 선택 또는 수동 삭제
+
+⚠️ **Phase 1 인프라**:
+- Phase 1 (VPC, ALB 등)는 그대로 유지됩니다
 - Phase 2만 정리하므로 Phase 1 비용 (~$84/월)은 계속 발생
 - 전체 정리를 원하면 Phase 1도 cleanup 필요:
   ```bash
@@ -454,28 +498,30 @@ You can now redeploy Phase 2:
 
 ⚠️ **재배포 시**:
 - .env 파일의 Phase 1 정보만 있으면 Phase 2 재배포 가능
-- Docker 이미지가 삭제되므로 재빌드 필요 (5-10분)
+- ECR 이미지를 유지했다면: 재빌드 불필요 (1-2분)
+- ECR 이미지를 삭제했다면: 재빌드 필요 (5-10분)
 
 ### 수동 정리 (대안)
 
 cleanup 스크립트를 사용하지 않고 수동으로 정리:
 
 ```bash
-# ECR 이미지 삭제
-aws ecr delete-repository \
-  --repository-name deep-insight-fargate-runtime-prod \
-  --region us-east-1 \
-  --force
-
-# CloudFormation 스택 삭제
+# 1. CloudFormation 스택 삭제 (ECS Cluster, Task Definitions, Log Group)
 aws cloudformation delete-stack \
   --stack-name deep-insight-fargate-prod \
   --region us-east-1
 
-# 삭제 완료 대기
+# 삭제 완료 대기 (2-5분)
 aws cloudformation wait stack-delete-complete \
   --stack-name deep-insight-fargate-prod \
   --region us-east-1
+
+# 2. ECR Repository 삭제 (선택 사항)
+# Note: CloudFormation이 DeletionPolicy: Retain으로 보호함
+aws ecr delete-repository \
+  --repository-name deep-insight-fargate-runtime-prod \
+  --region us-east-1 \
+  --force
 ```
 
 ---

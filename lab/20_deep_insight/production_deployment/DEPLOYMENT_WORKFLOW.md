@@ -116,19 +116,25 @@ ls -l scripts/phase1/verify.sh
 
 Phase 1이 Production 계정에서 성공적으로 배포되고 검증된 후에 다음 Phase들을 준비합니다:
 
-#### Phase 2: Fargate Runtime (계획)
-- `cloudformation/phase2-fargate.yaml` (ECR, ECS Cluster)
-- `scripts/phase2/1-deploy-infrastructure.sh` (CloudFormation)
-- `scripts/phase2/2-build-docker.sh` (Docker 빌드)
-- `scripts/phase2/3-push-to-ecr.sh` (ECR 푸시)
-- `scripts/phase2/4-register-task.sh` (Task Definition)
-- `scripts/phase2/5-verify.sh` (검증)
+#### Phase 2: Fargate Runtime (완료)
+- ✅ `cloudformation/phase2-fargate.yaml` (Three-Stage CloudFormation)
+  - Conditional deployment: ECR 단독 생성 또는 Full Stack
+  - DeletionPolicy: Retain for ECR (데이터 보호)
+- ✅ `scripts/phase2/deploy.sh` (Three-Stage 자동 배포)
+  - Stage 1: ECR Repository 생성 (CloudFormation, DeployECS=false)
+  - Stage 2: Docker 빌드 및 ECR 푸시
+  - Stage 3: Full Stack 배포 (CloudFormation, DeployECS=true)
+- ✅ `scripts/phase2/verify.sh` (검증)
+- ✅ `scripts/phase2/cleanup.sh` (CloudFormation-centric 정리)
 
-#### Phase 3: AgentCore Runtime (계획)
-- `scripts/phase3/1-prepare-source.sh` (소스 준비)
-- `scripts/phase3/2-create-yaml.sh` (.bedrock_agentcore.yaml 생성)
-- `scripts/phase3/3-deploy-runtime.sh` (Runtime 배포)
-- `scripts/phase3/4-verify.sh` (검증)
+#### Phase 3: AgentCore Runtime (준비)
+- `scripts/phase3/deploy.sh` (통합 배포 스크립트)
+  - 소스 파일 복사
+  - .bedrock_agentcore.yaml 자동 생성 (VPC 모드)
+  - bedrock_agentcore toolkit으로 Runtime 배포
+  - ENI 생성 및 상태 확인
+- `scripts/phase3/verify.sh` (검증)
+- `scripts/phase3/cleanup.sh` (정리)
 
 #### Phase 4: Testing (계획)
 - `scripts/phase4/1-test-simple.sh` (간단한 Job)
@@ -528,32 +534,35 @@ ls -la ../fargate-runtime/
 ./scripts/phase2/deploy.sh prod
 ```
 
-**자동 실행 단계**:
+**Three-Stage 자동 실행**:
 
-1. **사전 확인** (1분)
-   - Phase 1 .env 파일 로드
-   - AWS CLI, Docker 설치 확인
-   - fargate-runtime 디렉토리 확인
+**사전 확인** (1분):
+- Phase 1 .env 파일 로드
+- AWS CLI, Docker 설치 확인
+- fargate-runtime 디렉토리 확인
+- CloudFormation 템플릿 검증
 
-2. **ECR Repository 생성** (1분)
-   - deep-insight-fargate-runtime-prod
-   - 이미 존재하면 재사용
+**STAGE 1: ECR Repository 생성** (1-2분):
+- CloudFormation 배포 (DeployECS=false)
+- ECR Repository만 생성: deep-insight-fargate-runtime-prod
+- 이미지 스캔 활성화, AES256 암호화
+- **DeletionPolicy: Retain** (데이터 보호)
+- ECR URI를 CloudFormation Outputs에서 가져오기
 
-3. **Docker 이미지 빌드** (5-10분)
-   - Python 3.12 + 한글 폰트 + 필수 패키지
-   - dynamic_executor_v2.py 포함
-   - 두 개 태그: v20251102-083000, latest
+**STAGE 2: Docker 빌드 및 푸시** (5-10분):
+- Docker 이미지 빌드
+  - Python 3.12 + 한글 폰트 + 필수 패키지
+  - dynamic_executor_v2.py 포함
+  - 두 개 태그: v20251102-083000, latest
+- ECR 로그인
+- 이미지 푸시 (약 700MB)
 
-4. **ECR 푸시** (1-2분)
-   - ECR 로그인
-   - 이미지 푸시 (약 700MB)
-
-5. **CloudFormation 배포** (2-3분)
-   - ECR Repository (이미 생성됨, CloudFormation 관리로 전환)
-   - ECS Cluster (Container Insights 활성화)
-   - ECS Task Definition (2 vCPU, 4GB RAM)
-   - CloudWatch Log Group (7일 보관)
-   - .env 파일에 Phase 2 outputs 추가
+**STAGE 3: Full Stack 배포** (2-3분):
+- CloudFormation 업데이트 (DeployECS=true)
+- ECS Cluster 생성 (Container Insights 활성화)
+- Task Definition 등록 (2 vCPU, 4GB RAM)
+- CloudWatch Log Group 생성 (7일 보관)
+- .env 파일에 Phase 2 outputs 추가
 
 **예상 출력 (마지막 부분)**:
 ```
@@ -642,21 +651,67 @@ Next Steps:
 
 **🎉 Phase 2 Fargate Runtime 배포 성공!**
 
-### C7. 다음 단계
+### C7. Phase 3: AgentCore Runtime 배포 (CloudFormation)
 
-**⏳ Phase 3-4는 Phase 2 완료 후 진행 예정**:
+**소요 시간**: 10-15분
 
-1. **Phase 3: AgentCore Runtime**
-   - `.bedrock_agentcore.yaml` 생성 (VPC 모드)
-   - Runtime 배포
-   - ENI 생성 확인
+Phase 2가 완료되면 AgentCore Runtime을 배포합니다.
 
-2. **Phase 4: Testing**
+#### C7.1 Phase 3 스크립트 실행 권한 부여
+
+```bash
+# Phase 3 스크립트 실행 권한 부여
+chmod +x scripts/phase3/*.sh
+```
+
+#### C7.2 Phase 3 배포 실행
+
+```bash
+./scripts/phase3/deploy.sh prod
+```
+
+**배포 과정**:
+1. ✅ Phase 1, 2 .env 파일 로드
+2. ✅ AgentCore Runtime 소스 파일 복사
+3. ✅ `.bedrock_agentcore.yaml` 자동 생성 (VPC 모드)
+4. ✅ bedrock_agentcore toolkit으로 Runtime 배포
+5. ✅ ENI 생성 및 상태 확인
+6. ✅ Runtime ARN을 .env에 저장
+
+**예상 소요 시간**: 10-15분
+
+#### C7.3 Phase 3 검증
+
+```bash
+./scripts/phase3/verify.sh
+```
+
+**검증 항목**:
+- [ ] Runtime Status: `READY`
+- [ ] Network Mode: `VPC`
+- [ ] ENI Status: `in-use`
+- [ ] Runtime ARN 저장 완료
+
+#### C7.4 Phase 3 배포 완료!
+
+**✅ Phase 3 체크리스트**:
+- [x] AgentCore Runtime 생성 완료
+- [x] VPC 모드 활성화 완료
+- [x] ENI 생성 및 연결 완료 (Private IP)
+- [x] `.env` 파일에 RUNTIME_ARN 추가 완료
+
+**🎉 Phase 3 AgentCore Runtime 배포 성공!**
+
+### C8. 다음 단계
+
+**⏳ Phase 4는 Phase 3 완료 후 진행 예정**:
+
+1. **Phase 4: Testing**
    - 네트워크 연결 테스트
    - AgentCore Job 실행
    - PDF 보고서 생성 테스트
 
-**현재 상태**: ✅ Phase 1 완료, Phase 2-4 준비 중
+**현재 상태**: ✅ Phase 1-2 완료, 🚀 Phase 3 준비 완료, ⏳ Phase 4 준비 중
 
 ---
 
@@ -903,12 +958,17 @@ cd production_deployment
 - ✅ .env 파일 선택적 정리
 - ✅ 에러 발생 시 상세 로그 출력
 
-**Phase 2 정리 (2-5분)**:
-- ECR Repository 및 Docker 이미지
-- ECS Cluster 및 실행 중인 Task
-- Task Definitions (선택 사항)
-- CloudWatch Log Group
-- CloudFormation Stack
+**Phase 2 정리 (2-10분)**:
+- 실행 중인 ECS Task 자동 정지 (30초)
+- **CloudFormation Stack 자동 삭제** (2-5분):
+  - ECS Cluster
+  - Task Definitions (모든 버전)
+  - CloudWatch Log Group
+- **ECR Repository 선택적 삭제** (10초):
+  - CloudFormation이 DeletionPolicy: Retain으로 보호
+  - Interactive 모드: 사용자 선택 (y/N)
+  - Force 모드: 자동 삭제
+  - Docker 이미지 포함 삭제 (force delete)
 - .env Phase 2 섹션 (선택 사항)
 
 **Phase 1 정리 (10-20분)**:
@@ -950,7 +1010,10 @@ aws cloudformation wait stack-delete-complete \
 
 **⚠️ 주의사항**:
 - **Phase 2 먼저 삭제**: Phase 1은 Phase 2의 의존성이므로 순서 중요
-- CloudFormation 스택 삭제 시 모든 리소스가 삭제됩니다
+- **CloudFormation 스택 삭제**:
+  - Phase 2: ECS Cluster, Task Definitions, Log Group 자동 삭제
+  - **ECR Repository는 DeletionPolicy: Retain으로 보호됨** (자동 삭제 안 됨)
+  - ECR 삭제를 원하면 cleanup 스크립트 사용 또는 수동 삭제
 - 수동 삭제 시 실행 중인 ECS Task가 있으면 삭제 실패 가능
 - `.env` 파일은 삭제되지 않으므로 수동 삭제 필요
 - 재배포 시 `.env` 파일이 자동으로 다시 생성됩니다
@@ -960,23 +1023,27 @@ aws cloudformation wait stack-delete-complete \
 ## 🎯 다음 단계
 
 ### Development 계정 (현재)
-1. ✅ Phase 1 CloudFormation 템플릿 생성
-2. ✅ Deploy/Verify 스크립트 생성
-3. ✅ 문서 작성 (DEPLOYMENT_WORKFLOW.md)
-4. ⏳ Git에 푸시 (준비 완료)
-5. ⏳ Production 계정 배포 후 Phase 2, 3, 4 준비
+1. ✅ Phase 1 CloudFormation 템플릿 생성 (Nested Stacks)
+2. ✅ Phase 1 Deploy/Verify/Cleanup 스크립트 생성
+3. ✅ Phase 2 CloudFormation 템플릿 생성 (Three-Stage)
+4. ✅ Phase 2 Deploy/Verify/Cleanup 스크립트 생성
+5. ✅ 문서 작성 (완전한 Phase 1-2 가이드)
+6. 🚀 Phase 3 준비 중 (deploy/verify/cleanup 스크립트)
+7. ⏳ Git에 푸시 (Phase 3 완료 후)
 
 ### Production 계정 (다음)
-1. ⏳ Git Clone
-2. ⏳ Phase 1 배포 (`./scripts/phase1/deploy.sh prod`)
-3. ⏳ Phase 1 검증 (`./scripts/phase1/verify.sh`)
-4. ⏳ 검증 완료 후 Development 계정에 피드백
-5. ⏳ Phase 2, 3, 4 진행 (Development 계정에서 준비 후)
+1. ✅ Git Clone
+2. ✅ Phase 1 배포 (`./scripts/phase1/deploy.sh prod`)
+3. ✅ Phase 1 검증 (`./scripts/phase1/verify.sh`)
+4. ✅ Phase 2 배포 (`./scripts/phase2/deploy.sh prod`)
+5. ✅ Phase 2 검증 (`./scripts/phase2/verify.sh`)
+6. 🚀 Phase 3 배포 (스크립트 준비 완료 후)
+7. ⏳ Phase 4 테스트
 
 ### 전체 로드맵
-- **현재**: Phase 1 CloudFormation 완료
-- **다음**: Production 계정 Phase 1 배포
-- **향후**: Phase 2 (Fargate), Phase 3 (AgentCore), Phase 4 (Testing)
+- **완료**: Phase 1 (VPC 인프라), Phase 2 (Fargate Runtime)
+- **준비 중**: Phase 3 (AgentCore Runtime)
+- **향후**: Phase 4 (Testing)
 
 ---
 

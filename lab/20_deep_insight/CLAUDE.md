@@ -4,7 +4,327 @@
 
 ---
 
-## 🚀 최신 업데이트 (2025-10-20)
+## 🚀 최신 업데이트 (2025-11-03)
+
+### ⚠️ AgentCore Runtime VPC 배포 - langchain Import 에러 수정 중
+
+**목표**: 개발 계정에서 AgentCore Runtime을 VPC 모드로 배포하고 테스트
+
+**진행 상황**:
+- ✅ Phase 1 Python 스크립트 작성 완료 (`01_create_agentcore_runtime.py`, `02_agentcore_runtime.py`, `03_invoke_agentcore_job_vpc.py`)
+- ✅ Runtime 생성 성공 (`bedrock_manus_runtime_vpc_1762174336-0Y1CmLAZmq`)
+- ❌ Runtime 시작 실패 - `ModuleNotFoundError: No module named 'langchain.callbacks'`
+
+#### 문제 1: langchain 0.3.x Import 경로 변경
+
+**에러**:
+```python
+# src/utils/bedrock.py:17
+from langchain.callbacks.base import BaseCallbackHandler
+ModuleNotFoundError: No module named 'langchain.callbacks'
+```
+
+**원인**: langchain 0.3.x에서 import 경로가 변경됨
+- 구버전: `from langchain.callbacks.base import BaseCallbackHandler`
+- 신버전: `from langchain_core.callbacks.base import BaseCallbackHandler`
+
+**수정 완료**:
+1. ✅ `requirements.txt`: `langchain-core>=0.3.27` 추가 (37번째 줄)
+2. ✅ `src/utils/bedrock.py`: import 경로 수정 (17번째 줄)
+   ```python
+   from langchain_core.callbacks.base import BaseCallbackHandler
+   ```
+
+#### 문제 2: Docker 이미지 빌드 누락 🚨
+
+**핵심 문제**: 코드를 수정했지만 **새 Docker 이미지를 빌드하지 않음**!
+
+**발견 사항**:
+- `01_create_agentcore_runtime.py`는 Runtime만 생성
+- Docker 빌드 + ECR 푸시 단계가 없음
+- 기존 ECR 이미지(수정 전 코드)를 사용 → 에러 계속 발생
+
+**agentcore_runtime.launch() vs AWS CLI 차이점**:
+
+| 항목 | `agentcore_runtime.launch()` | `aws bedrock-agentcore-control create-agent-runtime` |
+|------|------------------------------|-----------------------------------------------------|
+| Docker 빌드 | ✅ 자동 수행 | ❌ 수행 안 함 |
+| ECR 푸시 | ✅ 자동 수행 | ❌ 수행 안 함 |
+| Runtime 생성 | ✅ 수행 | ✅ 수행 |
+| VPC 설정 제어 | ⚠️ SDK 버그 | ✅ 정확한 제어 |
+
+**노트북 방식 (agentcore_runtime.ipynb)**:
+- Cell 14: `configure()` - Dockerfile 생성만
+- Cell 16: VPC 설정 YAML에 추가
+- Cell 18: AWS CLI로 Runtime만 생성 + **기존 PUBLIC runtime의 ECR 이미지 재사용**
+  ```python
+  # ⚠️ Using PUBLIC runtime's ECR image
+  ecr_repo = f"{account_id}.dkr.ecr.{region}.amazonaws.com/bedrock-agentcore-bedrock_manus_runtime"
+  ```
+
+#### 문제 3: Runtime 생성/업데이트 로직 개선
+
+**수정 완료**:
+1. ✅ `.env`에서 기존 Runtime ARN 읽기 (100-102번째 줄)
+2. ✅ Runtime 이름 고정: `bedrock_manus_runtime_vpc` (timestamp 제거)
+3. ✅ Create/Update 자동 선택 (224-231번째 줄)
+   ```python
+   if EXISTING_RUNTIME_ID:
+       operation = "update"  # 기존 Runtime 업데이트
+   else:
+       operation = "create"  # 새 Runtime 생성
+   ```
+4. ✅ AWS CLI 명령어 분기 처리 (275-282번째 줄)
+5. ✅ `.env` 파일 중복 제거 로직 (354-386번째 줄)
+
+#### 해결 방법 (내일 작업)
+
+**Step 5 추가 필요**: Docker 빌드 + ECR 푸시
+
+`01_create_agentcore_runtime.py`에 다음 단계 추가:
+
+```python
+# Step 4: VPC 설정 추가 (YAML) - ✅ 완료
+
+# Step 5: Docker 빌드 + ECR 푸시 - ⏳ 내일 추가 필요
+try:
+    print("🐳 Docker 이미지 빌드 중... (5-10분)")
+    agentcore_runtime.launch(agent_name=agent_name)
+    print("✅ Docker 빌드 및 ECR 푸시 완료")
+except Exception as e:
+    # Runtime 생성 단계에서 실패 가능 (VPC 설정 때문)
+    # 하지만 Docker 빌드 + ECR 푸시는 이미 완료됨
+    print("⚠️ launch() 에러 (예상됨), Docker는 빌드 완료")
+
+# Step 6: AWS CLI로 Runtime 생성/업데이트 - ✅ 완료
+```
+
+**이렇게 하면**:
+1. ✅ Docker 이미지 빌드 (수정된 requirements.txt + bedrock.py 포함)
+2. ✅ ECR에 푸시 (새 이미지 업로드)
+3. ⚠️ launch()의 Runtime 생성은 실패 가능 (VPC 설정)
+4. ✅ AWS CLI로 Runtime 재생성/업데이트 (정확한 VPC 설정)
+
+#### 수정된 파일
+
+**코드 수정**:
+- ✅ `requirements.txt`: langchain-core 추가
+- ✅ `src/utils/bedrock.py`: import 경로 수정
+- ✅ `01_create_agentcore_runtime.py`: Create/Update 자동 선택, .env 중복 제거
+- ⏳ `01_create_agentcore_runtime.py`: Docker 빌드 단계 추가 필요 (내일)
+
+**생성된 Runtime**:
+- Runtime ID: `bedrock_manus_runtime_vpc_1762174336-0Y1CmLAZmq`
+- Status: READY (metadata)
+- 실제 상태: Container 시작 실패 (langchain import 에러)
+
+#### 다음 단계 (내일)
+
+1. **`01_create_agentcore_runtime.py` 수정**:
+   - Step 5에 `agentcore_runtime.launch()` 추가
+   - Docker 빌드 + ECR 푸시 자동화
+   - launch() 에러 핸들링 (Runtime 생성 실패 시 무시)
+
+2. **Runtime 재배포**:
+   ```bash
+   uv run 01_create_agentcore_runtime.py  # Docker 빌드 포함
+   ```
+
+3. **테스트**:
+   ```bash
+   uv run 03_invoke_agentcore_job_vpc.py  # Runtime 호출 테스트
+   ```
+
+4. **성공 시**:
+   - Git 커밋 (설정 파일 제외)
+   - Production 계정 배포 가이드 작성
+
+**참고 문서**:
+- `DEV_ACCOUNT_GUIDE.md` - 개발 계정 실행 가이드
+- `PHASE3_EXECUTION_GUIDE.md` - Phase 3 배포 가이드
+- `agentcore_runtime.ipynb` - 노트북 원본 (Cell 18 참조)
+
+---
+
+## 🚀 이전 업데이트 (2025-11-02)
+
+### ✅ Phase 2 Three-Stage CloudFormation 완성!
+
+**목표**: ECR Repository 충돌 문제를 근본적으로 해결하고 완전한 Infrastructure as Code 달성
+
+**핵심 문제**:
+- 기존 방식: deploy.sh가 AWS CLI로 ECR 수동 생성 → CloudFormation이 ECR 생성 시도 → 충돌 발생
+- `Resource of type 'AWS::ECR::Repository' with identifier 'deep-insight-fargate-runtime-prod' already exists`
+- 사용자 요구: "I don't want these procedures to have the same error in other accounts. find a permanent method."
+
+**해결 방법: Three-Stage CloudFormation Approach**
+
+#### 아키텍처 변경 사항
+
+**1. CloudFormation 템플릿** (`cloudformation/phase2-fargate.yaml`):
+```yaml
+Parameters:
+  DeployECS:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Set to 'false' for Stage 1 (ECR only), 'true' for Stage 2 (Full stack)
+
+Conditions:
+  ShouldDeployECS: !Equals [!Ref DeployECS, 'true']
+
+Resources:
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain       # 데이터 보호!
+    UpdateReplacePolicy: Retain
+    # Always created (no Condition)
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Condition: ShouldDeployECS   # Stage 3에서만 생성
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Condition: ShouldDeployECS   # Stage 3에서만 생성
+```
+
+**2. 배포 스크립트** (`scripts/phase2/deploy.sh`):
+```bash
+# STAGE 1: ECR Repository 생성 (1-2분)
+aws cloudformation deploy \
+  --parameter-overrides DeployECS=false \
+  ...
+
+# ECR URI를 CloudFormation Outputs에서 가져오기 (AWS CLI 대신)
+ECR_URI=$(aws cloudformation describe-stacks ...)
+
+# STAGE 2: Docker 빌드 및 푸시 (5-10분)
+docker build -t "$ECR_URI:$TAG" -t "$ECR_URI:latest" .
+docker push "$ECR_URI:$TAG"
+docker push "$ECR_URI:latest"
+
+# STAGE 3: Full Stack 배포 (2-3분)
+aws cloudformation deploy \
+  --parameter-overrides DeployECS=true DockerImageUri="$ECR_URI:latest" \
+  ...
+```
+
+**3. Cleanup 스크립트** (`scripts/phase2/cleanup.sh`):
+- CloudFormation-centric approach
+- Step 3 (ECR 삭제)를 Step 5로 이동 (선택적 삭제)
+- CloudFormation이 ECS Cluster, Task Definitions, Log Group 자동 삭제
+- ECR은 DeletionPolicy: Retain으로 보호됨 (사용자가 'y' 선택 시만 삭제)
+
+#### 생성/수정된 파일
+
+**스크립트**:
+- ✅ `scripts/phase2/cleanup.sh` (새로 생성, 340줄)
+- ✅ `scripts/phase2/deploy.sh` (완전히 재작성, 450줄)
+
+**CloudFormation**:
+- ✅ `cloudformation/phase2-fargate.yaml` (수정, 270줄)
+  - DeployECS parameter 추가
+  - ShouldDeployECS Condition 추가
+  - DeletionPolicy: Retain for ECR
+
+**Docker**:
+- ✅ `fargate-runtime/Dockerfile` (heredoc 에러 수정)
+  - `COPY <<EOF requirements.txt` → `COPY requirements.txt .`
+  - DOCKER_BUILDKIT 불필요 (제거)
+
+**문서** (5개 파일 업데이트):
+- ✅ `production_deployment/README.md`
+  - Phase 2 섹션에 "완전한 IaC" 특징 추가
+  - Three-Stage 배포 설명
+- ✅ `production_deployment/CLOUDFORMATION_GUIDE.md`
+  - Phase 2.1-2.5 섹션 완전히 재작성
+  - Three-Stage workflow 상세 설명
+  - DeletionPolicy: Retain 설명
+- ✅ `production_deployment/docs/02_FARGATE_RUNTIME.md`
+  - Deployment 섹션: Three-Stage 자동화로 업데이트
+  - Cleanup 섹션: CloudFormation-centric으로 변경
+  - 6단계로 간소화 (기존 7단계)
+- ✅ `production_deployment/DEPLOYMENT_WORKFLOW.md`
+  - Phase 2 상태: "⏳ 계획" → "✅ 완료"
+  - C6 섹션: Three-Stage 자동 실행 설명
+  - Cleanup 섹션: DeletionPolicy 주의사항 추가
+- ✅ `production_deployment/STEP_BY_STEP_GUIDE.md`
+  - 5.4절: 5단계 → Three-Stage 자동화 설명
+  - 7.2절: Phase 1-2 완료 상태로 업데이트
+  - Cleanup: ECR 선택적 삭제 프로세스 추가
+
+#### 주요 특징
+
+**1. 완전한 Infrastructure as Code**:
+- 모든 리소스가 CloudFormation으로 관리
+- ECR Repository 충돌 문제 완전 해결
+- 어떤 AWS 계정에서도 동일하게 재현 가능
+
+**2. DeletionPolicy: Retain (데이터 보호)**:
+- ECR Repository는 스택 삭제 시 보호됨
+- Docker 이미지 데이터 손실 방지
+- 삭제를 원하면 cleanup 스크립트에서 선택적 삭제
+
+**3. Three-Stage 자동화**:
+- STAGE 1: ECR Repository 생성 (CloudFormation, DeployECS=false)
+- STAGE 2: Docker 빌드 및 ECR 푸시
+- STAGE 3: Full Stack 배포 (CloudFormation, DeployECS=true)
+
+**4. 재현 가능성**:
+- Production 계정에서 테스트 완료 (11/12 checks passed)
+- Container Insights 활성화 (minor issue, optional)
+
+#### 배포 검증 (Production 계정)
+
+**검증 결과** (11/12 checks passed):
+```
+1. Checking ECR Repository...
+  ECR Repository exists                              ✓ OK
+  Docker images in repository                        ✓ OK (2)
+  Latest tag exists                                  ✓ OK
+
+2. Checking ECS Cluster...
+  ECS Cluster exists                                 ✓ OK
+  ECS Cluster status                                 ✓ ACTIVE
+  Container Insights                                 ⚠ Not enabled (minor)
+
+3. Checking Task Definition...
+  Task Definition exists                             ✓ OK
+  Task Definition status                             ✓ ACTIVE
+  Network mode                                       ✓ awsvpc
+  Requires compatibilities                           ✓ FARGATE
+
+4. Checking CloudWatch Logs...
+  CloudWatch Log Group exists                        ✓ OK
+  Log retention                                      ✓ 7 days
+```
+
+**Minor Issue (허용 가능)**:
+- Container Insights: CloudFormation 템플릿에는 enabled로 설정되어 있으나, Stage 1→Stage 3 전환 시 적용 안 됨
+- 해결 방법: 30초 만에 수동 활성화 가능, 또는 무시하고 진행
+- 핵심 기능에 영향 없음
+
+#### 다음 단계
+
+**✅ Phase 1-2 완료**:
+- Phase 1: VPC, ALB, Security Groups, VPC Endpoints, IAM Roles
+- Phase 2: ECR, Docker Image, ECS Cluster, Task Definition, CloudWatch Logs
+  - **Three-Stage CloudFormation 배포**
+  - **DeletionPolicy: Retain for ECR**
+
+**⏳ Phase 3-4 (향후 진행)**:
+- Phase 3: AgentCore Runtime 배포
+- Phase 4: 통합 테스트 및 검증
+
+**참고 문서**:
+- `production_deployment/CLOUDFORMATION_GUIDE.md` - Phase 2.1-2.5 상세 설명
+- `production_deployment/docs/02_FARGATE_RUNTIME.md` - Phase 2 배포 가이드
+- `production_deployment/STEP_BY_STEP_GUIDE.md` - 단계별 배포 가이드
+
+---
+
+## 🚀 이전 업데이트 (2025-10-20)
 
 ### ✅ 프로덕션 배포 가이드 완성!
 

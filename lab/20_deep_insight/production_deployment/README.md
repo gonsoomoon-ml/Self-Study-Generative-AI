@@ -19,8 +19,9 @@
 
 **현재 상태**:
 - ✅ **Phase 1 완료**: VPC 인프라 (CloudFormation + Nested Stacks)
-- ✅ **Phase 2 완료**: Fargate Runtime (CloudFormation + Docker)
-- ⏳ **Phase 3-4 준비 중**: AgentCore Runtime, Testing
+- ✅ **Phase 2 완료**: Fargate Runtime (CloudFormation + Docker, Three-Stage 배포)
+- 🚀 **Phase 3 준비**: AgentCore Runtime 배포 (CloudFormation 기반)
+- ⏳ **Phase 4 준비 중**: Testing
 
 ---
 
@@ -164,8 +165,8 @@ Passed:        15
 #### ✅ Phase 2: Fargate Runtime (완료)
 → **[02_FARGATE_RUNTIME.md](./docs/02_FARGATE_RUNTIME.md)**
 
-**생성 리소스** (5-10분):
-- ECR Repository (이미지 스캔, AES256 암호화)
+**생성 리소스** (10-15분):
+- ECR Repository (이미지 스캔, AES256 암호화, DeletionPolicy: Retain)
 - Docker 이미지 (Python 3.12 + 한글 폰트 + 필수 패키지)
 - ECS Cluster (Container Insights 활성화)
 - ECS Task Definition (2 vCPU, 4GB RAM)
@@ -173,22 +174,51 @@ Passed:        15
 
 **배포 방법**:
 ```bash
-./scripts/phase2/deploy.sh prod
-./scripts/phase2/verify.sh
+./scripts/phase2/deploy.sh prod   # Three-Stage 자동 배포
+./scripts/phase2/verify.sh        # 12개 항목 검증
 ```
 
-**특징**: Docker 빌드 + ECR 푸시 + CloudFormation 배포를 deploy.sh 하나로 자동화
+**특징**:
+- ✅ **완전한 IaC**: CloudFormation이 모든 리소스 관리
+- ✅ **Three-Stage 배포**: ECR 생성 → Docker 빌드/푸시 → ECS 배포
+- ✅ **재현 가능**: 어떤 계정에서도 동일하게 작동
+- ✅ **데이터 보호**: ECR은 DeletionPolicy: Retain으로 보호
 
-#### ⏳ Phase 3: AgentCore Runtime (예정)
+#### ✅ Phase 3: AgentCore Runtime (준비 완료)
 → **[03_AGENTCORE_RUNTIME.md](./docs/03_AGENTCORE_RUNTIME.md)**
 
-**예정 작업** (10-15분):
-- `.bedrock_agentcore.yaml` 생성 (VPC 모드)
-- Runtime 배포
-- ENI 생성 확인
-- Runtime 상태 검증
+**배포 작업** (10-15분):
+- AgentCore Runtime 생성 (VPC 모드)
+- Docker 이미지 빌드 (CodeBuild)
+- ECR 푸시 및 Runtime 배포
+- ENI 생성 및 상태 검증
 
-**현재 상태**: Phase 1 완료 후 진행 예정
+**배포 방법**:
+```bash
+# 1. 프로젝트로 이동
+cd /path/to/05_insight_extractor_strands_sdk_workshop_phase_2
+
+# 2. uv 환경 설정
+cd setup
+uv sync
+./patch_dockerignore_template.sh  # coordinator.md 포함 (필수!)
+
+# 3. .env 파일 확인 (Phase 1/2에서 자동 생성됨)
+cd ../production_deployment
+cat .env  # VPC_ID, SUBNET_ID 등 Phase 1/2 출력값 확인
+
+# 4. Runtime 배포
+cd ..
+python3 01_create_agentcore_runtime.py
+```
+
+**특징**:
+- ✅ **Native launch() 메서드**: AWS CLI 우회 방식 불필요
+- ✅ **VPC Private 모드**: VPC Endpoint 통한 안전한 통신
+- ✅ **자동 CodeBuild Role**: Toolkit이 자동 생성/재사용
+- ✅ **coordinator.md 포함**: Patch script로 프롬프트 파일 자동 포함
+
+**현재 상태**: 프로덕션 배포 준비 완료 ✅
 
 #### ⏳ Phase 4: 테스트 및 검증 (예정)
 → **[04_TESTING.md](./docs/04_TESTING.md)**
@@ -342,6 +372,42 @@ aws ecr list-images \
   --region us-east-1
 ```
 
+### Phase 3: AgentCore Runtime 배포
+
+```bash
+# Python/uv 설치 확인
+python3 --version
+uv --version
+
+# 배포 (10-15분: setup + Docker 빌드 + Runtime 생성)
+cd /path/to/05_insight_extractor_strands_sdk_workshop_phase_2
+
+# 1. uv 환경 설정
+cd setup
+uv sync
+./patch_dockerignore_template.sh  # coordinator.md 포함 (필수!)
+
+# 2. .env 파일 확인 (Phase 1/2에서 자동 생성됨)
+cd ../production_deployment
+cat .env  # VPC_ID, SUBNET_ID 등 확인
+
+# 3. Runtime 배포
+cd ..
+python3 01_create_agentcore_runtime.py
+
+# 3. 검증
+# CloudWatch Logs 확인
+aws logs tail /aws/bedrock-agentcore/runtimes/deep_insight_runtime_vpc --follow --region us-east-1
+
+# 4. 테스트 (선택 사항)
+python3 03_invoke_agentcore_job_vpc.py
+```
+
+**중요 참고사항**:
+- ✅ **patch_dockerignore_template.sh 필수**: coordinator.md 파일 포함을 위해 반드시 실행
+- ✅ **CodeBuild Role 자동 생성**: Toolkit이 첫 실행 시 자동으로 생성, 이후 재사용
+- ✅ **VPC 모드**: Phase 1에서 생성한 VPC Endpoint 사용
+
 ### 정리
 
 ```bash
@@ -389,15 +455,20 @@ aws cloudformation delete-stack \
 ## 📝 다음 단계
 
 ### 현재 완료
-- [x] Phase 1 CloudFormation 템플릿 생성
-- [x] Deploy/Verify 스크립트 생성
-- [x] 가이드 문서 작성 (71KB)
+- [x] Phase 1 CloudFormation 템플릿 생성 (Nested Stacks)
+- [x] Phase 1 Deploy/Verify/Cleanup 스크립트 생성
+- [x] Phase 2 CloudFormation 템플릿 생성 (Three-Stage)
+- [x] Phase 2 Deploy/Verify/Cleanup 스크립트 생성
+- [x] Phase 3 Python 배포 스크립트 생성 (01_create_agentcore_runtime.py)
+- [x] Phase 3 coordinator.md 포함 패치 스크립트 (patch_dockerignore_template.sh)
+- [x] boto3/toolkit 버전 업데이트 (requirements.txt, pyproject.toml)
+- [x] 가이드 문서 작성 (Phase 1-3 완전 배포 가이드)
 
-### 향후 작업
-- [ ] Production 계정에서 Phase 1 배포 테스트
-- [ ] Phase 2 CloudFormation 템플릿 작성 (Fargate)
-- [ ] Phase 3 스크립트 작성 (AgentCore Runtime)
-- [ ] Phase 4 테스트 스크립트 작성
+### 다음 작업 (Phase 4 - 테스트 및 검증)
+- [ ] End-to-End 테스트 스크립트 작성
+- [ ] 성능 벤치마크 테스트
+- [ ] 모니터링 대시보드 구성
+- [ ] Production 롤아웃 체크리스트 작성
 
 ---
 

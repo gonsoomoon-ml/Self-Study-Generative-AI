@@ -1,4 +1,4 @@
-# Phase 3: AgentCore Runtime 생성
+# Phase 3: AgentCore Runtime 배포
 
 > **소요 시간**: 10-15분
 > **난이도**: 중급
@@ -9,25 +9,160 @@
 ## 📋 목차
 
 1. [개요](#개요)
-2. [Step 1: AgentCore 파일 준비](#step-1-agentcore-파일-준비)
-3. [Step 2: Runtime 설정 파일 생성](#step-2-runtime-설정-파일-생성)
-4. [Step 3: Runtime 배포](#step-3-runtime-배포)
-5. [Step 4: Runtime 검증](#step-4-runtime-검증)
-6. [트러블슈팅](#트러블슈팅)
+2. [빠른 시작 (자동 배포)](#빠른-시작-자동-배포)
+3. [수동 배포 (단계별)](#수동-배포-단계별)
+4. [트러블슈팅](#트러블슈팅)
 
 ---
 
 ## 🎯 개요
 
-이 단계에서는 Bedrock AgentCore Runtime을 VPC Private 모드로 생성합니다.
+이 단계에서는 Bedrock AgentCore Runtime을 VPC Private 모드로 배포합니다.
 
 ### 주요 작업
 
 - ✅ AgentCore Runtime 소스 코드 준비
-- ✅ `.bedrock_agentcore.yaml` 설정 파일 생성
-- ✅ VPC 모드 Runtime 배포
+- ✅ `.bedrock_agentcore.yaml` 설정 파일 생성 (VPC 모드)
+- ✅ bedrock_agentcore toolkit으로 Runtime 배포
 - ✅ Runtime 상태 및 ENI 확인
 - ✅ Runtime ARN 저장
+
+### 배포 방법
+
+**자동 배포** (권장):
+- 🚀 단일 스크립트로 전체 프로세스 자동화
+- ⏱️ 소요 시간: 10-15분
+- 📝 명령어: `./scripts/phase3/deploy.sh prod`
+
+**수동 배포** (학습 목적):
+- 📖 단계별 실행으로 이해도 향상
+- ⏱️ 소요 시간: 20-25분
+- 📝 각 단계를 수동으로 실행
+
+---
+
+## 🚀 빠른 시작 (자동 배포)
+
+### 1단계: 스크립트 실행 권한 부여
+
+```bash
+cd production_deployment
+chmod +x scripts/phase3/*.sh
+```
+
+### 2단계: Phase 3 배포 실행
+
+```bash
+./scripts/phase3/deploy.sh prod
+```
+
+**예상 출력**:
+```
+============================================
+Phase 3: AgentCore Runtime 배포
+Environment: prod
+============================================
+
+[1/7] 사전 체크...
+  ✓ .env 파일 확인
+  ✓ 필수 환경 변수 확인 (9개)
+  ✓ AWS CLI 확인
+  ✓ Python3 확인
+  ✓ bedrock_agentcore toolkit 확인
+
+[2/7] AgentCore Runtime 소스 파일 준비...
+  ✓ agentcore_runtime.py
+  ✓ src/ (graph, tools, utils, prompts)
+  ✓ requirements.txt
+
+[3/7] .bedrock_agentcore.yaml 생성...
+  ✓ .bedrock_agentcore.yaml 생성 완료
+
+[4/7] 환경 변수 파일 생성...
+  ✓ .env 파일 생성 완료
+
+[5/7] AgentCore Runtime 배포 시작...
+  📦 Docker 이미지 빌드 및 ECR 푸시 중...
+  ⏱️  예상 소요 시간: 5-10분
+
+  [1/2] Configuration...
+  ✓ Configuration 완료
+
+  [2/2] Runtime 배포 (launch)...
+  ✓ Runtime 배포 완료
+
+[6/7] Runtime ARN 가져오기...
+  ✓ Runtime ARN: arn:aws:bedrock-agentcore:us-east-1:xxx:runtime/...
+
+[7/7] .env 파일 업데이트...
+  ✓ .env 파일 업데이트 완료
+
+============================================
+✓ Phase 3 배포 완료!
+============================================
+
+Deployment Summary:
+  Runtime Name: bedrock_manus_runtime_prod_1730518400
+  Runtime ARN: arn:aws:bedrock-agentcore:us-east-1:xxx:runtime/...
+  Network Mode: VPC
+  VPC ID: vpc-xxx
+  Subnet: subnet-xxx
+  Security Group: sg-xxx
+
+Next Steps:
+  1. 검증 실행: ./scripts/phase3/verify.sh
+  2. ENI 상태 확인: aws ec2 describe-network-interfaces --filters "Name=vpc-id,Values=vpc-xxx"
+  3. Phase 4 진행: 테스트 및 검증
+```
+
+### 3단계: Runtime 검증
+
+```bash
+./scripts/phase3/verify.sh
+```
+
+**검증 항목** (총 8개):
+```
+============================================
+Phase 3: AgentCore Runtime Verification
+============================================
+
+1. Checking AgentCore Runtime...
+  Runtime exists                              ✓ OK
+  Runtime status                              ✓ READY
+  Network mode                                ✓ VPC
+  Security group                              ✓ OK
+  Subnet                                      ✓ OK
+
+2. Checking Network Interface (ENI)...
+  ✓ ENI found (count: 1)
+
+3. Checking CloudWatch Logs (optional)...
+  ✓ CloudWatch Log Group found
+
+4. Checking Runtime Metadata...
+  Runtime ARN saved in .env                   ✓ OK
+  Runtime name saved in .env                  ✓ OK
+
+============================================
+Verification Summary
+============================================
+
+Total Checks:  8
+Passed:        8
+
+✓ All checks passed!
+```
+
+### ✅ 자동 배포 완료!
+
+Phase 3 자동 배포가 완료되었습니다. [Phase 4](./04_TESTING.md)로 진행하세요.
+
+---
+
+## 📖 수동 배포 (단계별)
+
+자동 배포 스크립트의 내부 동작을 이해하고 싶거나, 특정 단계만 수정하고 싶은 경우 아래 단계별 가이드를 참고하세요.
 
 ---
 
@@ -477,10 +612,42 @@ Event: {...}
 - [x] RUNTIME_ARN 저장 완료
 - [x] `invoke_agentcore_job.py` 생성 완료
 
-**STATUS.md 업데이트**:
+**다음 단계**:
+- ✅ Phase 3 완료
+- ⏳ Phase 4로 진행: [04_TESTING.md](./04_TESTING.md)
+
+---
+
+## 🧹 Cleanup (리소스 정리)
+
+Phase 3 리소스를 정리하려면 cleanup 스크립트를 사용하세요.
+
+### Cleanup 방법
+
+**Interactive 모드** (권장):
 ```bash
-# production_deployment/STATUS.md 파일을 편집하여 Phase 3 체크박스를 완료로 표시하세요
+./scripts/phase3/cleanup.sh prod
 ```
+- 각 리소스 삭제 전 확인 요청
+- 실수로 삭제하는 것을 방지
+
+**Force 모드** (자동 삭제):
+```bash
+./scripts/phase3/cleanup.sh prod --force
+```
+- 모든 확인을 건너뛰고 자동 삭제
+- CI/CD 파이프라인에서 사용
+
+### 삭제되는 리소스
+
+1. **AgentCore Runtime**: `bedrock_manus_runtime_prod_xxx`
+2. **ECR Repository**: bedrock_agentcore toolkit이 생성한 ECR (선택적)
+3. **agentcore-runtime/**: 로컬 디렉토리 (선택적)
+4. **.env**: Phase 3 섹션만 삭제
+
+**참고**:
+- ENI는 Runtime 삭제 시 자동으로 삭제됩니다
+- CloudWatch Logs는 수동 삭제 필요 (선택 사항)
 
 ---
 

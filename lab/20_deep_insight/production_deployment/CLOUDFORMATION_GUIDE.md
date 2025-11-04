@@ -176,71 +176,96 @@ Stacks:
 
 ---
 
-### Phase 2: Fargate Runtime (CloudFormation + Docker)
+### Phase 2: Fargate Runtime (Three-Stage CloudFormation)
 
-**특징**: 단일 스크립트로 Docker 빌드, ECR 푸시, CloudFormation 배포를 자동화
+**특징**: CloudFormation이 모든 리소스를 관리하는 완전한 IaC 구현
 
 #### 2.1 CloudFormation 템플릿
 
-**파일**: `cloudformation/phase2-fargate.yaml` (250줄)
+**파일**: `cloudformation/phase2-fargate.yaml` (270줄)
 
 **포함 리소스**:
-- ✅ ECR Repository (이미지 스캔, AES256 암호화, lifecycle policy)
-- ✅ ECS Cluster (Container Insights 활성화)
-- ✅ ECS Task Definition (Fargate, 2 vCPU, 4GB RAM)
-- ✅ CloudWatch Log Group (7일 보관)
+- ✅ ECR Repository (이미지 스캔, AES256 암호화, **DeletionPolicy: Retain**)
+- ✅ ECS Cluster (Container Insights 활성화, Conditional)
+- ✅ ECS Task Definition (Fargate, 2 vCPU, 4GB RAM, Conditional)
+- ✅ CloudWatch Log Group (7일 보관, Conditional)
+
+**핵심 설계**:
+```yaml
+Parameters:
+  DeployECS: 'false' | 'true'  # Stage 제어
+
+Conditions:
+  ShouldDeployECS: !Equals [!Ref DeployECS, 'true']
+
+Resources:
+  ECRRepository:     # 항상 생성 (DeletionPolicy: Retain)
+  ECSCluster:        # Condition: ShouldDeployECS
+  TaskDefinition:    # Condition: ShouldDeployECS
+  LogGroup:          # Condition: ShouldDeployECS
+```
 
 **파라미터**:
+- `DeployECS`: false (Stage 1), true (Stage 3)
 - Phase 1 outputs (VPC ID, Subnets, Security Groups, IAM Roles)
-- Docker Image URI (deploy.sh가 자동 주입)
+- Docker Image URI (Stage 3에서 주입)
 - Task CPU/Memory 설정
 
 **Outputs**:
-- ECRRepositoryUri
-- ECRRepositoryName
-- ECSClusterArn
-- ECSClusterName
-- TaskDefinitionArn
-- LogGroupName
+- ECRRepositoryUri (항상)
+- ECRRepositoryName (항상)
+- ECSClusterArn (Conditional)
+- ECSClusterName (Conditional)
+- TaskDefinitionArn (Conditional)
+- LogGroupName (Conditional)
 
-#### 2.2 통합 배포 스크립트
+#### 2.2 Three-Stage 배포 스크립트
 
-**파일**: `scripts/phase2/deploy.sh` (300줄)
+**파일**: `scripts/phase2/deploy.sh` (450줄)
 
 **실행 워크플로우**:
 ```bash
 ./scripts/phase2/deploy.sh prod
 ```
 
-**자동 실행 단계**:
+**Three-Stage 자동 배포**:
 
-1. **사전 확인** (1분)
-   - Phase 1 .env 파일 로드
-   - AWS CLI, Docker 설치 확인
-   - fargate-runtime 디렉토리 확인
+**STAGE 1: ECR Repository 생성** (1-2분)
+```bash
+# CloudFormation으로 ECR만 생성
+aws cloudformation deploy \
+  --parameter-overrides DeployECS=false
+```
+- ECR Repository 생성 (CloudFormation)
+- DeletionPolicy: Retain 적용
+- ECR URI 가져오기
 
-2. **ECR Repository 생성** (1분)
-   - Repository 존재 여부 확인
-   - 없으면 생성, 있으면 재사용
+**STAGE 2: Docker 빌드 및 푸시** (5-10분)
+```bash
+# fargate-runtime 디렉토리에서 Docker 빌드
+docker build -t $ECR_URI:$TAG -t $ECR_URI:latest .
+docker push (versioned + latest)
+```
+- Python 3.12 + 한글 폰트 설치
+- dynamic_executor_v2.py 포함
+- 두 개 태그 생성 및 푸시 (약 700MB)
 
-3. **Docker 이미지 빌드** (5-10분)
-   - fargate-runtime/Dockerfile 사용
-   - Python 3.12 + 한글 폰트 + 필수 패키지 설치
-   - dynamic_executor_v2.py 포함
-   - 두 개 태그 생성: `v20251102-083000`, `latest`
+**STAGE 3: Full Stack 배포** (2-3분)
+```bash
+# CloudFormation 업데이트로 ECS 생성
+aws cloudformation deploy \
+  --parameter-overrides DeployECS=true DockerImageUri=$ECR_URI:latest
+```
+- ECS Cluster, Task Definition, Log Group 생성
+- .env 파일에 모든 outputs 저장
 
-4. **ECR 푸시** (1-2분)
-   - ECR 로그인
-   - 태그된 이미지 푸시 (약 700MB)
+**전체 소요 시간**: 10-15분
 
-5. **CloudFormation 배포** (2-3분)
-   - Phase 1 outputs 자동 로드
-   - Docker Image URI 자동 주입
-   - CloudFormation 파라미터 동적 생성
-   - 템플릿 검증 및 배포
-   - .env 파일에 Phase 2 outputs 추가
-
-**소요 시간**: 10-15분
+**장점**:
+- ✅ **완전한 IaC**: CloudFormation이 모든 리소스 관리
+- ✅ **어느 계정에서나 동일**: ECR 충돌 없음
+- ✅ **데이터 보호**: ECR은 DeletionPolicy: Retain
+- ✅ **재현 가능**: Git으로 전체 인프라 버전 관리
 
 #### 2.3 검증 스크립트
 
@@ -286,9 +311,9 @@ Passed:        12
 
 **전체 Phase 2 소요 시간**: 10-15분
 
-#### 2.5 Cleanup 스크립트
+#### 2.5 Cleanup 스크립트 (CloudFormation 중심)
 
-**파일**: `scripts/phase2/cleanup.sh` (290줄)
+**파일**: `scripts/phase2/cleanup.sh` (340줄)
 
 **실행**:
 ```bash
@@ -299,31 +324,41 @@ Passed:        12
 ./scripts/phase2/cleanup.sh prod --force
 ```
 
-**자동 정리 단계** (총 7단계, 2-5분):
+**자동 정리 단계** (총 6단계, 2-5분):
 
 1. **환경 변수 로드** (.env 파일에서 리소스 이름 가져오기)
 2. **실행 중인 ECS Task 정지** (모든 Fargate container 중지, 30초 대기)
-3. **ECR Repository 삭제** (모든 Docker 이미지 포함, force delete)
-4. **CloudFormation 상태 확인** (스택 존재 여부)
-5. **CloudFormation Stack 삭제** (Task Definition, Log Group 등, 2-5분)
+3. **CloudFormation 상태 확인** (스택 존재 여부)
+4. **CloudFormation Stack 삭제** (2-5분)
+   - ECS Cluster 자동 삭제
+   - Task Definitions 모든 버전 자동 삭제
+   - CloudWatch Log Group 자동 삭제
+5. **ECR Repository 삭제** (선택 사항, **DeletionPolicy: Retain으로 보호됨**)
 6. **.env 파일 정리** (Phase 2 섹션만 제거, 선택 사항)
-7. **Task Definition deregister** (모든 버전, 선택 사항)
 
-**정리되는 리소스**:
-- ✅ ECR Repository (`deep-insight-fargate-runtime-prod`)
-- ✅ Docker 이미지 (모든 버전)
+**CloudFormation이 자동 삭제**:
 - ✅ ECS Cluster (`deep-insight-cluster-prod`)
 - ✅ Task Definitions (모든 버전)
 - ✅ CloudWatch Log Group (`/ecs/deep-insight-fargate-prod`)
-- ✅ CloudFormation Stack (`deep-insight-fargate-prod`)
+
+**수동 확인 필요** (보호됨):
+- ⚠️ ECR Repository (DeletionPolicy: Retain)
+  - Interactive 모드: 삭제 여부 확인
+  - Force 모드: 자동 삭제
+  - 데이터 보호를 위해 CloudFormation은 자동 삭제하지 않음
 
 **참고**: Phase 1 인프라 (VPC, ALB 등)는 그대로 유지됩니다.
 
 **안전 장치**:
 - Interactive 모드: 'yes' 타이핑 필수
 - Force 모드: 2초 대기 (Ctrl+C로 취소 가능)
-- Task Definition 및 .env 파일은 선택적 삭제
+- ECR은 DeletionPolicy: Retain으로 데이터 보호
 - 10분 timeout (무한 대기 방지)
+
+**핵심 개선사항**:
+- ✅ CloudFormation이 대부분 리소스 자동 삭제
+- ✅ ECR은 DeletionPolicy로 데이터 보호
+- ✅ 더 간단하고 안전한 cleanup 프로세스
 
 ---
 

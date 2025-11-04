@@ -105,6 +105,67 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
+  # ============================================
+  # CodeBuild Execution Role (Phase 3용)
+  # ============================================
+  CodeBuildExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-codebuild-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser
+      Policies:
+        - PolicyName: CodeBuildExecutionPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:PutImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - codebuild:CreateReportGroup
+                  - codebuild:CreateReport
+                  - codebuild:UpdateReport
+                  - codebuild:BatchPutTestCases
+                  - codebuild:BatchPutCodeCoverages
+                Resource: '*'
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-codebuild-role-${Environment}'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Purpose
+          Value: AgentCore Runtime Docker Build
+
 # ============================================
 # Outputs
 # ============================================
@@ -120,3 +181,9 @@ Outputs:
     Value: !GetAtt TaskRole.Arn
     Export:
       Name: !Sub '${AWS::StackName}-TaskRoleArn'
+
+  CodeBuildExecutionRoleArn:
+    Description: CodeBuild Execution Role ARN (for Phase 3 AgentCore Runtime)
+    Value: !GetAtt CodeBuildExecutionRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-CodeBuildExecutionRoleArn'
