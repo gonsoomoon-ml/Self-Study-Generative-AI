@@ -35,12 +35,12 @@ usage() {
     echo ""
     echo "예시:"
     echo "  $0 myproject"
-    echo "  $0 myproject 3.11"
-    echo "  $0 myproject 3.11.5"
+    echo "  $0 myproject 3.12"
+    echo "  $0 myproject 3.12.5"
     echo ""
     echo "옵션:"
     echo "  환경이름     : 생성할 환경의 이름 (필수)"
-    echo "  python버전   : 사용할 Python 버전 (선택, 기본값: 3.11)"
+    echo "  python버전   : 사용할 Python 버전 (선택, 기본값: 3.12)"
     exit 1
 }
 
@@ -51,7 +51,7 @@ if [ $# -lt 1 ]; then
 fi
 
 ENV_NAME=$1
-PYTHON_VERSION=${2:-3.11}
+PYTHON_VERSION=${2:-3.12}  # Changed from 3.11 to 3.12 to match pyproject.toml
 VENV_PATH=".venv"  # 명시적으로 가상 환경 경로 설정
 
 print_info "환경 설정을 시작합니다..."

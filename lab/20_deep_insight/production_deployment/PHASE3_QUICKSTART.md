@@ -15,16 +15,34 @@ git clone https://github.com/hyeonsangjeon/aws-ai-ml-workshop-kr.git
 cd aws-ai-ml-workshop-kr/genai/aws-gen-ai-kr/20_applications/08_bedrock_manus/use_cases/05_insight_extractor_strands_sdk_workshop_phase_2
 ```
 
-### 2단계: uv 환경 설정
+### 2단계: uv 환경 설정 (완전 설정)
 ```bash
 cd setup
-uv sync
+./create-uv-env.sh deep-insight
 ```
+
+**이 스크립트는 다음을 자동으로 수행합니다**:
+- UV 설치 확인/자동 설치
+- Python 3.12 설정 (프로젝트 요구사항)
+- 의존성 설치 (pyproject.toml 기반)
+- **한글 폰트 설치** (PDF 생성에 필수!)
+- **시스템 패키지 설치** (pandoc, texlive, poppler-utils)
+- Jupyter 커널 등록
+- 루트 디렉토리에 심링크 생성
 
 **예상 출력**:
 ```
-Resolved 307 packages in 225ms
-Audited 300 packages in 3ms
+[INFO] 환경 설정을 시작합니다...
+[INFO] 환경 이름: deep-insight
+[INFO] Python 버전: 3.12
+...
+[SUCCESS] 환경 설정이 완료되었습니다!
+```
+
+**또는 간단 설정** (의존성만 동기화):
+```bash
+cd setup
+uv sync  # 이미 환경이 구성되어 있다면
 ```
 
 ### 3단계: 패치 스크립트 실행 (필수!)
