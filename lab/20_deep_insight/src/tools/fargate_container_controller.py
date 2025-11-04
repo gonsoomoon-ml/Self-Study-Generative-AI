@@ -6,6 +6,7 @@ Session-Based Fargate Manager
 - Session 완료 → S3 업로드 → 컨테이너 삭제
 """
 
+import os
 import boto3
 import json
 import time
@@ -13,23 +14,32 @@ import uuid
 import requests
 from typing import Dict, Any, Optional
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# ECS and ALB configuration from environment
+ECS_CLUSTER_NAME = os.getenv("ECS_CLUSTER_NAME", "my-fargate-cluster")
+ALB_DNS = os.getenv("ALB_DNS", "http://fargate-flask-alb-862273998.us-east-1.elb.amazonaws.com")
 
 class SessionBasedFargateManager:
     def __init__(self,
-                 cluster_name: str = "my-fargate-cluster",
+                 cluster_name: str = None,
                  task_definition: str = "fargate-dynamic-task",
                  alb_target_group_arn: str = "arn:aws:elasticloadbalancing:us-east-1:057716757052:targetgroup/fargate-flask-tg-default/0bcd6380352d5e78",
-                 alb_dns: str = "http://fargate-flask-alb-862273998.us-east-1.elb.amazonaws.com",
+                 alb_dns: str = None,
                  subnets: list = None,
                  security_groups: list = None,
                  region: str = "us-east-1"):
         """
         세션 기반 Fargate 관리자 초기화
         """
-        self.cluster_name = cluster_name
+        # Use environment variables as fallback
+        self.cluster_name = cluster_name or ECS_CLUSTER_NAME
         self.task_definition = task_definition
         self.alb_target_group_arn = alb_target_group_arn
-        self.alb_dns = alb_dns
+        self.alb_dns = alb_dns or ALB_DNS
         self.region = region
         self.subnets = subnets or ["subnet-46162921", "subnet-6b1d5f55"]
         self.security_groups = security_groups or ["sg-05d4ccf6d9cfde284"]

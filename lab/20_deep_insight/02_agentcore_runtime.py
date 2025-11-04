@@ -18,6 +18,9 @@ from src.graph.builder import build_graph
 # Load environment variables
 load_dotenv()
 
+# ECS Cluster configuration from environment
+ECS_CLUSTER_NAME = os.getenv("ECS_CLUSTER_NAME", "my-fargate-cluster")
+
 # Observability
 from opentelemetry import trace
 from opentelemetry import context as otel_context
@@ -71,7 +74,7 @@ def cleanup_fargate_session():
         try:
             result = subprocess.run([
                 'aws', 'ecs', 'list-tasks',
-                '--cluster', 'my-fargate-cluster',
+                '--cluster', ECS_CLUSTER_NAME,
                 '--query', 'taskArns[*]',
                 '--output', 'text'
             ], capture_output=True, text=True, timeout=30)
@@ -85,7 +88,7 @@ def cleanup_fargate_session():
                     for task_id in task_ids:
                         subprocess.run([
                             'aws', 'ecs', 'stop-task',
-                            '--cluster', 'my-fargate-cluster',
+                            '--cluster', ECS_CLUSTER_NAME,
                             '--task', task_id
                         ], capture_output=True, timeout=20)
                         print(f"   • Stopped task: {task_id[:12]}...", flush=True)

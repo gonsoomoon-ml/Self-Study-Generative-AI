@@ -24,6 +24,13 @@ import subprocess
 import atexit
 from datetime import datetime
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# ECS Cluster configuration from environment
+ECS_CLUSTER_NAME = os.getenv("ECS_CLUSTER_NAME", "my-fargate-cluster")
 
 # Third-party imports
 import boto3
@@ -709,7 +716,7 @@ class GlobalFargateSessionManager:
             try:
                 logger.info(f"🧹 Cleaning up orphaned container for request {self._current_request_id}: {current_task_arn.split('/')[-1][:12]}...")
                 ecs_client.stop_task(
-                    cluster='my-fargate-cluster',
+                    cluster=ECS_CLUSTER_NAME,
                     task=current_task_arn,
                     reason=f'Session creation failed - cleanup (request: {self._current_request_id})'
                 )
