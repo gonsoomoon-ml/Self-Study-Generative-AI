@@ -1,32 +1,55 @@
-# Environment files
+# Environment files (NEVER commit)
 .env
 .env.local
 .env.*.local
+*.env
+!.env.example
 .env.development
-.env.production
 
-# AWS credentials and configuration
+# AWS credentials
+.aws/
 credentials
 config
-.bedrock_agentcore.yaml
-test_vpc_config.json
 
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
 .Python
-env/
-venv/
-.venv/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Jupyter
-.ipynb_checkpoints/
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+uv.lock
+
+# Jupyter Notebook
+.ipynb_checkpoints
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
@@ -34,18 +57,22 @@ Thumbs.db
 
 # Logs
 *.log
+logs/
 
 # Temporary files
 temp/
 tmp/
+artifacts/
+
+# Runtime outputs
+.bedrock_agentcore/
 
 # Backup files
-backup/
+*.bak
 *.backup
 *~
 
-# Generated artifacts
-artifacts/
-*.pdf
-!production_deployment/docs/*.pdf
-assets/*.pdf
+# Test files
+.pytest_cache/
+.coverage
+htmlcov/

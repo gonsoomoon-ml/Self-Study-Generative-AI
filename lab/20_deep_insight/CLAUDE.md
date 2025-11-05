@@ -1,123 +1,107 @@
 # Claude Code 작업 일지
 
-> 📦 상세 히스토리: `CLAUDE.md.backup_20251105` 참조
-
----
-
-## 🔄 Development/Production Workflow
-
-**⚠️ IMPORTANT**: This environment is a **development account**.
-
-### Workflow Process
-1. **Development**: Code changes and testing are performed in this development account
-2. **Git Push**: Once tasks are completed, code is pushed to the git repository
-3. **Production Testing**: Code is deployed and tested in a **production account** (which Claude Code cannot access)
-4. **Error Feedback Loop**: If errors occur in production:
-   - User provides error messages from the production account
-   - Claude Code fixes the code in the development account
-   - Fixed code is pushed to git and re-tested in production
-
-This iterative process ensures that all code is properly tested before final production deployment.
+> 📦 상세 히스토리: `CLAUDE.md.backup_20251105_detailed` 참조
 
 ---
 
 ## 🎯 프로젝트 현황
 
-### ✅ Production Ready - VPC Runtime 완전 작동
+**상태**: ✅ **Production Ready** - VPC Runtime 완전 작동 (2025-11-04 검증)
 
-**현재 상태**: VPC Private 모드에서 Multi-Agent Workflow 완전 작동 확인 (2025-11-04)
+**개발 환경**: Development Account (057716757052, us-east-1)
+**배포 방식**: Dev → Git Push → Production Account → Feedback Loop
 
 ---
 
 ## 🚀 현재 배포 상태
 
-### Production VPC Runtime
+### VPC Runtime
+- **Runtime ID**: `deep_insight_runtime_vpc-c0LVReFA3o`
+- **Network Mode**: VPC (Test VPC: vpc-05975448296a22c21, 10.100.0.0/16)
+- **Status**: READY ✅
+- **검증 완료**: End-to-End 네트워크 플로우, Multi-Agent Workflow, PDF 보고서 생성
 
-**Runtime 정보**:
-- Runtime ID: `deep_insight_runtime_vpc-c0LVReFA3o`
-- Runtime ARN: `arn:aws:bedrock-agentcore:us-east-1:057716757052:runtime/deep_insight_runtime_vpc-c0LVReFA3o`
-- Network Mode: **VPC** (Test VPC: vpc-05975448296a22c21)
-- Status: **READY** ✅
-- 생성 시간: 2025-11-04 11:20:02 UTC
-
-**네트워크 구성**:
-- VPC CIDR: 10.100.0.0/16
-- Subnet: subnet-0b2fb367d6e823a79 (Private, use1-az2)
-- Security Group: sg-0affaea9ac4dc26b1
-- Internal ALB: test-vpc-private-alb
-- Target Group: test-vpc-private-tg
-
-**검증 완료**:
-- ✅ End-to-End 네트워크 플로우 (Mac → Bedrock → VPC → ALB → Fargate)
-- ✅ Fargate Container 정상 작동 (ECR image pull, Health check, Code execution)
-- ✅ Multi-Agent Workflow (Coder → Validator → Reporter)
-- ✅ S3 File Sync
-- ✅ PDF 보고서 생성
+### 주요 AWS 리소스
+```
+ECS Cluster:      my-fargate-cluster
+Task Definition:  fargate-dynamic-task:6
+Docker Image:     v19-fix-exec-exception
+VPC:              vpc-05975448296a22c21 (10.100.0.0/16)
+Subnet:           subnet-0b2fb367d6e823a79 (use1-az2)
+Security Groups:
+  - AgentCore:    sg-0affaea9ac4dc26b1
+  - ALB:          sg-061896ca7967f6183
+  - Fargate:      sg-0e1314a2421686c2c
+  - VPC Endpoint: sg-085cf66da6c4027d2
+S3 Bucket:        bedrock-logs-gonsoomoon
+```
 
 ---
 
-## 📊 주요 AWS 리소스
+## 🔧 주요 수정 사항 (2025-11-05)
 
-### ECS/Fargate
-- Cluster: `my-fargate-cluster`
-- Task Definition: `fargate-dynamic-task:6`
-- Docker Image: `057716757052.dkr.ecr.us-east-1.amazonaws.com/dynamic-executor:v19-fix-exec-exception`
+### 1. Fargate 네트워크 환경 변수 추가 ⭐
+**파일**: `production_deployment/scripts/phase3/deploy.sh:236-237`
+```bash
+FARGATE_SUBNET_IDS=${PRIVATE_SUBNET_1_ID},${PRIVATE_SUBNET_2_ID}
+FARGATE_SECURITY_GROUP_IDS=${SG_FARGATE_ID}
+```
 
-### VPC Infrastructure
-- Test VPC: `vpc-05975448296a22c21` (10.100.0.0/16)
-- NAT Gateway: `nat-084c84d8f7ab9ac5c`
-- VPC Endpoints: Bedrock AgentCore (2), ECR (2), CloudWatch Logs, S3
+### 2. Security Group 규칙 추가 ⭐
+**파일**: `production_deployment/cloudformation/phase1-infrastructure.yaml`
+- VPC Endpoint SG: HTTPS from VPC CIDR
+- AgentCore SG: All traffic from VPC Endpoint
+- AgentCore SG: HTTPS from Fargate SG
 
-### Security Groups
-- AgentCore: `sg-0affaea9ac4dc26b1`
-- ALB: `sg-061896ca7967f6183`
-- Fargate: `sg-0e1314a2421686c2c`
-- VPC Endpoint: `sg-085cf66da6c4027d2`
+### 3. IAM 권한 추가 ⭐
+**파일**: `production_deployment/cloudformation/phase1-infrastructure.yaml`
+```yaml
+# ECS 권한 (line 757)
+- ecs:DescribeTaskDefinition
 
-### S3
-- Bucket: `bedrock-logs-gonsoomoon`
+# CloudWatch Logs Delivery (lines 730-738)
+- logs:CreateDelivery, PutDeliverySource, PutDeliveryDestination
+- logs:GetDelivery, DescribeDeliveries, DeleteDelivery
+- logs:UpdateDeliveryConfiguration, DescribeDeliverySource, DescribeDeliveryDestination
+
+# Bedrock 권한 (lines 748, 823)
+- bedrock:AllowVendedLogDeliveryForResource
+```
+
+### 4. OTEL 환경 변수 추가 ✅
+**파일**: `.env.example`, `01_create_agentcore_runtime.py`
+- 6개 OTEL 변수로 per-invocation 로그 스트림 활성화
+
+### 5. 자동화 스크립트 생성 ✅
+**파일**: `production_deployment/scripts/setup_env.sh` (354줄)
+- CloudFormation Outputs에서 .env 자동 생성 (프로젝트 루트)
+- 35개 환경 변수 자동화
+
+### 6. 환경 파일 구조 정리 ✅
+**최종 구조**:
+```
+프로젝트 루트/
+├── .env              # 실제 환경 변수 (Git 제외)
+├── .env.example      # 템플릿 (Git 포함)
+└── production_deployment/scripts/setup_env.sh
+```
 
 ---
 
-## 🔧 최근 해결한 주요 문제
+## 🎯 Production 배포 단계
 
-### 1. 환경 변수 이름 불일치 (2025-11-05)
-**문제**: Production에서 Runtime 시작 실패 - `TARGET_GROUP_ARN` vs `ALB_TARGET_GROUP_ARN` 불일치
-**해결**: 모든 스크립트와 문서를 `ALB_TARGET_GROUP_ARN`으로 통일
-**영향**: Production Runtime 재생성 필요
+1. **Phase 1**: VPC, ALB, Security Groups, IAM (30-40분)
+   - CloudFormation: `phase1-infrastructure.yaml`
 
-### 2. Security Group 규칙 누락 (ECR 접근 불가)
-**문제**: Fargate가 ECR에서 Docker 이미지를 pull하지 못함
-**해결**: VPC Endpoint SG에 Fargate SG로부터의 HTTPS(443) 인바운드 규칙 추가
+2. **Phase 2**: ECR, Docker, ECS Cluster (15-20분)
+   - CloudFormation: `phase2-fargate.yaml`
+   - Three-Stage: ECR → Docker → Full Stack
 
-### 3. ALB Target Group VPC 불일치
-**문제**: Default VPC의 Target Group 사용 시 ValidationError
-**해결**: Test VPC용 Target Group으로 변경
-
-### 4. Retry 로직 개선
-**문제**: Non-retryable 에러도 재시도하여 시간 낭비
-**해결**: ValidationException 등은 즉시 실패, Throttling 등만 재시도
-
----
-
-## 🎯 다음 단계
-
-### Production 계정 배포
-1. **Phase 1**: VPC, ALB, Security Groups, VPC Endpoints, IAM Roles
-   - CloudFormation: `production_deployment/cloudformation/phase1-infrastructure.yaml`
-   - 예상 시간: 30-40분
-
-2. **Phase 2**: ECR, Docker Image, ECS Cluster, Task Definition
-   - CloudFormation: `production_deployment/cloudformation/phase2-fargate.yaml`
-   - Three-Stage 배포 (ECR → Docker → Full Stack)
-   - 예상 시간: 15-20분
-
-3. **Phase 3**: AgentCore Runtime VPC 모드 생성
+3. **Phase 3**: AgentCore Runtime (10-15분)
    - Script: `01_create_agentcore_runtime.py`
-   - 예상 시간: 10-15분
 
-4. **Phase 4**: 통합 테스트 및 검증
-   - 예상 시간: 10-30분
+4. **Phase 4**: 통합 테스트 (10-30분)
+   - Script: `03_invoke_agentcore_job_vpc.py`
 
 **총 예상 시간**: 65-105분 (약 1-2시간)
 
@@ -125,34 +109,49 @@ This iterative process ensures that all code is properly tested before final pro
 
 ## 📚 주요 문서
 
-### Production 배포 가이드
+**배포 가이드**:
 - `production_deployment/README.md` - 메인 가이드
 - `production_deployment/DEPLOYMENT_WORKFLOW.md` - 배포 워크플로우
-- `production_deployment/PHASE3_QUICKSTART.md` - Phase 3 배포 가이드
+- `production_deployment/PHASE3_QUICKSTART.md` - Phase 3 상세
 
-### 스크립트
-- `01_create_agentcore_runtime.py` - Runtime 생성/업데이트 (VPC 모드)
-- `02_agentcore_runtime.py` - Runtime 실행 (로컬 테스트)
-- `03_invoke_agentcore_job_vpc.py` - Runtime 호출 (VPC)
+**분석 보고서**:
+- `assets/VPC_Job_실행_네트워크_워크플로우_보고서.md` - VPC 네트워크 플로우
+- `CLAUDE.md.backup_20251105_detailed` - 상세 이슈 히스토리
 
-### 분석 보고서
-- `assets/VPC_Job_실행_네트워크_워크플로우_보고서.md` - VPC 네트워크 플로우 분석
-- `CLAUDE.md.backup_20251105` - 상세 작업 히스토리 (1469줄)
+**스크립트**:
+- `01_create_agentcore_runtime.py` - Runtime 생성/업데이트
+- `03_invoke_agentcore_job_vpc.py` - Runtime 호출 테스트
 
 ---
 
-## 💰 비용 고려
+## 🛠️ 빠른 트러블슈팅
 
-**Test VPC 월간 비용** (24/7 운영 시):
-- NAT Gateway: ~$32.40/월
-- VPC Endpoints (Interface 5개): ~$36.00/월
-- Fargate Task (실행 시): ~$0.04/시간
-- **총 ~$68/월**
+### Runtime 시작 실패
+- ✅ FARGATE_SUBNET_IDS, FARGATE_SECURITY_GROUP_IDS 환경 변수 확인
+- ✅ Security Group 규칙 확인 (VPC Endpoint → ECR 접근)
+- ✅ IAM 권한 확인 (ecs:DescribeTaskDefinition, logs:CreateDelivery)
 
-**권장**: 테스트 완료 후 미사용 리소스 정리 고려
+### ECR 접근 불가
+- ✅ VPC Endpoint SG: HTTPS from VPC CIDR 규칙 확인
+- ✅ NAT Gateway 상태 확인
+- ✅ Route Table 확인 (0.0.0.0/0 → NAT Gateway)
+
+### 로그 스트림 미생성
+- ✅ OTEL 환경 변수 확인 (6개)
+- ✅ CloudWatch Logs Delivery 권한 확인 (9개)
+- ✅ bedrock:AllowVendedLogDeliveryForResource 권한 확인
+
+---
+
+## 💰 비용
+
+**Test VPC 월간 비용** (24/7):
+- NAT Gateway: ~$32/월
+- VPC Endpoints: ~$36/월
+- **총**: ~$68/월
 
 ---
 
 **마지막 업데이트**: 2025-11-05
-**상태**: Production Ready - VPC Runtime 완전 작동 ✅
-**환경**: Development Account (AWS Account: 057716757052)
+**상태**: Production Ready ✅
+**환경**: Development Account (057716757052)

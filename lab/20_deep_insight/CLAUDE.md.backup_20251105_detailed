@@ -1,0 +1,299 @@
+# Claude Code 작업 일지
+
+> 📦 상세 히스토리: `CLAUDE.md.backup_20251105` 참조
+
+---
+
+## 🔄 Development/Production Workflow
+
+**⚠️ IMPORTANT**: This environment is a **development account**.
+
+### Workflow Process
+1. **Development**: Code changes and testing are performed in this development account
+2. **Git Push**: Once tasks are completed, code is pushed to the git repository
+3. **Production Testing**: Code is deployed and tested in a **production account** (which Claude Code cannot access)
+4. **Error Feedback Loop**: If errors occur in production:
+   - User provides error messages from the production account
+   - Claude Code fixes the code in the development account
+   - Fixed code is pushed to git and re-tested in production
+
+This iterative process ensures that all code is properly tested before final production deployment.
+
+---
+
+## 🎯 프로젝트 현황
+
+### ✅ Production Ready - VPC Runtime 완전 작동
+
+**현재 상태**: VPC Private 모드에서 Multi-Agent Workflow 완전 작동 확인 (2025-11-04)
+
+---
+
+## 🚀 현재 배포 상태
+
+### Production VPC Runtime
+
+**Runtime 정보**:
+- Runtime ID: `deep_insight_runtime_vpc-c0LVReFA3o`
+- Runtime ARN: `arn:aws:bedrock-agentcore:us-east-1:057716757052:runtime/deep_insight_runtime_vpc-c0LVReFA3o`
+- Network Mode: **VPC** (Test VPC: vpc-05975448296a22c21)
+- Status: **READY** ✅
+- 생성 시간: 2025-11-04 11:20:02 UTC
+
+**네트워크 구성**:
+- VPC CIDR: 10.100.0.0/16
+- Subnet: subnet-0b2fb367d6e823a79 (Private, use1-az2)
+- Security Group: sg-0affaea9ac4dc26b1
+- Internal ALB: test-vpc-private-alb
+- Target Group: test-vpc-private-tg
+
+**검증 완료**:
+- ✅ End-to-End 네트워크 플로우 (Mac → Bedrock → VPC → ALB → Fargate)
+- ✅ Fargate Container 정상 작동 (ECR image pull, Health check, Code execution)
+- ✅ Multi-Agent Workflow (Coder → Validator → Reporter)
+- ✅ S3 File Sync
+- ✅ PDF 보고서 생성
+
+---
+
+## 📊 주요 AWS 리소스
+
+### ECS/Fargate
+- Cluster: `my-fargate-cluster`
+- Task Definition: `fargate-dynamic-task:6`
+- Docker Image: `057716757052.dkr.ecr.us-east-1.amazonaws.com/dynamic-executor:v19-fix-exec-exception`
+
+### VPC Infrastructure
+- Test VPC: `vpc-05975448296a22c21` (10.100.0.0/16)
+- NAT Gateway: `nat-084c84d8f7ab9ac5c`
+- VPC Endpoints: Bedrock AgentCore (2), ECR (2), CloudWatch Logs, S3
+
+### Security Groups
+- AgentCore: `sg-0affaea9ac4dc26b1`
+- ALB: `sg-061896ca7967f6183`
+- Fargate: `sg-0e1314a2421686c2c`
+- VPC Endpoint: `sg-085cf66da6c4027d2`
+
+### S3
+- Bucket: `bedrock-logs-gonsoomoon`
+
+---
+
+## 🔧 최근 해결한 주요 문제
+
+### 1. Fargate 네트워크 환경 변수 누락 (2025-11-05) 🚨 Critical!
+**문제**: Runtime이 Fargate 컨테이너를 시작할 수 없음 - 네트워크 설정 누락
+**근본 원인**: Phase 3 배포 스크립트가 Runtime .env에 2개의 필수 변수를 추가하지 않음
+- `FARGATE_SUBNET_IDS` ❌
+- `FARGATE_SECURITY_GROUP_IDS` ❌
+
+**해결**: Phase 3 deploy.sh 수정 (scripts/phase3/deploy.sh:236-237)
+```bash
+FARGATE_SUBNET_IDS=${PRIVATE_SUBNET_1_ID},${PRIVATE_SUBNET_2_ID}
+FARGATE_SECURITY_GROUP_IDS=${SG_FARGATE_ID}
+```
+
+**추가 수정**:
+- REQUIRED_VARS에 PRIVATE_SUBNET_1_ID, PRIVATE_SUBNET_2_ID, SG_FARGATE_ID 추가
+- .bedrock_agentcore.yaml: 2개 subnet 모두 포함하도록 SUBNET_ARRAY 수정
+- .env.template, .env.example 업데이트 (PRIVATE_SUBNET_ID → PRIVATE_SUBNET_1_ID, PRIVATE_SUBNET_2_ID)
+
+**영향**: Production Runtime 재생성 필요
+
+### 2. Security Group 규칙 누락 (2025-11-05) ⭐ 중요!
+**문제**: Production에서 Runtime 시작 실패 - Fargate Container가 ECR 접근 불가
+**근본 원인**: Phase 1 CloudFormation 템플릿에 3개의 중요한 SG 규칙 누락
+- VPC Endpoint SG: HTTPS from VPC CIDR 누락 (가장 중요!)
+- AgentCore SG: All traffic from VPC Endpoint (기존 HTTPS만)
+- AgentCore SG: HTTPS from Fargate SG 누락
+
+**해결**: Phase 1 템플릿에 규칙 추가 (production_deployment/cloudformation/phase1-infrastructure.yaml)
+```yaml
+# 1. VPC Endpoint SG: HTTPS from VPC CIDR
+VPCESGIngressVPCCIDR:
+  CidrIp: !GetAtt VPC.CidrBlock  # VPC CIDR 전체 허용
+
+# 2. AgentCore SG: All from VPC Endpoint
+AgentCoreSGIngressVPCE:
+  IpProtocol: -1  # All traffic
+
+# 3. AgentCore SG: HTTPS from Fargate
+AgentCoreSGIngressFargate:
+  FromPort: 443, ToPort: 443
+  SourceSecurityGroupId: !Ref FargateSecurityGroup
+```
+
+**영향**: Production Stack Update 필요
+
+### 3. OpenTelemetry (OTEL) 환경 변수 추가 (2025-11-05) ✅
+**목적**: AgentCore Runtime에서 per-invocation 로그 스트림 활성화
+**추가된 변수** (production_deployment/.env.example):
+```bash
+OTEL_PYTHON_DISTRO=aws_distro
+OTEL_PYTHON_CONFIGURATOR=aws_configurator
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+OTEL_EXPORTER_OTLP_LOGS_HEADERS=x-aws-log-group=bedrock-agentcore-observability,x-aws-log-stream=custom-spans,x-aws-metric-namespace=AgentCore
+OTEL_RESOURCE_ATTRIBUTES=service.name=deep-insight-runtime
+AGENT_OBSERVABILITY_ENABLED=true
+```
+
+**수정된 파일**:
+- `production_deployment/.env.example`: OTEL 변수, Phase 2 변수 추가
+- `01_create_agentcore_runtime.py`: OTEL 변수 로드 및 Container에 전달 (lines 111-117, 292-304, 312-313)
+  - ✅ **프로젝트 루트 .env 로드** (line 83)
+- `03_invoke_agentcore_job_vpc.py`: ✅ **프로젝트 루트 .env 로드** (line 55)
+
+**효과**: CloudWatch Logs에서 Runtime의 per-invocation 로그 스트림 생성됨
+
+**자동화 스크립트 생성** (2025-11-05): ✅
+- `production_deployment/scripts/setup_env.sh`: CloudFormation Outputs에서 **.env를 프로젝트 루트에 자동 생성**
+  - Phase 1/2 Stack Outputs 자동 읽기
+  - OTEL 변수 자동 추가
+  - 기존 RUNTIME_ARN 보존
+  - 35개 환경 변수 완전 자동화
+  - ✅ **프로젝트 루트에 .env 생성** (not production_deployment/.env)
+- `production_deployment/README.md`: Environment Setup 섹션 추가 (5단계 + 상세 가이드)
+
+### 4. CloudWatch Logs Delivery 권한 누락 (2025-11-05) 🚨 Critical!
+**문제**: AgentCore Runtime의 per-invocation 로그 스트림이 생성되지 않음
+**근본 원인**: Task Execution Role에 CloudWatch Logs Delivery 권한 누락
+```
+현재 (기본 로깅만):
+- logs:CreateLogGroup
+- logs:CreateLogStream
+- logs:PutLogEvents
+
+누락된 권한:
+- ❌ logs:CreateDelivery
+- ❌ logs:PutDeliverySource
+- ❌ logs:PutDeliveryDestination
+- ❌ logs:GetDelivery
+- ❌ bedrock:AllowVendedLogDeliveryForResource
+```
+
+**해결**: Phase 1 템플릿 수정 (cloudformation/phase1-infrastructure.yaml)
+```yaml
+# CloudWatchLogsAccess (line 730-736):
+Action:
+  - logs:CreateLogGroup
+  - logs:CreateLogStream
+  - logs:PutLogEvents
+  - logs:CreateDelivery          # 추가!
+  - logs:PutDeliverySource       # 추가!
+  - logs:PutDeliveryDestination  # 추가!
+  - logs:GetDelivery             # 추가!
+  - logs:DescribeDeliveries      # 추가!
+
+# BedrockAccess (line 746, 821 - 2곳):
+Action:
+  - bedrock:InvokeModel
+  - bedrock:InvokeModelWithResponseStream
+  - bedrock:AllowVendedLogDeliveryForResource  # 추가!
+```
+
+**영향**: Production Stack Update 필요
+
+### 4. ECS DescribeTaskDefinition 권한 누락 (2025-11-05) 🚨
+**문제**: Runtime이 Fargate Task를 시작할 수 없음 - Task Definition 조회 권한 없음
+**근본 원인**: Task Execution Role의 ECSAccess 정책에 `ecs:DescribeTaskDefinition` 누락
+
+**해결**: Phase 1 템플릿 수정 (cloudformation/phase1-infrastructure.yaml:757)
+```yaml
+Action:
+  - ecs:RunTask
+  - ecs:DescribeTasks
+  - ecs:DescribeTaskDefinition  # 추가!
+```
+
+**영향**: Production Stack Update 필요
+
+### 5. 환경 변수 이름 불일치 (2025-11-05)
+**문제**: Production에서 Runtime 시작 실패 - `TARGET_GROUP_ARN` vs `ALB_TARGET_GROUP_ARN` 불일치
+**해결**: 모든 스크립트와 문서를 `ALB_TARGET_GROUP_ARN`으로 통일
+**영향**: Production Runtime 재생성 필요
+
+### 6. 환경 파일 구조 정리 (2025-11-05) ✅
+**문제**: 중복된 .env 파일들로 인한 혼란
+- `production_deployment/.env` (개발 전용, 혼란 야기)
+- `production_deployment/.env.template` (오래됨, OTEL 및 Phase 2 변수 누락)
+- `production_deployment/.env.example` (프로젝트 루트와 중복)
+
+**해결**:
+1. ✅ `.gitignore` 생성 (프로젝트 루트) - .env 파일 제외, .env.example 포함
+2. ✅ `production_deployment/.env` 삭제 (개발 전용 설정)
+3. ✅ `production_deployment/.env.template` 삭제 (오래된 템플릿)
+4. ✅ `production_deployment/.env.example` 삭제 (중복 제거)
+
+**최종 구조**:
+```
+프로젝트 루트/
+├── .env                    # 실제 환경 변수 (Git 제외)
+├── .env.example            # 템플릿 (Single source of truth, Git 포함)
+└── production_deployment/
+    └── scripts/
+        └── setup_env.sh    # 프로젝트 루트에 .env 자동 생성
+```
+
+**효과**:
+- Single source of truth for environment templates
+- 명확한 파일 위치 (프로젝트 루트 .env)
+- Git 관리 단순화
+
+---
+
+## 🎯 다음 단계
+
+### Production 계정 배포
+1. **Phase 1**: VPC, ALB, Security Groups, VPC Endpoints, IAM Roles
+   - CloudFormation: `production_deployment/cloudformation/phase1-infrastructure.yaml`
+   - 예상 시간: 30-40분
+
+2. **Phase 2**: ECR, Docker Image, ECS Cluster, Task Definition
+   - CloudFormation: `production_deployment/cloudformation/phase2-fargate.yaml`
+   - Three-Stage 배포 (ECR → Docker → Full Stack)
+   - 예상 시간: 15-20분
+
+3. **Phase 3**: AgentCore Runtime VPC 모드 생성
+   - Script: `01_create_agentcore_runtime.py`
+   - 예상 시간: 10-15분
+
+4. **Phase 4**: 통합 테스트 및 검증
+   - 예상 시간: 10-30분
+
+**총 예상 시간**: 65-105분 (약 1-2시간)
+
+---
+
+## 📚 주요 문서
+
+### Production 배포 가이드
+- `production_deployment/README.md` - 메인 가이드
+- `production_deployment/DEPLOYMENT_WORKFLOW.md` - 배포 워크플로우
+- `production_deployment/PHASE3_QUICKSTART.md` - Phase 3 배포 가이드
+
+### 스크립트
+- `01_create_agentcore_runtime.py` - Runtime 생성/업데이트 (VPC 모드)
+- `02_agentcore_runtime.py` - Runtime 실행 (로컬 테스트)
+- `03_invoke_agentcore_job_vpc.py` - Runtime 호출 (VPC)
+
+### 분석 보고서
+- `assets/VPC_Job_실행_네트워크_워크플로우_보고서.md` - VPC 네트워크 플로우 분석
+- `CLAUDE.md.backup_20251105` - 상세 작업 히스토리 (1469줄)
+
+---
+
+## 💰 비용 고려
+
+**Test VPC 월간 비용** (24/7 운영 시):
+- NAT Gateway: ~$32.40/월
+- VPC Endpoints (Interface 5개): ~$36.00/월
+- Fargate Task (실행 시): ~$0.04/시간
+- **총 ~$68/월**
+
+**권장**: 테스트 완료 후 미사용 리소스 정리 고려
+
+---
+
+**마지막 업데이트**: 2025-11-05
+**상태**: Production Ready - VPC Runtime 완전 작동 ✅
+**환경**: Development Account (AWS Account: 057716757052)

@@ -79,11 +79,12 @@ def main():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = current_dir
 
-    # production_deployment/.env 로드
-    env_file = os.path.join(current_dir, "production_deployment", ".env")
+    # Project root의 .env 로드
+    env_file = os.path.join(current_dir, ".env")
     if not os.path.exists(env_file):
         print_error(f".env 파일이 없습니다: {env_file}")
         print_warning("Phase 1, 2를 먼저 배포하세요")
+        print_warning("또는 ./production_deployment/scripts/setup_env.sh 실행")
         sys.exit(1)
 
     load_dotenv(env_file)
@@ -107,6 +108,14 @@ def main():
     FARGATE_SECURITY_GROUP_IDS = os.getenv("FARGATE_SECURITY_GROUP_IDS")
     FARGATE_ASSIGN_PUBLIC_IP = os.getenv("FARGATE_ASSIGN_PUBLIC_IP", "ENABLED")
     ALB_TARGET_GROUP_ARN = os.getenv("ALB_TARGET_GROUP_ARN")
+
+    # OpenTelemetry Configuration (for per-invocation log streams)
+    OTEL_PYTHON_DISTRO = os.getenv("OTEL_PYTHON_DISTRO")
+    OTEL_PYTHON_CONFIGURATOR = os.getenv("OTEL_PYTHON_CONFIGURATOR")
+    OTEL_EXPORTER_OTLP_PROTOCOL = os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL")
+    OTEL_EXPORTER_OTLP_LOGS_HEADERS = os.getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS")
+    OTEL_RESOURCE_ATTRIBUTES = os.getenv("OTEL_RESOURCE_ATTRIBUTES")
+    AGENT_OBSERVABILITY_ENABLED = os.getenv("AGENT_OBSERVABILITY_ENABLED")
 
     # 기존 Runtime 정보 (있으면 업데이트, 없으면 생성)
     EXISTING_RUNTIME_ARN = os.getenv("RUNTIME_ARN")
@@ -281,12 +290,28 @@ def main():
         if ALB_TARGET_GROUP_ARN:
             container_env_vars["ALB_TARGET_GROUP_ARN"] = ALB_TARGET_GROUP_ARN
 
+        # OpenTelemetry Configuration (for per-invocation log streams)
+        if OTEL_PYTHON_DISTRO:
+            container_env_vars["OTEL_PYTHON_DISTRO"] = OTEL_PYTHON_DISTRO
+        if OTEL_PYTHON_CONFIGURATOR:
+            container_env_vars["OTEL_PYTHON_CONFIGURATOR"] = OTEL_PYTHON_CONFIGURATOR
+        if OTEL_EXPORTER_OTLP_PROTOCOL:
+            container_env_vars["OTEL_EXPORTER_OTLP_PROTOCOL"] = OTEL_EXPORTER_OTLP_PROTOCOL
+        if OTEL_EXPORTER_OTLP_LOGS_HEADERS:
+            container_env_vars["OTEL_EXPORTER_OTLP_LOGS_HEADERS"] = OTEL_EXPORTER_OTLP_LOGS_HEADERS
+        if OTEL_RESOURCE_ATTRIBUTES:
+            container_env_vars["OTEL_RESOURCE_ATTRIBUTES"] = OTEL_RESOURCE_ATTRIBUTES
+        if AGENT_OBSERVABILITY_ENABLED:
+            container_env_vars["AGENT_OBSERVABILITY_ENABLED"] = AGENT_OBSERVABILITY_ENABLED
+
         # launch()는 agent_name 파라미터를 받지 않음 (configure()에서 이미 설정함)
         # env_vars 파라미터로 Container 환경 변수 전달
         launch_kwargs = {}
         if container_env_vars:
             launch_kwargs["env_vars"] = container_env_vars
             print_info(f"Container에 {len(container_env_vars)}개 환경 변수 전달")
+            if AGENT_OBSERVABILITY_ENABLED:
+                print_info("  [OTEL] Observability: ENABLED ✅")
 
         launch_response = agentcore_runtime.launch(**launch_kwargs)
 

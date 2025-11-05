@@ -52,10 +52,11 @@ from src.utils.strands_sdk_utils import strands_utils
 # ============================================================
 
 # production_deployment/.env 로드
-env_file = os.path.join(current_dir, "production_deployment", ".env")
+env_file = os.path.join(current_dir, ".env")
 if not os.path.exists(env_file):
     print(f"{RED}❌ .env 파일이 없습니다: {env_file}{NC}")
     print(f"{YELLOW}⚠️  Phase 1, 2, 3를 먼저 배포하세요{NC}")
+    print(f"{YELLOW}⚠️  또는 ./production_deployment/scripts/setup_env.sh 실행{NC}")
     sys.exit(1)
 
 load_dotenv(env_file)

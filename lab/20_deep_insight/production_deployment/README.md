@@ -128,6 +128,123 @@ Passed:        15
 ✓ All checks passed!
 ```
 
+### 5단계: 환경 설정 (1분) - 선택사항
+
+CloudFormation 배포 후, **프로젝트 루트**에 `.env` 파일을 자동으로 생성할 수 있습니다:
+
+```bash
+# 자동 생성 (권장) - 프로젝트 루트에 .env 생성
+cd production_deployment/scripts
+./setup_env.sh prod
+```
+
+**수동 설정**:
+```bash
+# 프로젝트 루트로 이동
+cd /path/to/05_insight_extractor_strands_sdk_workshop_phase_2
+
+# 템플릿 복사
+cp production_deployment/.env.example .env
+
+# .env 파일 편집 (CloudFormation outputs 값 입력)
+vi .env
+```
+
+**주요 환경 변수**:
+- `OTEL_*`: OpenTelemetry 설정 (per-invocation 로그 스트림)
+- `AWS_REGION`, `AWS_ACCOUNT_ID`: AWS 계정 정보
+- `VPC_ID`, `PRIVATE_SUBNET_*_ID`: Phase 1 네트워크 리소스
+- `ECS_CLUSTER_NAME`, `ECR_REPOSITORY_URI`: Phase 2 Fargate 리소스
+- `FARGATE_SUBNET_IDS`, `FARGATE_SECURITY_GROUP_IDS`: Fargate 네트워크 설정
+- `RUNTIME_ARN`: Phase 3에서 생성됨
+
+---
+
+## 🔧 Environment Setup
+
+### Quick Start (Automated)
+
+`setup_env.sh` 스크립트는 CloudFormation Stack Outputs에서 자동으로 `.env` 파일을 생성합니다:
+
+```bash
+cd production_deployment/scripts
+./setup_env.sh prod
+```
+
+**스크립트 기능**:
+- ✅ AWS 계정 ID 및 리전 자동 감지
+- ✅ Phase 1 CloudFormation Stack Outputs 읽기 (15개 변수)
+- ✅ Phase 2 CloudFormation Stack Outputs 읽기 (7개 변수, 배포된 경우)
+- ✅ OTEL 설정 자동 추가 (6개 변수)
+- ✅ 기존 `RUNTIME_ARN` 보존 (이미 생성된 경우)
+- ✅ `.env` 파일을 **프로젝트 루트**에 생성
+
+**Expected Output**:
+```
+============================================
+Environment Setup - Auto-generate .env
+Environment: prod
+============================================
+
+✓ Detected AWS Account: 738490718699
+✓ Detected AWS Region: us-east-1
+✓ Phase 1 stack status: CREATE_COMPLETE
+✓ Phase 2 stack status: CREATE_COMPLETE
+✓ Reading Phase 1 CloudFormation outputs...
+✓ Phase 1: 15 variables
+✓ Reading Phase 2 CloudFormation outputs...
+✓ Phase 2: 7 variables
+✓ Generated .env at: /path/to/project-root/.env
+
+============================================
+Summary
+============================================
+✓ Total variables: 35
+  - OTEL: 6 variables
+  - AWS Config: 4 variables
+  - Phase 1: 15 variables
+  - Phase 2: 7 variables
+  - S3 Bucket: 1 variable
+  - Runtime: 3 variables (empty, to be populated)
+
+✓ Environment setup complete!
+
+Next steps:
+  1. Deploy Phase 3: cd production_deployment && python 01_create_agentcore_runtime.py
+  2. Test Runtime: cd production_deployment && python 03_invoke_agentcore_job_vpc.py
+```
+
+### Manual Setup
+
+`.env.example` 템플릿을 복사하여 수동으로 설정할 수도 있습니다:
+
+```bash
+cp .env.example .env
+vi .env
+```
+
+**필수 값 확인** (CloudFormation Outputs에서):
+```bash
+# Phase 1 Outputs 확인
+aws cloudformation describe-stacks \
+  --stack-name deep-insight-infrastructure-prod \
+  --query 'Stacks[0].Outputs' \
+  --output json
+
+# Phase 2 Outputs 확인
+aws cloudformation describe-stacks \
+  --stack-name deep-insight-fargate-prod \
+  --query 'Stacks[0].Outputs' \
+  --output json
+```
+
+**주요 섹션**:
+1. **OTEL Configuration** (6 variables): Per-invocation 로그 스트림 활성화
+2. **AWS Configuration** (4 variables): 계정 ID, 리전, Bedrock 모델
+3. **Phase 1 Infrastructure** (15 variables): VPC, Subnets, Security Groups, ALB, IAM Roles
+4. **Phase 2 Fargate Runtime** (7 variables): ECR, ECS Cluster, Task Definition
+5. **Phase 3 Runtime** (3 variables): Runtime ARN (배포 후 자동 입력)
+
 ---
 
 ## 📖 상세 가이드

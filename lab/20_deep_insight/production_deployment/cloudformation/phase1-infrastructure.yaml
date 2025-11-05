@@ -306,11 +306,19 @@ Resources:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       GroupId: !Ref AgentCoreSecurityGroup
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref VPCEndpointSecurityGroup
+      Description: Allow all traffic from VPC Endpoints
+
+  AgentCoreSGIngressFargate:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref AgentCoreSecurityGroup
       IpProtocol: tcp
       FromPort: 443
       ToPort: 443
-      SourceSecurityGroupId: !Ref VPCEndpointSecurityGroup
-      Description: Allow HTTPS from VPC Endpoints
+      SourceSecurityGroupId: !Ref FargateSecurityGroup
+      Description: Allow HTTPS from Fargate
 
   # AgentCore SG Egress rules
   AgentCoreSGEgressALB:
@@ -439,6 +447,16 @@ Resources:
       Description: Allow all outbound
 
   # VPC Endpoint SG Ingress rules
+  VPCESGIngressVPCCIDR:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref VPCEndpointSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !GetAtt VPC.CidrBlock
+      Description: Allow HTTPS from VPC CIDR (for Fargate ECR access)
+
   VPCESGIngressAgentCore:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
@@ -709,6 +727,15 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
+                  - logs:CreateDelivery
+                  - logs:PutDeliverySource
+                  - logs:PutDeliveryDestination
+                  - logs:GetDelivery
+                  - logs:DescribeDeliveries
+                  - logs:DescribeDeliverySource
+                  - logs:DescribeDeliveryDestination
+                  - logs:DeleteDelivery
+                  - logs:UpdateDeliveryConfiguration
                 Resource: '*'
         - PolicyName: BedrockAccess
           PolicyDocument:
@@ -718,6 +745,7 @@ Resources:
                 Action:
                   - bedrock:InvokeModel
                   - bedrock:InvokeModelWithResponseStream
+                  - bedrock:AllowVendedLogDeliveryForResource
                 Resource: '*'
         - PolicyName: XRayAccess
           PolicyDocument:
@@ -727,6 +755,29 @@ Resources:
                 Action:
                   - xray:PutTraceSegments
                   - xray:PutTelemetryRecords
+                Resource: '*'
+        - PolicyName: ECSAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:RunTask
+                  - ecs:DescribeTasks
+                  - ecs:DescribeTaskDefinition
+                  - ecs:ListTasks
+                  - ecs:StopTask
+                  - iam:PassRole
+                Resource: '*'
+        - PolicyName: ELBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - elasticloadbalancing:RegisterTargets
+                  - elasticloadbalancing:DeregisterTargets
+                  - elasticloadbalancing:DescribeTargetHealth
                 Resource: '*'
       Tags:
         - Key: Name
@@ -769,6 +820,7 @@ Resources:
                 Action:
                   - bedrock:InvokeModel
                   - bedrock:InvokeModelWithResponseStream
+                  - bedrock:AllowVendedLogDeliveryForResource
                 Resource: '*'
       Tags:
         - Key: Name

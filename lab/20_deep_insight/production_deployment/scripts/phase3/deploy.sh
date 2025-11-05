@@ -58,8 +58,10 @@ REQUIRED_VARS=(
     "AWS_REGION"
     "AWS_ACCOUNT_ID"
     "VPC_ID"
-    "PRIVATE_SUBNET_ID"
+    "PRIVATE_SUBNET_1_ID"
+    "PRIVATE_SUBNET_2_ID"
     "SG_AGENTCORE_ID"
+    "SG_FARGATE_ID"
     "ALB_DNS"
     "ALB_TARGET_GROUP_ARN"
     "ECS_CLUSTER_NAME"
@@ -161,8 +163,9 @@ echo ""
 
 echo -e "${YELLOW}[3/7] .bedrock_agentcore.yaml 생성...${NC}"
 
-# Subnets 배열 형식으로 변환 (comma separated → yaml list)
-SUBNET_ARRAY="          - ${PRIVATE_SUBNET_ID}"
+# Subnets 배열 형식으로 변환 (yaml list)
+SUBNET_ARRAY="          - ${PRIVATE_SUBNET_1_ID}
+          - ${PRIVATE_SUBNET_2_ID}"
 
 # Runtime 이름 생성 (타임스탬프 포함)
 TIMESTAMP=$(date +%s)
@@ -170,7 +173,7 @@ RUNTIME_NAME="bedrock_manus_runtime_${ENVIRONMENT}_${TIMESTAMP}"
 
 echo "  - Runtime Name: $RUNTIME_NAME"
 echo "  - VPC ID: $VPC_ID"
-echo "  - Subnet: $PRIVATE_SUBNET_ID"
+echo "  - Subnets: $PRIVATE_SUBNET_1_ID, $PRIVATE_SUBNET_2_ID"
 echo "  - Security Group: $SG_AGENTCORE_ID"
 
 # .bedrock_agentcore.yaml 생성
@@ -233,6 +236,8 @@ S3_BUCKET_NAME=${S3_BUCKET_NAME}
 FARGATE_CLUSTER_NAME=${ECS_CLUSTER_NAME}
 INTERNAL_ALB_DNS=${ALB_DNS}
 ALB_TARGET_GROUP_ARN=${ALB_TARGET_GROUP_ARN}
+FARGATE_SUBNET_IDS=${PRIVATE_SUBNET_1_ID},${PRIVATE_SUBNET_2_ID}
+FARGATE_SECURITY_GROUP_IDS=${SG_FARGATE_ID}
 
 # Observability
 AGENT_OBSERVABILITY_ENABLED=true
