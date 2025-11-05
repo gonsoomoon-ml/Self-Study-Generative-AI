@@ -106,7 +106,7 @@ def main():
     # Fargate Task Network Configuration (Test VPC)
     FARGATE_SUBNET_IDS = os.getenv("FARGATE_SUBNET_IDS")
     FARGATE_SECURITY_GROUP_IDS = os.getenv("FARGATE_SECURITY_GROUP_IDS")
-    FARGATE_ASSIGN_PUBLIC_IP = os.getenv("FARGATE_ASSIGN_PUBLIC_IP", "ENABLED")
+    FARGATE_ASSIGN_PUBLIC_IP = os.getenv("FARGATE_ASSIGN_PUBLIC_IP", "DISABLED")  # DISABLED for Private Subnets
     ALB_TARGET_GROUP_ARN = os.getenv("ALB_TARGET_GROUP_ARN")
 
     # OpenTelemetry Configuration (for per-invocation log streams)

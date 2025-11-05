@@ -128,9 +128,11 @@ Passed:        15
 ✓ All checks passed!
 ```
 
-### 5단계: 환경 설정 (1분) - 선택사항
+### 5단계: 환경 설정 (1분) - **Phase 3 전에 필수**
 
-CloudFormation 배포 후, **프로젝트 루트**에 `.env` 파일을 자동으로 생성할 수 있습니다:
+CloudFormation 배포 후, **Phase 3 Runtime 생성 전에** 프로젝트 루트에 `.env` 파일을 생성해야 합니다:
+
+> ⚠️ **중요**: `01_create_agentcore_runtime.py`는 이 .env 파일에서 VPC, Subnet, Security Group 등의 정보를 읽습니다.
 
 ```bash
 # 자동 생성 (권장) - 프로젝트 루트에 .env 생성
@@ -143,8 +145,8 @@ cd production_deployment/scripts
 # 프로젝트 루트로 이동
 cd /path/to/05_insight_extractor_strands_sdk_workshop_phase_2
 
-# 템플릿 복사
-cp production_deployment/.env.example .env
+# 템플릿 복사 (프로젝트 루트의 .env.example 사용)
+cp .env.example .env
 
 # .env 파일 편집 (CloudFormation outputs 값 입력)
 vi .env
@@ -161,6 +163,8 @@ vi .env
 ---
 
 ## 🔧 Environment Setup
+
+> ⚠️ **Phase 3 전에 반드시 실행**: Runtime 생성 스크립트가 이 파일에서 환경 변수를 읽습니다.
 
 ### Quick Start (Automated)
 
@@ -315,16 +319,20 @@ aws cloudformation describe-stacks \
 # 1. 프로젝트로 이동
 cd /path/to/05_insight_extractor_strands_sdk_workshop_phase_2
 
-# 2. uv 환경 설정
+# 2. .env 파일 생성 (Phase 1/2 CloudFormation Outputs에서 자동 생성)
+cd production_deployment/scripts
+./setup_env.sh prod  # 35개 환경 변수 자동 생성 (프로젝트 루트에 .env 생성)
+
+# 3. 환경 변수 확인
+cd ../..
+cat .env  # VPC_ID, SUBNET_IDs, Security Group IDs 등 확인
+
+# 4. uv 환경 설정
 cd setup
 uv sync
 ./patch_dockerignore_template.sh  # coordinator.md 포함 (필수!)
 
-# 3. .env 파일 확인 (Phase 1/2에서 자동 생성됨)
-cd ../production_deployment
-cat .env  # VPC_ID, SUBNET_ID 등 Phase 1/2 출력값 확인
-
-# 4. Runtime 배포
+# 5. Runtime 배포
 cd ..
 python3 01_create_agentcore_runtime.py
 ```

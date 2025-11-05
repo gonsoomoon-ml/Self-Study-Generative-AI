@@ -126,15 +126,13 @@ SG_AGENTCORE_ID=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="Agen
 SG_ALB_ID=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="ALBSecurityGroupId") | .OutputValue')
 SG_FARGATE_ID=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="FargateSecurityGroupId") | .OutputValue')
 SG_VPCE_ID=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="VPCEndpointSecurityGroupId") | .OutputValue')
-ALB_ARN=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="LoadBalancerArn") | .OutputValue')
-ALB_DNS=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="LoadBalancerDNS") | .OutputValue')
+ALB_ARN=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="ApplicationLoadBalancerArn") | .OutputValue')
+ALB_DNS=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="ApplicationLoadBalancerDNS") | .OutputValue')
 ALB_TARGET_GROUP_ARN=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="TargetGroupArn") | .OutputValue')
 TASK_EXECUTION_ROLE_ARN=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="TaskExecutionRoleArn") | .OutputValue')
 TASK_ROLE_ARN=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="TaskRoleArn") | .OutputValue')
-VPCE_DATA_PLANE=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="VPCEndpointDataPlaneId") | .OutputValue')
-VPCE_GATEWAY=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="VPCEndpointGatewayId") | .OutputValue')
 
-PHASE1_COUNT=15
+PHASE1_COUNT=13
 echo -e "${GREEN}✓${NC} Phase 1: $PHASE1_COUNT variables"
 
 # Read Phase 2 outputs (if deployed)
@@ -209,9 +207,6 @@ ALB_TARGET_GROUP_ARN=$ALB_TARGET_GROUP_ARN
 TASK_EXECUTION_ROLE_ARN=$TASK_EXECUTION_ROLE_ARN
 TASK_ROLE_ARN=$TASK_ROLE_ARN
 
-VPCE_DATA_PLANE=$VPCE_DATA_PLANE
-VPCE_GATEWAY=$VPCE_GATEWAY
-
 EOF
 
 # Add Phase 2 variables if deployed
@@ -231,6 +226,7 @@ LOG_GROUP_NAME=$LOG_GROUP_NAME
 # Fargate Network Configuration (for Runtime to launch containers)
 FARGATE_SUBNET_IDS=$PRIVATE_SUBNET_1_ID,$PRIVATE_SUBNET_2_ID
 FARGATE_SECURITY_GROUP_IDS=$SG_FARGATE_ID
+FARGATE_ASSIGN_PUBLIC_IP=DISABLED
 
 EOF
 else
