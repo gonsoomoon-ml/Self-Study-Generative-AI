@@ -148,7 +148,6 @@ Thumbs.db
 .aws/
 
 # Data files
-*.csv
 *.json
 *.db
 *.sqlite

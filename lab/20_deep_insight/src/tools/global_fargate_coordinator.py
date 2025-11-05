@@ -26,15 +26,18 @@ from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (don't override Runtime env vars)
+load_dotenv(override=False)
 
-# ECS Cluster configuration from environment
-ECS_CLUSTER_NAME = os.getenv("ECS_CLUSTER_NAME", "my-fargate-cluster")
+# ECS and ALB configuration from environment
+# These must be provided via environment variables (no hardcoded defaults)
+ECS_CLUSTER_NAME = os.getenv("ECS_CLUSTER_NAME")
+ALB_TARGET_GROUP_ARN = os.getenv("ALB_TARGET_GROUP_ARN")
 
 # Third-party imports
 import boto3
 import requests
+from botocore.exceptions import ClientError
 
 # Local imports
 from src.tools.fargate_container_controller import SessionBasedFargateManager
@@ -382,7 +385,49 @@ class GlobalFargateSessionManager:
                 self._retry_count = 0
                 return True
 
+            except ClientError as create_error:
+                error_code = create_error.response['Error']['Code']
+                error_message = create_error.response['Error']['Message']
+                logger.error(f"❌ Session creation failed (attempt {attempt}/{self._max_session_failures}): [{error_code}] {error_message}")
+
+                # 세션 생성 자체가 실패한 경우만 cleanup
+                if self._current_request_id in self._sessions:
+                    del self._sessions[self._current_request_id]
+                self._cleanup_orphaned_containers()
+
+                # ❌ Configuration errors - FAIL FAST (don't retry)
+                NON_RETRYABLE_ERRORS = [
+                    'ValidationException',  # Invalid parameters (e.g., wrong VPC, subnet, etc.)
+                    'InvalidParameterException',  # Invalid parameters
+                    'AccessDeniedException',  # IAM permission issues
+                    'ResourceNotFoundException',  # Resource not found
+                    'UnauthorizedException',  # Auth issues
+                ]
+
+                if error_code in NON_RETRYABLE_ERRORS:
+                    logger.error(f"❌ FATAL: Non-retryable configuration error detected: {error_code}")
+                    logger.error(f"   Error: {error_message}")
+                    logger.error(f"   Fix the configuration and try again. Not retrying.")
+                    failure_count = self._session_creation_failures.get(self._current_request_id, 0)
+                    self._session_creation_failures[self._current_request_id] = failure_count + 1
+                    raise
+
+                # ✅ Transient errors - retry with exponential backoff
+                # (e.g., ThrottlingException, ServiceUnavailable, etc.)
+                if attempt < self._max_session_failures:
+                    wait_time = 3 ** attempt  # 3, 9, 27, 81초
+                    logger.warning(f"⏳ Transient error - waiting {wait_time}s before retry (exponential backoff: 3^{attempt})...")
+                    time.sleep(wait_time)
+                else:
+                    # 마지막 시도 실패 - 실패 카운터 증가 후 에러 발생
+                    failure_count = self._session_creation_failures.get(self._current_request_id, 0)
+                    self._session_creation_failures[self._current_request_id] = failure_count + 1
+                    logger.error(f"❌ FATAL: Session creation failed {self._max_session_failures} times for request {self._current_request_id}")
+                    logger.error(f"   Total backoff time: {3 + 9 + 27 + 81} seconds")
+                    raise
+
             except Exception as create_error:
+                # Handle non-AWS exceptions (e.g., network errors, Python exceptions)
                 logger.error(f"❌ Session creation failed (attempt {attempt}/{self._max_session_failures}): {create_error}")
 
                 # 세션 생성 자체가 실패한 경우만 cleanup
@@ -390,7 +435,7 @@ class GlobalFargateSessionManager:
                     del self._sessions[self._current_request_id]
                 self._cleanup_orphaned_containers()
 
-                # 마지막 시도가 아니면 Exponential Backoff 적용 (3^n초)
+                # Retry non-AWS exceptions
                 if attempt < self._max_session_failures:
                     wait_time = 3 ** attempt  # 3, 9, 27, 81초
                     logger.warning(f"⏳ Waiting {wait_time}s before retry (exponential backoff: 3^{attempt})...")
@@ -465,10 +510,11 @@ class GlobalFargateSessionManager:
             'healthy', 'unhealthy', 'initial', 'draining', 'unused', 'not_registered', 'unknown'
         """
         try:
-            elbv2_client = boto3.client('elbv2', region_name='us-east-1')
-            target_group_arn = 'arn:aws:elasticloadbalancing:us-east-1:057716757052:targetgroup/fargate-flask-tg-default/0bcd6380352d5e78'
+            if not ALB_TARGET_GROUP_ARN:
+                raise ValueError("ALB_TARGET_GROUP_ARN environment variable is required")
 
-            response = elbv2_client.describe_target_health(TargetGroupArn=target_group_arn)
+            elbv2_client = boto3.client('elbv2', region_name='us-east-1')
+            response = elbv2_client.describe_target_health(TargetGroupArn=ALB_TARGET_GROUP_ARN)
 
             for target_health in response.get('TargetHealthDescriptions', []):
                 if target_health['Target']['Id'] == target_ip:

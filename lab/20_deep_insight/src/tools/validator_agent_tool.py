@@ -17,7 +17,8 @@ from strands_tools import file_read
 from dotenv import load_dotenv
 from opentelemetry import trace
 from src.utils.agentcore_observability import add_span_event
-load_dotenv()
+# Load environment variables (don't override Runtime env vars)
+load_dotenv(override=False)
 
 # Simple logger setup
 logger = logging.getLogger(__name__)

@@ -16,18 +16,26 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (don't override Runtime env vars)
+load_dotenv(override=False)
 
 # ECS and ALB configuration from environment
-ECS_CLUSTER_NAME = os.getenv("ECS_CLUSTER_NAME", "my-fargate-cluster")
-ALB_DNS = os.getenv("ALB_DNS", "http://fargate-flask-alb-862273998.us-east-1.elb.amazonaws.com")
+# These must be provided via environment variables (no hardcoded defaults)
+ECS_CLUSTER_NAME = os.getenv("ECS_CLUSTER_NAME")
+ALB_DNS = os.getenv("ALB_DNS")
+ALB_TARGET_GROUP_ARN = os.getenv("ALB_TARGET_GROUP_ARN")
+
+# Fargate Task Network Configuration (VPC)
+# These must be provided via environment variables (no hardcoded defaults)
+FARGATE_SUBNET_IDS = os.getenv("FARGATE_SUBNET_IDS")
+FARGATE_SECURITY_GROUP_IDS = os.getenv("FARGATE_SECURITY_GROUP_IDS")
+FARGATE_ASSIGN_PUBLIC_IP = os.getenv("FARGATE_ASSIGN_PUBLIC_IP", "DISABLED")  # Default to DISABLED for security
 
 class SessionBasedFargateManager:
     def __init__(self,
                  cluster_name: str = None,
                  task_definition: str = "fargate-dynamic-task",
-                 alb_target_group_arn: str = "arn:aws:elasticloadbalancing:us-east-1:057716757052:targetgroup/fargate-flask-tg-default/0bcd6380352d5e78",
+                 alb_target_group_arn: str = None,
                  alb_dns: str = None,
                  subnets: list = None,
                  security_groups: list = None,
@@ -38,11 +46,34 @@ class SessionBasedFargateManager:
         # Use environment variables as fallback
         self.cluster_name = cluster_name or ECS_CLUSTER_NAME
         self.task_definition = task_definition
-        self.alb_target_group_arn = alb_target_group_arn
+        self.alb_target_group_arn = alb_target_group_arn or ALB_TARGET_GROUP_ARN
         self.alb_dns = alb_dns or ALB_DNS
         self.region = region
-        self.subnets = subnets or ["subnet-46162921", "subnet-6b1d5f55"]
-        self.security_groups = security_groups or ["sg-05d4ccf6d9cfde284"]
+
+        # Validate required environment variables
+        if not self.cluster_name:
+            raise ValueError("ECS_CLUSTER_NAME environment variable is required")
+        if not self.alb_dns:
+            raise ValueError("ALB_DNS environment variable is required")
+        if not self.alb_target_group_arn:
+            raise ValueError("ALB_TARGET_GROUP_ARN environment variable is required")
+
+        # Parse subnet and security group IDs from environment variables (comma-separated)
+        if subnets:
+            self.subnets = subnets
+        elif FARGATE_SUBNET_IDS:
+            self.subnets = [s.strip() for s in FARGATE_SUBNET_IDS.split(",")]
+        else:
+            raise ValueError("FARGATE_SUBNET_IDS environment variable is required")
+
+        if security_groups:
+            self.security_groups = security_groups
+        elif FARGATE_SECURITY_GROUP_IDS:
+            self.security_groups = [sg.strip() for sg in FARGATE_SECURITY_GROUP_IDS.split(",")]
+        else:
+            raise ValueError("FARGATE_SECURITY_GROUP_IDS environment variable is required")
+
+        self.assign_public_ip = FARGATE_ASSIGN_PUBLIC_IP or "DISABLED"
 
         # AWS 클라이언트
         self.ecs_client = boto3.client('ecs', region_name=region)
@@ -158,7 +189,7 @@ class SessionBasedFargateManager:
                 'awsvpcConfiguration': {
                     'subnets': self.subnets,
                     'securityGroups': self.security_groups,
-                    'assignPublicIp': 'ENABLED'
+                    'assignPublicIp': self.assign_public_ip
                 }
             },
             overrides={

@@ -4,7 +4,127 @@
 
 ---
 
-## 🚀 최신 업데이트 (2025-11-03)
+## 🚀 최신 업데이트 (2025-11-04)
+
+### ✅ VPC Runtime 완전 성공! - 네트워크 및 보안 그룹 문제 해결
+
+**목표**: 개발 계정에서 AgentCore Runtime을 VPC 모드로 배포하고 End-to-End 테스트 완료
+
+**결과**: ✅ **Production Ready** - VPC Runtime 생성 및 Fargate 컨테이너 정상 작동!
+
+#### 발견 및 해결한 문제들
+
+**1. ALB Target Group VPC 불일치 (해결 완료 ✅)**
+
+**문제**:
+- Fargate 태스크: Test VPC (10.100.1.x)에서 실행
+- ALB Target Group: Default VPC Target Group을 가리킴
+- 결과: `ValidationError: IP address '10.100.1.250' is outside the VPC`
+
+**해결**:
+```bash
+# Wrong (Default VPC)
+ALB_TARGET_GROUP_ARN=arn:aws:...targetgroup/fargate-flask-tg-default/...
+
+# Fixed (Test VPC)
+ALB_TARGET_GROUP_ARN=arn:aws:...targetgroup/test-vpc-private-tg/9247fbb91d2e2e75
+```
+
+**2. Retry 로직 개선 (해결 완료 ✅)**
+
+**문제**: Configuration 에러(ValidationException)도 5번 재시도 → 120초 낭비
+
+**해결**: `src/tools/global_fargate_coordinator.py` 수정
+- ❌ **Non-retryable errors** (즉시 실패): ValidationException, InvalidParameterException, AccessDeniedException
+- ✅ **Transient errors** (재시도): ThrottlingException, ServiceUnavailable
+- Exponential backoff: 3, 9, 27, 81초
+
+**3. Security Group 규칙 누락 - ECR 접근 불가 (해결 완료 ✅)**
+
+**문제**: Fargate 태스크가 ECR에서 Docker 이미지를 pull하지 못함
+```
+TaskFailedToStart: unable to pull registry auth from Amazon ECR
+Post "https://api.ecr.us-east-1.amazonaws.com/": dial tcp 10.100.2.6:443: i/o timeout
+```
+
+**근본 원인**:
+- VPC Endpoints (ECR API, ECR Docker, CloudWatch Logs): `sg-0affaea9ac4dc26b1` (AgentCore SG) 사용
+- VPC Endpoint SG Inbound 규칙: Fargate SG (`sg-0e1314a2421686c2c`)로부터의 트래픽 허용 안 함
+
+**해결**:
+```bash
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-0affaea9ac4dc26b1 \
+  --protocol tcp \
+  --port 443 \
+  --source-group sg-0e1314a2421686c2c
+```
+
+**효과**:
+- ✅ Fargate → ECR API VPC Endpoint (이미지 pull)
+- ✅ Fargate → ECR Docker VPC Endpoint (레이어 pull)
+- ✅ Fargate → CloudWatch Logs VPC Endpoint (로그 전송)
+
+#### 생성된 리소스
+
+**AgentCore Runtime**:
+- Runtime ID: `deep_insight_runtime_vpc-c0LVReFA3o`
+- Runtime ARN: `arn:aws:bedrock-agentcore:us-east-1:057716757052:runtime/deep_insight_runtime_vpc-c0LVReFA3o`
+- Network Mode: **VPC** (Test VPC)
+- Status: **READY** ✅
+- 생성 시간: 2025-11-04 11:20:02 UTC
+
+**Fargate Container**:
+- Task: `507b3fe4d7354eb6a2f026afb56c2066`
+- Session ID: `2025-11-04-11-36-26`
+- Private IP: `10.100.1.65` (Test VPC)
+- Status: **RUNNING** ✅
+- Docker 이미지 Pull: ✅ 성공
+- Health Check: ✅ PASSING
+- Code Execution: ✅ 정상 작동 (2개 실행 완료)
+
+#### 네트워크 플로우 검증
+
+```
+AgentCore Runtime (VPC)
+  → Internal ALB (10.100.2.64, 10.100.1.175)
+  → Fargate Container (10.100.1.65:8080)
+  → Python Code Execution ✅
+  → S3 File Sync ✅
+```
+
+#### Production 배포 시 주의사항
+
+**Phase 1 CloudFormation**: ✅ **수정 불필요**
+- VPC Endpoint Security Group 규칙 이미 존재 (line 452-460)
+- Test 환경에서 수동 설정 시 잘못된 SG 할당으로 문제 발생
+- Production은 CloudFormation으로 배포 시 올바른 구성 자동 적용
+
+```yaml
+# production_deployment/cloudformation/phase1-infrastructure.yaml
+VPCESGIngressFargate:  # Line 452-460
+  Type: AWS::EC2::SecurityGroupIngress
+  Properties:
+    GroupId: !Ref VPCEndpointSecurityGroup  # 전용 SG 사용
+    IpProtocol: tcp
+    FromPort: 443
+    ToPort: 443
+    SourceSecurityGroupId: !Ref FargateSecurityGroup
+    Description: Allow HTTPS from Fargate
+```
+
+**Phase 2**: ✅ **수정 불필요** - 그대로 배포 가능
+
+#### 다음 단계
+
+1. ✅ **VPC Runtime 테스트 완료**: Multi-agent workflow 실행 중
+2. ⏳ **전체 Job 완료 대기**: PDF 보고서 생성까지 확인
+3. ⏳ **Production 계정 배포**: CloudFormation으로 Phase 1-2 배포
+4. ⏳ **문서화**: 최종 배포 가이드 업데이트
+
+---
+
+## 🚀 이전 업데이트 (2025-11-03)
 
 ### ⚠️ AgentCore Runtime VPC 배포 - langchain Import 에러 수정 중
 

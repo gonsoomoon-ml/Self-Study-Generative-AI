@@ -15,8 +15,9 @@
     1. production_deployment/.env에서 VPC 정보 로드
     2. 기존 IAM Role 재사용 (Phase 1에서 생성)
     3. Runtime.configure()로 VPC 설정 포함하여 구성
-    4. Runtime.launch()로 Docker 빌드 + ECR 푸시 + Runtime 생성
-    5. Runtime ARN을 .env에 저장
+    4. Container 환경 변수 준비 (ECS_CLUSTER_NAME, ALB_DNS 등)
+    5. Runtime.launch(env_vars=...)로 Docker 빌드 + ECR 푸시 + Runtime 생성
+    6. Runtime ARN을 .env에 저장
 
 주의사항:
     - 최신 boto3 (>=1.40.65) 및 bedrock_agentcore_starter_toolkit (>=0.1.28) 필요
@@ -96,6 +97,17 @@ def main():
     SG_AGENTCORE_ID = os.getenv("SG_AGENTCORE_ID")
     TASK_EXECUTION_ROLE_ARN = os.getenv("TASK_EXECUTION_ROLE_ARN")
 
+    # Container 환경 변수 (Runtime 컨테이너에 전달)
+    ECS_CLUSTER_NAME = os.getenv("ECS_CLUSTER_NAME")
+    ALB_DNS = os.getenv("ALB_DNS")
+    TASK_DEFINITION_ARN = os.getenv("TASK_DEFINITION_ARN")
+
+    # Fargate Task Network Configuration (Test VPC)
+    FARGATE_SUBNET_IDS = os.getenv("FARGATE_SUBNET_IDS")
+    FARGATE_SECURITY_GROUP_IDS = os.getenv("FARGATE_SECURITY_GROUP_IDS")
+    FARGATE_ASSIGN_PUBLIC_IP = os.getenv("FARGATE_ASSIGN_PUBLIC_IP", "ENABLED")
+    ALB_TARGET_GROUP_ARN = os.getenv("ALB_TARGET_GROUP_ARN")
+
     # 기존 Runtime 정보 (있으면 업데이트, 없으면 생성)
     EXISTING_RUNTIME_ARN = os.getenv("RUNTIME_ARN")
     EXISTING_RUNTIME_ID = EXISTING_RUNTIME_ARN.split('/')[-1] if EXISTING_RUNTIME_ARN else None
@@ -122,6 +134,28 @@ def main():
     print(f"  - Security Group: {SG_AGENTCORE_ID}")
     if EXISTING_RUNTIME_ID:
         print(f"  - Existing Runtime: {EXISTING_RUNTIME_ID} (will update)")
+
+    # Container 환경 변수 출력
+    if ECS_CLUSTER_NAME or ALB_DNS:
+        print(f"\n  Container 환경 변수 (env_vars):")
+        if ECS_CLUSTER_NAME:
+            print(f"    - ECS_CLUSTER_NAME: {ECS_CLUSTER_NAME}")
+        if ALB_DNS:
+            print(f"    - ALB_DNS: {ALB_DNS}")
+        if TASK_DEFINITION_ARN:
+            print(f"    - TASK_DEFINITION_ARN: {TASK_DEFINITION_ARN}")
+        if FARGATE_SUBNET_IDS:
+            print(f"    - FARGATE_SUBNET_IDS: {FARGATE_SUBNET_IDS}")
+        if FARGATE_SECURITY_GROUP_IDS:
+            print(f"    - FARGATE_SECURITY_GROUP_IDS: {FARGATE_SECURITY_GROUP_IDS}")
+        if FARGATE_ASSIGN_PUBLIC_IP:
+            print(f"    - FARGATE_ASSIGN_PUBLIC_IP: {FARGATE_ASSIGN_PUBLIC_IP}")
+        if ALB_TARGET_GROUP_ARN:
+            print(f"    - ALB_TARGET_GROUP_ARN: {ALB_TARGET_GROUP_ARN}")
+    else:
+        print_warning("  Container 환경 변수가 설정되지 않았습니다 (ECS_CLUSTER_NAME, ALB_DNS)")
+        print_warning("  Runtime 컨테이너에서 Fargate와 통신하지 못할 수 있습니다")
+
     print()
 
     # ============================================================
@@ -224,8 +258,37 @@ def main():
     print()
 
     try:
+        # 환경 변수 준비 (Container에 전달)
+        container_env_vars = {}
+        if ECS_CLUSTER_NAME:
+            container_env_vars["ECS_CLUSTER_NAME"] = ECS_CLUSTER_NAME
+        if ALB_DNS:
+            container_env_vars["ALB_DNS"] = ALB_DNS
+        if AWS_REGION:
+            container_env_vars["AWS_REGION"] = AWS_REGION
+        if AWS_ACCOUNT_ID:
+            container_env_vars["AWS_ACCOUNT_ID"] = AWS_ACCOUNT_ID
+        if TASK_DEFINITION_ARN:
+            container_env_vars["TASK_DEFINITION_ARN"] = TASK_DEFINITION_ARN
+
+        # Fargate Task Network Configuration (Test VPC)
+        if FARGATE_SUBNET_IDS:
+            container_env_vars["FARGATE_SUBNET_IDS"] = FARGATE_SUBNET_IDS
+        if FARGATE_SECURITY_GROUP_IDS:
+            container_env_vars["FARGATE_SECURITY_GROUP_IDS"] = FARGATE_SECURITY_GROUP_IDS
+        if FARGATE_ASSIGN_PUBLIC_IP:
+            container_env_vars["FARGATE_ASSIGN_PUBLIC_IP"] = FARGATE_ASSIGN_PUBLIC_IP
+        if ALB_TARGET_GROUP_ARN:
+            container_env_vars["ALB_TARGET_GROUP_ARN"] = ALB_TARGET_GROUP_ARN
+
         # launch()는 agent_name 파라미터를 받지 않음 (configure()에서 이미 설정함)
-        launch_response = agentcore_runtime.launch()
+        # env_vars 파라미터로 Container 환경 변수 전달
+        launch_kwargs = {}
+        if container_env_vars:
+            launch_kwargs["env_vars"] = container_env_vars
+            print_info(f"Container에 {len(container_env_vars)}개 환경 변수 전달")
+
+        launch_response = agentcore_runtime.launch(**launch_kwargs)
 
         print_success("launch() 완료!")
 
