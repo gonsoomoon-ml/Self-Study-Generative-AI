@@ -86,6 +86,41 @@ FARGATE_SECURITY_GROUP_IDS=${SG_FARGATE_ID}
 └── production_deployment/scripts/setup_env.sh
 ```
 
+### 7. Task Role ECS/ALB 권한 누락 🚨 Critical!
+**문제**: Runtime이 Fargate Task 시작 불가
+**파일**: `phase1-infrastructure.yaml:825-856` (TaskRole에 2개 정책 추가)
+```yaml
+- PolicyName: ECSAccess        # ecs:RunTask, DescribeTaskDefinition, iam:PassRole
+- PolicyName: ALBAccess        # elasticloadbalancing:RegisterTargets, DescribeTargetHealth
+```
+**영향**: Production Phase 1 Stack Update 필요
+
+### 8. Task Definition 하드코딩 버그 🚨 Critical!
+**문제**: Fargate 컨테이너 시작 실패 - "TaskDefinition not found"
+**원인**: 개발 환경 값 하드코딩 ("fargate-dynamic-task")
+```python
+# src/tools/fargate_container_controller.py:37 (기존)
+task_definition: str = "fargate-dynamic-task"  # ❌ Development value hardcoded!
+```
+
+**해결**: `src/tools/fargate_container_controller.py:25,51-58`
+```python
+# Line 25: Load from environment
+TASK_DEFINITION_ARN = os.getenv("TASK_DEFINITION_ARN")
+
+# Lines 51-58: Use environment variable and extract family name from ARN
+task_def = task_definition or TASK_DEFINITION_ARN or "fargate-dynamic-task"
+if task_def and task_def.startswith("arn:"):
+    # Extract family name: "deep-insight-fargate-task-prod"
+    self.task_definition = task_def.split("/")[-1].split(":")[0]
+else:
+    self.task_definition = task_def
+```
+
+**효과**: Production task definition 자동 사용
+- Dev: `fargate-dynamic-task`
+- Prod: `deep-insight-fargate-task-prod` ✅
+
 ---
 
 ## 🎯 Production 배포 단계

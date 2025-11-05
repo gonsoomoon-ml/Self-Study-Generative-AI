@@ -22,6 +22,7 @@ load_dotenv(override=False)
 # ECS and ALB configuration from environment
 # These must be provided via environment variables (no hardcoded defaults)
 ECS_CLUSTER_NAME = os.getenv("ECS_CLUSTER_NAME")
+TASK_DEFINITION_ARN = os.getenv("TASK_DEFINITION_ARN")
 ALB_DNS = os.getenv("ALB_DNS")
 ALB_TARGET_GROUP_ARN = os.getenv("ALB_TARGET_GROUP_ARN")
 
@@ -45,7 +46,17 @@ class SessionBasedFargateManager:
         """
         # Use environment variables as fallback
         self.cluster_name = cluster_name or ECS_CLUSTER_NAME
-        self.task_definition = task_definition
+
+        # Handle task definition - support both family name and full ARN
+        task_def = task_definition or TASK_DEFINITION_ARN or "fargate-dynamic-task"
+        if task_def and task_def.startswith("arn:"):
+            # Extract family name from ARN: arn:aws:ecs:region:account:task-definition/family:revision
+            # Example: arn:aws:ecs:us-east-1:123456:task-definition/deep-insight-fargate-task-prod:1
+            # Result: deep-insight-fargate-task-prod
+            self.task_definition = task_def.split("/")[-1].split(":")[0]
+        else:
+            self.task_definition = task_def
+
         self.alb_target_group_arn = alb_target_group_arn or ALB_TARGET_GROUP_ARN
         self.alb_dns = alb_dns or ALB_DNS
         self.region = region
