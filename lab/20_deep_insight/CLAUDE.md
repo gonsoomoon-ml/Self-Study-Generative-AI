@@ -86,12 +86,13 @@ FARGATE_SECURITY_GROUP_IDS=${SG_FARGATE_ID}
 └── production_deployment/scripts/setup_env.sh
 ```
 
-### 7. Task Role ECS/ALB 권한 누락 🚨 Critical!
-**문제**: Runtime이 Fargate Task 시작 불가
-**파일**: `phase1-infrastructure.yaml:825-856` (TaskRole에 2개 정책 추가)
+### 7. Task Role 권한 누락 🚨 Critical!
+**문제**: Runtime이 Fargate Task 시작/관리 불가
+**파일**: `phase1-infrastructure.yaml:825-864` (TaskRole에 3개 정책 추가)
 ```yaml
 - PolicyName: ECSAccess        # ecs:RunTask, DescribeTaskDefinition, iam:PassRole
 - PolicyName: ALBAccess        # elasticloadbalancing:RegisterTargets, DescribeTargetHealth
+- PolicyName: EC2Access        # ec2:DescribeNetworkInterfaces (Issue #10에서 추가)
 ```
 **영향**: Production Phase 1 Stack Update 필요
 
@@ -162,6 +163,63 @@ self.container_name = container_name or CONTAINER_NAME or "dynamic-executor"
 **효과**: Production container name 자동 사용
 - Dev: `dynamic-executor` (env var not set)
 - Prod: `fargate-runtime` ✅ (from CONTAINER_NAME)
+
+### 10. Task Role EC2 권한 누락 🚨 Critical!
+**문제**: Container Name 수정 후 새로운 에러 - "ec2:DescribeNetworkInterfaces - You are not authorized to perform this operation"
+**근본 원인**: Task Role이 Fargate 태스크의 Private IP를 조회할 권한 없음
+**위치**: `src/tools/fargate_container_controller.py:228-246` (_wait_for_task_ip 메서드)
+
+**해결**: `phase1-infrastructure.yaml:857-864` (TaskRole에 EC2Access 정책 추가)
+```yaml
+- PolicyName: EC2Access
+  PolicyDocument:
+    Version: '2012-10-17'
+    Statement:
+      - Effect: Allow
+        Action:
+          - ec2:DescribeNetworkInterfaces
+        Resource: '*'
+```
+
+**영향**: Production Phase 1 Stack Update 필요
+**Phase 2**: 변경 불필요 (IAM은 모두 Phase 1에서 정의)
+
+### 11. Flask 패키지 누락 🚨 Critical!
+**문제**: Production에서 Fargate 컨테이너 Health Check 실패 - "ModuleNotFoundError: No module named 'flask'"
+**근본 원인**: `fargate-runtime/requirements.txt`에 Flask가 없음
+**위치**: `fargate-runtime/dynamic_executor_v2.py:20` (Flask import 시도)
+
+**왜 Development는 작동했는가?**:
+- Development: 3주 전 이미지 (`dynamic-executor:v19-fix-exec-exception`, 2025-10-11 빌드) 사용
+- 해당 이미지는 Flask가 설치된 상태로 빌드됨 ✅
+- Production: 현재 requirements.txt로 새 이미지 빌드 → Flask 없음 ❌
+
+**Container 크래시 시나리오**:
+```
+1. ECS Task 시작 → Container RUNNING 상태
+2. Python 앱 시작 → line 20: from flask import Flask
+3. ModuleNotFoundError 발생 → Python 프로세스 종료
+4. Port 8080 열리지 않음
+5. ALB Health Check 실패 (30회 시도, 모두 unhealthy)
+6. Container 계속 재시작 반복
+```
+
+**해결**: `fargate-runtime/requirements.txt:27`
+```python
+# Added Flask
+flask>=3.0.0
+```
+
+**영향**:
+- Production: Docker 이미지 재빌드 및 푸시 필요
+- Development: 다음 이미지 빌드 시 Flask 포함 보장
+
+**재배포 필요**:
+```bash
+# Production
+cd production_deployment/scripts/phase2
+./deploy.sh prod  # Docker 이미지 재빌드 및 푸시
+```
 
 ---
 

@@ -854,6 +854,14 @@ Resources:
                   - elasticloadbalancing:DescribeLoadBalancers
                   - elasticloadbalancing:DescribeTargetGroups
                 Resource: '*'
+          - PolicyName: EC2Access
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - ec2:DescribeNetworkInterfaces
+                  Resource: '*'
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-task-role-${Environment}'
