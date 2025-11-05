@@ -178,7 +178,6 @@ AGENT_OBSERVABILITY_ENABLED=true
 # AWS Configuration
 # ============================================================
 AWS_REGION=$AWS_REGION
-AWS_DEFAULT_REGION=$AWS_REGION
 AWS_ACCOUNT_ID=$AWS_ACCOUNT_ID
 
 # ============================================================
@@ -273,7 +272,7 @@ echo ""
 
 # Summary
 OTEL_COUNT=6
-AWS_CONFIG_COUNT=4
+AWS_CONFIG_COUNT=3  # AWS_REGION + AWS_ACCOUNT_ID + BEDROCK_MODEL_ID
 RUNTIME_COUNT=3
 TOTAL_COUNT=$((OTEL_COUNT + AWS_CONFIG_COUNT + PHASE1_COUNT + PHASE2_COUNT + RUNTIME_COUNT + 1))
 
