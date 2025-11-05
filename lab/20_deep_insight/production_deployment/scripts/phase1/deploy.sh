@@ -264,7 +264,7 @@ with open(env_file, 'w') as f:
     f.write(f"SG_VPCE_ID={output_dict.get('VPCEndpointSecurityGroupId', '')}\n")
     f.write(f"ALB_ARN={output_dict.get('ApplicationLoadBalancerArn', '')}\n")
     f.write(f"ALB_DNS={output_dict.get('ApplicationLoadBalancerDNS', '')}\n")
-    f.write(f"TARGET_GROUP_ARN={output_dict.get('TargetGroupArn', '')}\n")
+    f.write(f"ALB_TARGET_GROUP_ARN={output_dict.get('TargetGroupArn', '')}\n")
     f.write(f"TASK_EXECUTION_ROLE_ARN={output_dict.get('TaskExecutionRoleArn', '')}\n")
     f.write(f"TASK_ROLE_ARN={output_dict.get('TaskRoleArn', '')}\n")
 

@@ -211,7 +211,7 @@ fi
 
 # Check Target Group
 TG_HEALTH_CHECK=$(aws elbv2 describe-target-groups \
-    --target-group-arns "$TARGET_GROUP_ARN" \
+    --target-group-arns "$ALB_TARGET_GROUP_ARN" \
     --region "$AWS_REGION" \
     --query 'TargetGroups[0].HealthCheckEnabled' \
     --output text 2>/dev/null || echo "false")
@@ -229,7 +229,7 @@ fi
 
 # Check Sticky Sessions
 STICKINESS=$(aws elbv2 describe-target-group-attributes \
-    --target-group-arn "$TARGET_GROUP_ARN" \
+    --target-group-arn "$ALB_TARGET_GROUP_ARN" \
     --region "$AWS_REGION" \
     --query 'Attributes[?Key==`stickiness.enabled`].Value' \
     --output text 2>/dev/null || echo "false")
