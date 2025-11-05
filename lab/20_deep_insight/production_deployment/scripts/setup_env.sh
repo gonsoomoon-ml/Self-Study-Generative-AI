@@ -155,7 +155,7 @@ if [ "$PHASE2_DEPLOYED" = true ]; then
     # Extract task family from ARN
     TASK_DEFINITION_FAMILY=$(echo "$TASK_DEFINITION_ARN" | awk -F'/' '{print $2}' | cut -d':' -f1)
 
-    PHASE2_COUNT=7
+    PHASE2_COUNT=8
     echo -e "${GREEN}✓${NC} Phase 2: $PHASE2_COUNT variables"
 fi
 echo ""
@@ -226,6 +226,9 @@ LOG_GROUP_NAME=$LOG_GROUP_NAME
 FARGATE_SUBNET_IDS=$PRIVATE_SUBNET_1_ID,$PRIVATE_SUBNET_2_ID
 FARGATE_SECURITY_GROUP_IDS=$SG_FARGATE_ID
 FARGATE_ASSIGN_PUBLIC_IP=DISABLED
+
+# Container Configuration
+CONTAINER_NAME=fargate-runtime
 
 EOF
 else

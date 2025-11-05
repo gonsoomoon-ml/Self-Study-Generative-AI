@@ -102,6 +102,7 @@ def main():
     ECS_CLUSTER_NAME = os.getenv("ECS_CLUSTER_NAME")
     ALB_DNS = os.getenv("ALB_DNS")
     TASK_DEFINITION_ARN = os.getenv("TASK_DEFINITION_ARN")
+    CONTAINER_NAME = os.getenv("CONTAINER_NAME")
 
     # Fargate Task Network Configuration (Test VPC)
     FARGATE_SUBNET_IDS = os.getenv("FARGATE_SUBNET_IDS")
@@ -153,6 +154,8 @@ def main():
             print(f"    - ALB_DNS: {ALB_DNS}")
         if TASK_DEFINITION_ARN:
             print(f"    - TASK_DEFINITION_ARN: {TASK_DEFINITION_ARN}")
+        if CONTAINER_NAME:
+            print(f"    - CONTAINER_NAME: {CONTAINER_NAME}")
         if FARGATE_SUBNET_IDS:
             print(f"    - FARGATE_SUBNET_IDS: {FARGATE_SUBNET_IDS}")
         if FARGATE_SECURITY_GROUP_IDS:
@@ -279,6 +282,8 @@ def main():
             container_env_vars["AWS_ACCOUNT_ID"] = AWS_ACCOUNT_ID
         if TASK_DEFINITION_ARN:
             container_env_vars["TASK_DEFINITION_ARN"] = TASK_DEFINITION_ARN
+        if CONTAINER_NAME:
+            container_env_vars["CONTAINER_NAME"] = CONTAINER_NAME
 
         # Fargate Task Network Configuration (Test VPC)
         if FARGATE_SUBNET_IDS:

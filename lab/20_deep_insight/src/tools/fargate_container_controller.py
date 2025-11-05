@@ -23,6 +23,7 @@ load_dotenv(override=False)
 # These must be provided via environment variables (no hardcoded defaults)
 ECS_CLUSTER_NAME = os.getenv("ECS_CLUSTER_NAME")
 TASK_DEFINITION_ARN = os.getenv("TASK_DEFINITION_ARN")
+CONTAINER_NAME = os.getenv("CONTAINER_NAME")
 ALB_DNS = os.getenv("ALB_DNS")
 ALB_TARGET_GROUP_ARN = os.getenv("ALB_TARGET_GROUP_ARN")
 
@@ -35,7 +36,8 @@ FARGATE_ASSIGN_PUBLIC_IP = os.getenv("FARGATE_ASSIGN_PUBLIC_IP", "DISABLED")  # 
 class SessionBasedFargateManager:
     def __init__(self,
                  cluster_name: str = None,
-                 task_definition: str = "fargate-dynamic-task",
+                 task_definition: str = None,
+                 container_name: str = None,
                  alb_target_group_arn: str = None,
                  alb_dns: str = None,
                  subnets: list = None,
@@ -56,6 +58,9 @@ class SessionBasedFargateManager:
             self.task_definition = task_def.split("/")[-1].split(":")[0]
         else:
             self.task_definition = task_def
+
+        # Handle container name - use environment variable or fallback to default
+        self.container_name = container_name or CONTAINER_NAME or "dynamic-executor"
 
         self.alb_target_group_arn = alb_target_group_arn or ALB_TARGET_GROUP_ARN
         self.alb_dns = alb_dns or ALB_DNS
@@ -206,7 +211,7 @@ class SessionBasedFargateManager:
             overrides={
                 'containerOverrides': [
                     {
-                        'name': 'dynamic-executor',
+                        'name': self.container_name,
                         'environment': [
                             {
                                 'name': 'SESSION_ID',

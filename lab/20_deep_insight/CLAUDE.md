@@ -128,6 +128,41 @@ else:
 - Dev: `fargate-dynamic-task` (env var not set)
 - Prod: `deep-insight-fargate-task-prod` ✅ (from TASK_DEFINITION_ARN)
 
+### 9. Container Name 하드코딩 버그 🚨 Critical!
+**문제**: Task Definition 수정 후 새로운 에러 - "Override for container named dynamic-executor is not a container in the TaskDefinition"
+**근본 원인**: 컨테이너 이름이 하드코딩되어 있음
+```python
+# Production task definition
+Container Name: "fargate-runtime"
+
+# src/tools/fargate_container_controller.py:209 (기존)
+'name': 'dynamic-executor',  # ❌ Development 환경 하드코딩!
+```
+
+**해결**: `src/tools/fargate_container_controller.py:26,40,63,214`
+```python
+# Line 26: Load from environment
+CONTAINER_NAME = os.getenv("CONTAINER_NAME")
+
+# Line 40: Add parameter to __init__
+container_name: str = None,
+
+# Line 63: Fallback chain
+self.container_name = container_name or CONTAINER_NAME or "dynamic-executor"
+
+# Line 214: Use self.container_name
+'name': self.container_name,  # ✅ Now uses environment variable!
+```
+
+**파일 수정**:
+1. `.env.example:87` - `CONTAINER_NAME=fargate-runtime` 추가
+2. `setup_env.sh:158,231` - CONTAINER_NAME 자동 생성, PHASE2_COUNT=8
+3. `01_create_agentcore_runtime.py:105,158,286` - CONTAINER_NAME 로드 및 전달
+
+**효과**: Production container name 자동 사용
+- Dev: `dynamic-executor` (env var not set)
+- Prod: `fargate-runtime` ✅ (from CONTAINER_NAME)
+
 ---
 
 ## 🎯 Production 배포 단계
