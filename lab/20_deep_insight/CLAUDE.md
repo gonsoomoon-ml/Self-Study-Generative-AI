@@ -97,19 +97,26 @@ FARGATE_SECURITY_GROUP_IDS=${SG_FARGATE_ID}
 
 ### 8. Task Definition 하드코딩 버그 🚨 Critical!
 **문제**: Fargate 컨테이너 시작 실패 - "TaskDefinition not found"
-**원인**: 개발 환경 값 하드코딩 ("fargate-dynamic-task")
+**근본 원인**: Default parameter가 환경 변수 fallback을 blocking
 ```python
-# src/tools/fargate_container_controller.py:37 (기존)
-task_definition: str = "fargate-dynamic-task"  # ❌ Development value hardcoded!
+# src/tools/fargate_container_controller.py:38 (기존)
+task_definition: str = "fargate-dynamic-task"  # ❌ Non-empty default blocks env var!
+
+# Line 51: task_def = task_definition or TASK_DEFINITION_ARN
+# Result: Always uses "fargate-dynamic-task", never checks environment ❌
 ```
 
-**해결**: `src/tools/fargate_container_controller.py:25,51-58`
+**해결**: `src/tools/fargate_container_controller.py:25,38,51-58`
 ```python
 # Line 25: Load from environment
 TASK_DEFINITION_ARN = os.getenv("TASK_DEFINITION_ARN")
 
-# Lines 51-58: Use environment variable and extract family name from ARN
+# Line 38: Change default to None (allows fallback)
+task_definition: str = None  # ✅ Now env var can be used!
+
+# Lines 51-58: Fallback chain works correctly
 task_def = task_definition or TASK_DEFINITION_ARN or "fargate-dynamic-task"
+#          None (no arg)       ↓ Checks env var!    ↓ Last resort default
 if task_def and task_def.startswith("arn:"):
     # Extract family name: "deep-insight-fargate-task-prod"
     self.task_definition = task_def.split("/")[-1].split(":")[0]
@@ -118,8 +125,8 @@ else:
 ```
 
 **효과**: Production task definition 자동 사용
-- Dev: `fargate-dynamic-task`
-- Prod: `deep-insight-fargate-task-prod` ✅
+- Dev: `fargate-dynamic-task` (env var not set)
+- Prod: `deep-insight-fargate-task-prod` ✅ (from TASK_DEFINITION_ARN)
 
 ---
 
