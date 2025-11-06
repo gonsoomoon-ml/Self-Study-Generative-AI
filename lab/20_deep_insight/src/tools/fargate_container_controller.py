@@ -317,7 +317,7 @@ class SessionBasedFargateManager:
                 print(f"⚠️ HTTP session not initialized")
                 return False
 
-            response = self.http_session.get(f"{self.alb_dns}/health", timeout=5)
+            response = self.http_session.get(f"http://{self.alb_dns}/health", timeout=5)
             if response.status_code == 200:
                 health_data = response.json()
                 status = health_data.get('status', '')
@@ -363,7 +363,7 @@ class SessionBasedFargateManager:
         try:
             # 🍪 http_session 사용 (Sticky Session 쿠키 포함 - request별 격리)
             response = self.http_session.post(
-                f"{self.alb_dns}/execute",
+                f"http://{self.alb_dns}/execute",
                 json={"code": code},
                 timeout=180  # Increased for large PDF generation and complex data processing
             )
@@ -409,7 +409,7 @@ class SessionBasedFargateManager:
                 return {"error": "No HTTP session"}
 
             # 1. 세션 완료 신호 전송 (🍪 http_session 사용 - request별 격리)
-            response = self.http_session.post(f"{self.alb_dns}/session/complete", timeout=10)
+            response = self.http_session.post(f"http://{self.alb_dns}/session/complete", timeout=10)
             result = response.json() if response.status_code == 200 else {}
 
             # 2. S3 업로드 대기
@@ -474,7 +474,7 @@ class SessionBasedFargateManager:
             return {"error": "No HTTP session"}
 
         try:
-            response = self.http_session.get(f"{self.alb_dns}/session/status", timeout=5)
+            response = self.http_session.get(f"http://{self.alb_dns}/session/status", timeout=5)
             if response.status_code == 200:
                 status = response.json()
                 status['session_info'] = self.current_session

@@ -58,7 +58,7 @@ def acquire_cookie(alb_dns: str, expected_ip: str, session_id: str, max_attempts
 
             # /container-info에 세션 ID 포함하여 요청
             response = session.get(
-                f"{alb_dns}/container-info",
+                f"http://{alb_dns}/container-info",
                 params={"session_id": session_id},
                 timeout=5
             )

@@ -38,6 +38,68 @@ S3 Bucket:        bedrock-logs-gonsoomoon
 
 ---
 
+## 🚨 CRITICAL BUG (2025-11-05 밤) - 내일 수정 필요
+
+### 문제: Missing HTTP Scheme in URL Requests
+
+**증상**:
+- Cookie acquisition 100% 실패 (40/40 attempts)
+- Health check 100% 실패 (5/5 retry attempts)
+- Production Runtime `deep_insight_runtime_vpc-3oYut44SAk` 완전히 작동 불가
+
+**에러 메시지**:
+```
+MissingSchema: Invalid URL 'internal-deep-insight-alb-prod-457586948.us-east-1.elb.amazonaws.com/container-info':
+No scheme supplied. Perhaps you meant https://internal-deep-insight-alb-prod-457586948.us-east-1.elb.amazonaws.com/container-info?
+```
+
+**근본 원인**: URL에 `http://` 스킴이 누락됨
+
+**수정 필요 파일 (2곳)**:
+
+1. **`src/tools/cookie_acquisition_subprocess.py:61`**
+   ```python
+   # ❌ Before
+   response = session.get(
+       f"{alb_dns}/container-info",
+       params={"session_id": session_id},
+       timeout=5
+   )
+
+   # ✅ After
+   response = session.get(
+       f"http://{alb_dns}/container-info",
+       params={"session_id": session_id},
+       timeout=5
+   )
+   ```
+
+2. **`src/tools/fargate_container_controller.py:320`**
+   ```python
+   # ❌ Before
+   response = self.http_session.get(f"{self.alb_dns}/health", timeout=5)
+
+   # ✅ After
+   response = self.http_session.get(f"http://{self.alb_dns}/health", timeout=5)
+   ```
+
+**영향 범위**:
+- ✅ Dev Runtime (`c0LVReFA3o`): 성공 (11월 4일 테스트)
+- ❌ Production Runtime (`3oYut44SAk`): 실패 (11월 5일 테스트, Log stream: d4e2d7f4-1f79-48f5-9041-9c3fa45e1c23)
+
+**다음 작업**:
+1. 위 2개 파일 수정
+2. Docker 이미지 리빌드 & ECR 푸시
+3. 새 Runtime 생성 또는 기존 Runtime 업데이트
+4. End-to-End 테스트
+
+**로그 참조**:
+- `/aws/bedrock-agentcore/runtimes/deep_insight_runtime_vpc-3oYut44SAk-DEFAULT`
+- Log stream: `2025/11/05/[runtime-logs]d4e2d7f4-1f79-48f5-9041-9c3fa45e1c23`
+- Timestamps: 14:09:42 (모든 cookie acquisition 실패), 14:11:47 (최종 실패)
+
+---
+
 ## 🔧 주요 수정 사항 (2025-11-05)
 
 ### 1. Fargate 네트워크 환경 변수 추가 ⭐

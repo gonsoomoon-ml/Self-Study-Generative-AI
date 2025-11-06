@@ -103,6 +103,8 @@ def main():
     ALB_DNS = os.getenv("ALB_DNS")
     TASK_DEFINITION_ARN = os.getenv("TASK_DEFINITION_ARN")
     CONTAINER_NAME = os.getenv("CONTAINER_NAME")
+    S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+    BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID")
 
     # Fargate Task Network Configuration (Test VPC)
     FARGATE_SUBNET_IDS = os.getenv("FARGATE_SUBNET_IDS")
@@ -308,6 +310,14 @@ def main():
             container_env_vars["OTEL_RESOURCE_ATTRIBUTES"] = OTEL_RESOURCE_ATTRIBUTES
         if AGENT_OBSERVABILITY_ENABLED:
             container_env_vars["AGENT_OBSERVABILITY_ENABLED"] = AGENT_OBSERVABILITY_ENABLED
+
+        # S3 Configuration
+        if S3_BUCKET_NAME:
+            container_env_vars["S3_BUCKET_NAME"] = S3_BUCKET_NAME
+
+        # Bedrock Model Configuration
+        if BEDROCK_MODEL_ID:
+            container_env_vars["BEDROCK_MODEL_ID"] = BEDROCK_MODEL_ID
 
         # launch()는 agent_name 파라미터를 받지 않음 (configure()에서 이미 설정함)
         # env_vars 파라미터로 Container 환경 변수 전달

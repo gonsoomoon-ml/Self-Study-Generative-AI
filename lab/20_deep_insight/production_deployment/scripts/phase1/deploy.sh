@@ -84,7 +84,8 @@ echo -e "${GREEN}✓${NC} Parameter file found"
 # ============================================
 # S3 Bucket for Nested Templates
 # ============================================
-S3_BUCKET_NAME="deep-insight-cfn-templates-${AWS_ACCOUNT_ID}"
+# Use environment-specific bucket name for isolation
+S3_BUCKET_NAME="deep-insight-templates-${ENVIRONMENT}-${AWS_ACCOUNT_ID}"
 
 echo ""
 echo -e "${YELLOW}Setting up S3 bucket for nested templates...${NC}"

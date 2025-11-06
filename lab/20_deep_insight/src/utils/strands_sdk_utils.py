@@ -3,6 +3,7 @@ import logging
 import traceback
 import asyncio
 import time
+import os
 from src.utils.bedrock import bedrock_info
 from src.utils.common_utils import retry
 from strands import Agent, tool
@@ -59,10 +60,22 @@ class strands_utils():
         cache_type = kwargs["cache_type"]
         enable_reasoning = kwargs["enable_reasoning"]
 
-        if llm_type == "claude-sonnet-3-7":    
+        # Use BEDROCK_MODEL_ID from environment if set, otherwise fallback to hardcoded models
+        env_model_id = os.getenv("BEDROCK_MODEL_ID")
+
+        # Log model selection for debugging
+        if env_model_id:
+            logger.info(f"{Colors.GREEN}🔧 Using BEDROCK_MODEL_ID from environment: {env_model_id}{Colors.END}")
+        else:
+            logger.info(f"{Colors.YELLOW}⚠️  BEDROCK_MODEL_ID not set, using fallback model{Colors.END}")
+
+        if llm_type == "claude-sonnet-3-7":
             ## BedrockModel params: https://strandsagents.com/latest/api-reference/models/?h=bedrockmodel#strands.models.bedrock.BedrockModel
+            # Use env var if set, otherwise use the default model
+            model_id = env_model_id if env_model_id else bedrock_info.get_model_id(model_name="Claude-Sonnet-4-5-Global")
+            logger.info(f"{Colors.GREEN}📋 Model selected for {llm_type}: {model_id}{Colors.END}")
             llm = BedrockModel(
-                model_id=bedrock_info.get_model_id(model_name="Claude-V3-7-Sonnet-CRI"),
+                model_id=model_id,
                 streaming=True,
                 max_tokens=8192*5,
                 stop_sequences=["\n\nHuman"],
@@ -83,8 +96,10 @@ class strands_utils():
             )   
         elif llm_type == "claude-sonnet-3-5-v-2":
             ## BedrockModel params: https://strandsagents.com/latest/api-reference/models/?h=bedrockmodel#strands.models.bedrock.BedrockModel
+            # Use env var if set, otherwise use the default model
+            model_id = env_model_id if env_model_id else bedrock_info.get_model_id(model_name="Claude-V3-5-V-2-Sonnet-CRI")
             llm = BedrockModel(
-                model_id=bedrock_info.get_model_id(model_name="Claude-V3-5-V-2-Sonnet-CRI"),
+                model_id=model_id,
                 streaming=True,
                 max_tokens=8192,
                 stop_sequences=["\n\nHuman"],

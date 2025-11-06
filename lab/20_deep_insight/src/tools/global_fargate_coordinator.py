@@ -33,6 +33,7 @@ load_dotenv(override=False)
 # These must be provided via environment variables (no hardcoded defaults)
 ECS_CLUSTER_NAME = os.getenv("ECS_CLUSTER_NAME")
 ALB_TARGET_GROUP_ARN = os.getenv("ALB_TARGET_GROUP_ARN")
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 
 # Third-party imports
 import boto3
@@ -453,14 +454,14 @@ class GlobalFargateSessionManager:
         # 🐛 DEBUG: Checkpoint before health check
         logger.info(f"🔍 DEBUG: About to start ALB health check wait for {expected_ip}")
 
-        # 🆕 ALB가 Health Check를 시작할 시간 확보 (30초 대기, keep-alive 로그)
-        logger.info(f"⏳ Waiting 30 seconds for ALB to begin health checks...")
+        # 🆕 ALB가 Health Check를 시작할 시간 확보 (60초 대기, keep-alive 로그)
+        logger.info(f"⏳ Waiting 60 seconds for ALB to begin health checks...")
         logger.info(f"   This prevents 'ALB never sent health checks' issue")
 
-        # Keep-alive: 30초를 6번의 5초로 나누어 중간에 로그 출력
+        # Keep-alive: 60초를 6번의 10초로 나누어 중간에 로그 출력
         for wait_i in range(6):
-            time.sleep(5)
-            logger.info(f"   ⏱️  Waiting for ALB... ({(wait_i+1)*5}/30s)")
+            time.sleep(10)
+            logger.info(f"   ⏱️  Waiting for ALB... ({(wait_i+1)*10}/60s)")
 
         # ⏰ ALB Health Check 대기 (Container가 healthy 상태가 될 때까지)
         logger.info(f"⏰ Waiting for container {expected_ip} to be healthy in ALB...")
@@ -549,14 +550,15 @@ class GlobalFargateSessionManager:
         """
         # ✅ CloudWatch 공인 IP 로깅 (AgentCore Runtime → ALB 첫 연결)
         # ALB Security Group이 실제로 검증하는 공인 IP (NAT Gateway IP) 기록
-        try:
-            # AWS checkip 서비스를 통해 공인 IP 확인
-            response = requests.get("https://checkip.amazonaws.com", timeout=3)
-            public_ip = response.text.strip()
-            logger.info(f"🌐🌐🌐 PUBLIC IP DETECTED 🌐🌐🌐 First ALB connection from public IP: {public_ip} to ALB: {self._session_manager.alb_dns}")
-        except Exception as ip_err:
-            logger.warning(f"⚠️ Failed to detect public IP: {ip_err}")
-            public_ip = "unknown"
+        # NOTE: Disabled to keep all traffic 100% private (no internet access needed)
+        # try:
+        #     # AWS checkip 서비스를 통해 공인 IP 확인
+        #     response = requests.get("https://checkip.amazonaws.com", timeout=3)
+        #     public_ip = response.text.strip()
+        #     logger.info(f"🌐🌐🌐 PUBLIC IP DETECTED 🌐🌐🌐 First ALB connection from public IP: {public_ip} to ALB: {self._session_manager.alb_dns}")
+        # except Exception as ip_err:
+        #     logger.warning(f"⚠️ Failed to detect public IP: {ip_err}")
+        #     public_ip = "unknown"
 
         logger.info(f"🍪 Acquiring cookie for container: {expected_ip}")
         logger.info(f"   Session ID: {session_id}")
@@ -660,12 +662,12 @@ class GlobalFargateSessionManager:
             s3_client = boto3.client('s3', region_name='us-east-1')
             s3_client.upload_file(
                 csv_file_path,
-                'bedrock-logs-gonsoomoon',
+                S3_BUCKET_NAME,
                 s3_key,
                 ExtraArgs={'ContentType': 'text/csv'}
             )
 
-            logger.info(f"📤 Uploaded {csv_file_path} → s3://bedrock-logs-gonsoomoon/{s3_key}")
+            logger.info(f"📤 Uploaded {csv_file_path} → s3://{S3_BUCKET_NAME}/{s3_key}")
             return s3_key
 
         except Exception as e:
@@ -689,7 +691,7 @@ class GlobalFargateSessionManager:
             # s3_key 형태: "manus/fargate_sessions/{session_id}/input/file.csv"
             sync_request = {
                 "action": "sync_data_from_s3",
-                "bucket_name": "bedrock-logs-gonsoomoon",
+                "bucket_name": S3_BUCKET_NAME,
                 "s3_key_prefix": f"manus/fargate_sessions/{s3_key.split('/')[2]}/input/",
                 "local_path": "/app/data/"
             }
@@ -702,7 +704,7 @@ class GlobalFargateSessionManager:
             # ✅ 요청별 HTTP 클라이언트 사용 (쿠키 격리)
             http_client = self._get_http_client(self._current_request_id)
             response = http_client.post(
-                f"{alb_dns}/file-sync",
+                f"http://{alb_dns}/file-sync",
                 json=sync_request,
                 timeout=30
             )

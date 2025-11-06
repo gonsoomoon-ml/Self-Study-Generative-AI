@@ -81,6 +81,19 @@ Resources:
                   - xray:PutTraceSegments
                   - xray:PutTelemetryRecords
                 Resource: '*'
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub 'arn:aws:s3:::bedrock-logs-${AWS::AccountId}'
+                  - !Sub 'arn:aws:s3:::bedrock-logs-${AWS::AccountId}/*'
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-task-execution-role-${Environment}'
@@ -113,9 +126,10 @@ Resources:
                   - s3:PutObject
                   - s3:GetObject
                   - s3:ListBucket
+                  - s3:DeleteObject
                 Resource:
-                  - !Sub 'arn:aws:s3:::${S3BucketName}'
-                  - !Sub 'arn:aws:s3:::${S3BucketName}/*'
+                  - !Sub 'arn:aws:s3:::bedrock-logs-${AWS::AccountId}'
+                  - !Sub 'arn:aws:s3:::bedrock-logs-${AWS::AccountId}/*'
         - PolicyName: BedrockAccess
           PolicyDocument:
             Version: '2012-10-17'
