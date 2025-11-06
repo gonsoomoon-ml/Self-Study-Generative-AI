@@ -6,10 +6,16 @@
 
 ## 🎯 프로젝트 현황
 
-**상태**: ✅ **Production Ready** - VPC Runtime 완전 작동 (2025-11-04 검증)
+**상태**: ✅ **Production Ready** - VPC Runtime 완전 작동 (2025-11-06 최종 검증)
 
 **개발 환경**: Development Account (057716757052, us-east-1)
 **배포 방식**: Dev → Git Push → Production Account → Feedback Loop
+
+**최신 개선 사항 (2025-11-06)**:
+- ✅ 100% Private Network 검증 완료 (NAT Gateway 불필요)
+- ✅ ALB Wait Time 60초로 증가 (안정성 향상)
+- ✅ Runtime 버전 5 배포 완료
+- ✅ 클라이언트 스크립트 리팩토링 완료 (36% 코드 감소)
 
 ---
 
@@ -38,7 +44,7 @@ S3 Bucket:        bedrock-logs-gonsoomoon
 
 ---
 
-## 🚨 CRITICAL BUG (2025-11-05 밤) - 내일 수정 필요
+## 🚨 CRITICAL BUG (2025-11-05 밤) - ✅ 해결됨 (2025-11-06)
 
 ### 문제: Missing HTTP Scheme in URL Requests
 
@@ -97,6 +103,12 @@ No scheme supplied. Perhaps you meant https://internal-deep-insight-alb-prod-457
 - `/aws/bedrock-agentcore/runtimes/deep_insight_runtime_vpc-3oYut44SAk-DEFAULT`
 - Log stream: `2025/11/05/[runtime-logs]d4e2d7f4-1f79-48f5-9041-9c3fa45e1c23`
 - Timestamps: 14:09:42 (모든 cookie acquisition 실패), 14:11:47 (최종 실패)
+
+**✅ 해결 (2025-11-06)**:
+- 새 Runtime 생성: `deep_insight_runtime_vpc-Id77BBHcNl` (버전 5)
+- 100% Private Network 검증 완료
+- Cookie acquisition 첫 시도 성공
+- End-to-End 테스트 통과
 
 ---
 
@@ -349,6 +361,91 @@ cd production_deployment/scripts/phase2
 
 ---
 
-**마지막 업데이트**: 2025-11-05
+## 🔧 주요 작업 (2025-11-06)
+
+### 1. 100% Private Network 검증 완료 ✅
+**검증 결과**: `2025/11/06/[runtime-logs]4ef7963b-bc0d-4122-90ea-ab31c7131be1`
+- ✅ checkip.amazonaws.com 비활성화 완료 (no public internet access)
+- ✅ Cookie acquisition: 첫 시도 성공 (10.0.1.62 private IP)
+- ✅ 모든 AWS 서비스 통신: VPC Endpoints 사용 (100% private)
+- ✅ Job 완료: 총 매출액 157,685,452원 계산
+- ✅ Model ID 확인: Haiku 4.5 Global (환경 변수에서 로드)
+
+**결론**: NAT Gateway 불필요 (~$32/월 절감 가능)
+
+### 2. ALB Wait Time 증가 (30s → 60s) ✅
+**파일**: `src/tools/global_fargate_coordinator.py:457-464`
+```python
+# 변경 전: 30초 (6 × 5초 간격)
+# 변경 후: 60초 (6 × 10초 간격)
+logger.info(f"⏳ Waiting 60 seconds for ALB to begin health checks...")
+for wait_i in range(6):
+    time.sleep(10)
+    logger.info(f"   ⏱️  Waiting for ALB... ({(wait_i+1)*10}/60s)")
+```
+
+**배포 상태**:
+- ✅ Runtime 버전 4 → 5 업데이트 완료
+- ✅ 최신 로그 확인: `2025/11/06/[runtime-logs]c31783d3-b2c7-469d-891b-05c687521ee1`
+- ✅ 60초 대기 로그 확인 완료
+
+### 3. 환경 변수 전달 검증 ✅
+**Runtime 환경 변수 (17개)**:
+- ✅ BEDROCK_MODEL_ID: global.anthropic.claude-haiku-4-5-20251001-v1:0
+- ✅ AWS_REGION, AWS_ACCOUNT_ID
+- ✅ ECS_CLUSTER_NAME, TASK_DEFINITION_ARN, CONTAINER_NAME
+- ✅ FARGATE_SUBNET_IDS, FARGATE_SECURITY_GROUP_IDS
+- ✅ ALB_DNS, ALB_TARGET_GROUP_ARN
+- ✅ S3_BUCKET_NAME
+- ✅ OTEL 변수 6개 (Observability)
+
+**검증 방법**: `aws bedrock-agentcore-control get-agent-runtime`
+
+### 4. Multiple Container Initialization 원인 분석 ✅
+**증상**: 동시에 ~10개 "Initializing Global Fargate Session Manager" 로그 발견
+
+**근본 원인**: AWS Bedrock AgentCore 서비스 동작 (코드 문제 아님)
+- AgentCore가 parallel health probes 실행 (VPC 모드)
+- 9-10개 컨테이너: Health check만 수행 후 종료 (4 log events)
+- 1개 컨테이너: 실제 Job 처리 (1000+ log events)
+
+**목적**:
+- VPC 네트워크 검증 (Security Groups, VPC Endpoints, Routing)
+- HTTP 서버 응답 테스트
+- Fast job dispatch (pre-warmed containers)
+
+**결론**: 정상 동작, 비용 영향 미미 (<30초 실행)
+
+### 5. 03_invoke_agentcore_job_vpc.py 리팩토링 ✅
+**목적**: 불필요한 코드 제거 및 영어 문서화
+
+**제거된 코드 (93줄, 36% 감소)**:
+| 항목 | 라인 수 | 설명 |
+|------|---------|------|
+| CloudWatch logging function | 65 | send_error_to_cloudwatch() 전체 |
+| CloudWatch configuration | 3 | LOG_GROUP, LOG_STREAM_PREFIX |
+| CloudWatch client | 2 | logs_client 생성 |
+| CloudWatch error sending | 11 | Exception handler 내 전송 코드 |
+| Unused variables | 2 | boto_session, content |
+| Unused import | 1 | from boto3.session import Session |
+| Non-streaming handler | 9 | else 블록 (dead code) |
+
+**파일 크기**: 270줄 → 173줄
+
+**문서화**:
+- ✅ 파일 헤더 docstring 영어로 변환
+- ✅ 모든 함수 docstring 영어로 변환
+- ✅ 모든 주석 영어로 변환
+- ✅ 사용자 메시지 영어로 변환
+
+**개선 효과**:
+- 코드 가독성 향상
+- 유지보수 용이성 증가
+- CloudWatch 의존성 제거 (에러는 console 출력)
+- Dead code 제거
+
+---
+
+**마지막 업데이트**: 2025-11-06
 **상태**: Production Ready ✅
 **환경**: Development Account (057716757052)
