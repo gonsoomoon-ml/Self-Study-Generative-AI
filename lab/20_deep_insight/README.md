@@ -36,7 +36,7 @@ Four-phase deployment:
 ```bash
 # Phase 1 + 2: Infrastructure (Automated)
 cd production_deployment/scripts
-./deploy_phase1_phase2.sh prod us-east-1
+./deploy_phase1_phase2.sh prod us-west-2
 
 # Phase 3: Environment Setup
 cd phase3
