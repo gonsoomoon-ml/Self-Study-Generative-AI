@@ -58,7 +58,6 @@ echo -e "${BLUE}============================================${NC}"
 echo ""
 echo "Environment: $ENVIRONMENT"
 echo "Stack Name: $STACK_NAME"
-echo "Region: ${AWS_REGION:-us-east-1}"
 echo ""
 
 # Check prerequisites
@@ -152,14 +151,22 @@ if [ "$BUCKET_EXISTS" = false ]; then
     echo "Creating S3 bucket: ${S3_BUCKET_NAME} in ${AWS_REGION}"
 
     if [ "$AWS_REGION" == "us-east-1" ]; then
-        aws s3 mb "s3://${S3_BUCKET_NAME}" --region "$AWS_REGION"
+        # us-east-1 doesn't need LocationConstraint
+        aws s3api create-bucket \
+            --bucket "${S3_BUCKET_NAME}" \
+            --region "$AWS_REGION"
     else
-        aws s3 mb "s3://${S3_BUCKET_NAME}" --region "$AWS_REGION" --create-bucket-configuration LocationConstraint="$AWS_REGION"
+        # All other regions need LocationConstraint
+        aws s3api create-bucket \
+            --bucket "${S3_BUCKET_NAME}" \
+            --region "$AWS_REGION" \
+            --create-bucket-configuration LocationConstraint="$AWS_REGION"
     fi
 
     # Enable versioning (best practice)
     aws s3api put-bucket-versioning \
         --bucket "${S3_BUCKET_NAME}" \
+        --region "$AWS_REGION" \
         --versioning-configuration Status=Enabled
 
     echo -e "${GREEN}✓${NC} S3 bucket created in ${AWS_REGION}"
