@@ -32,7 +32,8 @@ echo ""
 
 # Get script directory and project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROD_DEPLOY_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROD_DEPLOY_DIR="$(cd "$SCRIPTS_DIR/.." && pwd)"
 PROJECT_ROOT="$(cd "$PROD_DEPLOY_DIR/.." && pwd)"
 ENV_FILE="$PROJECT_ROOT/.env"
 
