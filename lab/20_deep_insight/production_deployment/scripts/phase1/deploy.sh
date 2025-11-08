@@ -21,6 +21,31 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ENVIRONMENT="${1:-prod}"
 
+# Parse command-line arguments
+REGION=""
+PARAMETER_OVERRIDES=()
+shift || true  # Remove first positional argument (ENVIRONMENT)
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --region)
+            REGION="$2"
+            shift 2
+            ;;
+        --parameter-overrides)
+            shift
+            # Collect all remaining arguments as parameter overrides
+            while [[ $# -gt 0 ]] && [[ ! "$1" =~ ^-- ]]; do
+                PARAMETER_OVERRIDES+=("$1")
+                shift
+            done
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
 STACK_NAME="deep-insight-infrastructure-${ENVIRONMENT}"
 TEMPLATE_FILE="$PROJECT_ROOT/cloudformation/phase1-main.yaml"
 PARAMS_FILE="$PROJECT_ROOT/cloudformation/parameters/phase1-${ENVIRONMENT}-params.json"
@@ -53,7 +78,12 @@ fi
 
 # Get AWS Account ID and Region
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-AWS_REGION=$(aws configure get region || echo "us-east-1")
+# Use provided region or fall back to configured region
+if [ -z "$REGION" ]; then
+    AWS_REGION=$(aws configure get region || echo "us-east-1")
+else
+    AWS_REGION="$REGION"
+fi
 
 echo -e "${GREEN}✓${NC} AWS CLI configured"
 echo "  Account ID: $AWS_ACCOUNT_ID"
@@ -147,14 +177,26 @@ fi
 echo -e "${GREEN}✓${NC} Parameter file updated with Account ID: $AWS_ACCOUNT_ID"
 
 # ============================================
-# Add NestedTemplatesBucketName Parameter
+# Add NestedTemplatesBucketName and CLI Parameters
 # ============================================
-# Create updated params with nested bucket parameter
+# Create updated params with nested bucket parameter and CLI overrides
 FINAL_PARAMS_FILE="${PARAMS_FILE}.final"
 
-# Read existing params and add new one
+# Convert bash array to Python list for parameter overrides
+PARAM_OVERRIDES_JSON="[]"
+if [ ${#PARAMETER_OVERRIDES[@]} -gt 0 ]; then
+    PARAM_OVERRIDES_JSON=$(printf '%s\n' "${PARAMETER_OVERRIDES[@]}" | python3 -c "import sys, json; items = [line.strip() for line in sys.stdin if line.strip()]; params = [];
+for item in items:
+    if '=' in item:
+        key, value = item.split('=', 1)
+        params.append({'ParameterKey': key, 'ParameterValue': value})
+print(json.dumps(params))")
+fi
+
+# Read existing params and add new ones
 python3 - <<EOF
 import json
+import sys
 
 # Read existing params
 with open('${TEMP_PARAMS_FILE}', 'r') as f:
@@ -166,12 +208,24 @@ params.append({
     "ParameterValue": "${S3_BUCKET_NAME}"
 })
 
+# Add CLI parameter overrides (from wrapper script)
+cli_overrides = json.loads('${PARAM_OVERRIDES_JSON}')
+for override in cli_overrides:
+    # Check if parameter already exists
+    existing = [p for p in params if p['ParameterKey'] == override['ParameterKey']]
+    if existing:
+        # Update existing parameter
+        existing[0]['ParameterValue'] = override['ParameterValue']
+    else:
+        # Add new parameter
+        params.append(override)
+
 # Write final params
 with open('${FINAL_PARAMS_FILE}', 'w') as f:
     json.dump(params, f, indent=2)
 EOF
 
-echo -e "${GREEN}✓${NC} Added NestedTemplatesBucketName parameter"
+echo -e "${GREEN}✓${NC} Added NestedTemplatesBucketName parameter and CLI overrides"
 
 # ============================================
 # Validate CloudFormation Template

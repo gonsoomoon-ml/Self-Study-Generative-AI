@@ -24,6 +24,27 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ENVIRONMENT="${1:-prod}"
 PROJECT_NAME="deep-insight"
 
+# Parse command-line arguments
+REGION=""
+STAGE="all"
+shift || true  # Remove first positional argument (ENVIRONMENT)
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --region)
+            REGION="$2"
+            shift 2
+            ;;
+        --stage)
+            STAGE="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
 STACK_NAME="${PROJECT_NAME}-fargate-${ENVIRONMENT}"
 TEMPLATE_FILE="$PROJECT_ROOT/cloudformation/phase2-fargate.yaml"
 ENV_FILE="$PROJECT_ROOT/.env"
@@ -83,7 +104,12 @@ fi
 echo -e "${GREEN}✓${NC} CloudFormation template found"
 
 # Get AWS region and account
-AWS_REGION=$(aws configure get region || echo "us-east-1")
+# Use provided region or fall back to configured region
+if [ -z "$REGION" ]; then
+    AWS_REGION=$(aws configure get region || echo "us-east-1")
+else
+    AWS_REGION="$REGION"
+fi
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 # ============================================
