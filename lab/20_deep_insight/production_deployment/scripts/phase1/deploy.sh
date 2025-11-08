@@ -114,15 +114,42 @@ echo -e "${GREEN}✓${NC} Parameter file found"
 # ============================================
 # S3 Bucket for Nested Templates
 # ============================================
-# Use environment-specific bucket name for isolation
-S3_BUCKET_NAME="deep-insight-templates-${ENVIRONMENT}-${AWS_ACCOUNT_ID}"
+# Use environment and region-specific bucket name for multi-region support
+S3_BUCKET_NAME="deep-insight-templates-${ENVIRONMENT}-${AWS_REGION}-${AWS_ACCOUNT_ID}"
 
 echo ""
 echo -e "${YELLOW}Setting up S3 bucket for nested templates...${NC}"
+echo "Bucket name: ${S3_BUCKET_NAME}"
+echo "Target region: ${AWS_REGION}"
 
-# Check if bucket exists
-if ! aws s3 ls "s3://${S3_BUCKET_NAME}" 2>/dev/null; then
-    echo "Creating S3 bucket: ${S3_BUCKET_NAME}"
+# Check if bucket exists and verify region
+BUCKET_EXISTS=false
+BUCKET_REGION=""
+
+if aws s3api head-bucket --bucket "${S3_BUCKET_NAME}" 2>/dev/null; then
+    BUCKET_EXISTS=true
+    # Get bucket region
+    BUCKET_REGION=$(aws s3api get-bucket-location --bucket "${S3_BUCKET_NAME}" --query 'LocationConstraint' --output text 2>/dev/null || echo "us-east-1")
+    # AWS returns "None" for us-east-1, normalize it
+    if [ "$BUCKET_REGION" == "None" ] || [ "$BUCKET_REGION" == "null" ]; then
+        BUCKET_REGION="us-east-1"
+    fi
+
+    if [ "$BUCKET_REGION" != "$AWS_REGION" ]; then
+        echo -e "${RED}✗${NC} Bucket exists but in different region!"
+        echo "   Bucket region: ${BUCKET_REGION}"
+        echo "   Target region: ${AWS_REGION}"
+        echo ""
+        echo -e "${RED}Error: Cannot use bucket from different region for CloudFormation templates${NC}"
+        echo "Please use a different environment name or delete the bucket in ${BUCKET_REGION}"
+        exit 1
+    fi
+    echo -e "${GREEN}✓${NC} S3 bucket already exists in correct region (${BUCKET_REGION})"
+fi
+
+# Create bucket if it doesn't exist
+if [ "$BUCKET_EXISTS" = false ]; then
+    echo "Creating S3 bucket: ${S3_BUCKET_NAME} in ${AWS_REGION}"
 
     if [ "$AWS_REGION" == "us-east-1" ]; then
         aws s3 mb "s3://${S3_BUCKET_NAME}" --region "$AWS_REGION"
@@ -135,9 +162,7 @@ if ! aws s3 ls "s3://${S3_BUCKET_NAME}" 2>/dev/null; then
         --bucket "${S3_BUCKET_NAME}" \
         --versioning-configuration Status=Enabled
 
-    echo -e "${GREEN}✓${NC} S3 bucket created"
-else
-    echo -e "${GREEN}✓${NC} S3 bucket already exists"
+    echo -e "${GREEN}✓${NC} S3 bucket created in ${AWS_REGION}"
 fi
 
 # ============================================
