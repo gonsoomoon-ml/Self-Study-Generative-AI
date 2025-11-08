@@ -22,8 +22,8 @@ if [ ! -f "$TEMPLATE_FILE" ]; then
     exit 1
 fi
 
-# Check if already patched (don't escape the asterisk in grep)
-if grep -q "!src/prompts/\*.md" "$TEMPLATE_FILE"; then
+# Check if already patched (use literal string match)
+if grep -qF "!src/prompts/*.md" "$TEMPLATE_FILE"; then
     echo "✅ Template already patched!"
     exit 0
 fi
