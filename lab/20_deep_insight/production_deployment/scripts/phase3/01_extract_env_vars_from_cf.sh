@@ -137,8 +137,9 @@ ALB_DNS=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="ApplicationL
 ALB_TARGET_GROUP_ARN=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="TargetGroupArn") | .OutputValue')
 TASK_EXECUTION_ROLE_ARN=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="TaskExecutionRoleArn") | .OutputValue')
 TASK_ROLE_ARN=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="TaskRoleArn") | .OutputValue')
+S3_BUCKET_NAME=$(echo "$PHASE1_OUTPUTS" | jq -r '.[] | select(.OutputKey=="SessionDataBucketName") | .OutputValue')
 
-PHASE1_COUNT=13
+PHASE1_COUNT=14
 echo -e "${GREEN}✓${NC} Phase 1: $PHASE1_COUNT variables"
 
 # Read Phase 2 outputs (if deployed)
@@ -247,12 +248,12 @@ else
 EOF
 fi
 
-# Add S3 bucket (user must set this)
+# Add S3 bucket (from Phase 1 CloudFormation)
 cat >> "$ENV_FILE" <<EOF
 # ============================================================
 # S3 Configuration
 # ============================================================
-S3_BUCKET_NAME=bedrock-logs-$AWS_ACCOUNT_ID
+S3_BUCKET_NAME=$S3_BUCKET_NAME
 
 # ============================================================
 # Phase 3: AgentCore Runtime (After deployment)

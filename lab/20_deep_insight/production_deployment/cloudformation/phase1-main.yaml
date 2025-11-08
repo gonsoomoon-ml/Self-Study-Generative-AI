@@ -295,6 +295,12 @@ Outputs:
     Export:
       Name: !Sub '${ProjectName}-task-role-arn-${Environment}'
 
+  SessionDataBucketName:
+    Description: S3 Bucket for Fargate Session Data and Artifacts
+    Value: !GetAtt IAMStack.Outputs.SessionDataBucketName
+    Export:
+      Name: !Sub '${ProjectName}-session-bucket-name-${Environment}'
+
   # VPC Endpoints Outputs
   BedrockAgentCoreDataPlaneEndpointId:
     Description: Bedrock AgentCore Data Plane VPC Endpoint ID

@@ -16,6 +16,38 @@ Parameters:
 
 Resources:
   # ============================================
+  # S3 Bucket for Logs and Artifacts
+  # ============================================
+  SessionDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'deep-insight-logs-${AWS::Region}-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldSessionData
+            Status: Enabled
+            ExpirationInDays: 30
+            NoncurrentVersionExpirationInDays: 7
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-session-data-${Environment}'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ============================================
   # Task Execution Role
   # ============================================
   TaskExecutionRole:
@@ -229,3 +261,9 @@ Outputs:
     Value: !GetAtt CodeBuildExecutionRole.Arn
     Export:
       Name: !Sub '${AWS::StackName}-CodeBuildExecutionRoleArn'
+
+  SessionDataBucketName:
+    Description: S3 Bucket for Fargate Session Data and Artifacts
+    Value: !Ref SessionDataBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-SessionDataBucketName'

@@ -55,6 +55,49 @@ cd production_deployment/scripts/phase4
 ./verify.sh
 ```
 
+---
+
+## 🗑️ Cleanup
+
+### Complete Cleanup (All Phases)
+
+**Single command** to delete all resources in the correct order:
+
+```bash
+cd production_deployment/scripts
+./cleanup_all.sh prod us-west-2
+```
+
+This will delete:
+- Phase 4: AgentCore Runtime + CloudWatch logs
+- Phase 3: UV environment, .env file, symlinks
+- Phase 2: ECS cluster, ECR repository, Docker images
+- Phase 1: VPC, subnets, security groups, ALB, IAM roles
+- S3 buckets (templates + session data)
+
+**⚠️ WARNING**: You must type "DELETE" to confirm. This action is irreversible!
+
+### Manual Cleanup (Individual Phases)
+
+If you need to clean up specific phases:
+
+```bash
+# Phase 4: Delete Runtime only
+cd production_deployment/scripts/phase4
+./cleanup.sh prod
+
+# Phase 2: Delete Fargate resources
+cd production_deployment/scripts/phase2
+./cleanup.sh prod us-west-2
+
+# Phase 1: Delete VPC infrastructure
+cd production_deployment/scripts/phase1
+./cleanup.sh prod us-west-2
+```
+
+**Important**: Always delete in reverse order (4 → 3 → 2 → 1)
+
+For detailed cleanup instructions, see: [`production_deployment/scripts/README.md#cleanup`](production_deployment/scripts/README.md#-cleanup-order-enforcement)
 
 ---
 
@@ -67,8 +110,15 @@ cd production_deployment/scripts/phase4
 │   ├── cloudformation/          # CloudFormation templates
 │   ├── scripts/                 # Deployment & verification scripts
 │   │   ├── deploy_phase1_phase2.sh  # Automated Phase 1 + 2
+│   │   ├── cleanup_all.sh       # 🗑️ Complete cleanup (all phases)
 │   │   ├── phase1/              # VPC Infrastructure
+│   │   │   ├── deploy.sh
+│   │   │   ├── verify.sh
+│   │   │   └── cleanup.sh
 │   │   ├── phase2/              # Fargate Runtime
+│   │   │   ├── deploy.sh
+│   │   │   ├── verify.sh
+│   │   │   └── cleanup.sh
 │   │   ├── phase3/              # Environment Preparation
 │   │   │   ├── 01_extract_env_vars_from_cf.sh
 │   │   │   ├── 02_create_uv_env.sh
