@@ -136,7 +136,7 @@ echo "CODEBUILD_EXECUTION_ROLE_ARN=${CODEBUILD_ROLE_ARN}" >> .env
 cat .env | grep CODEBUILD
 ```
 
-그런 다음 `01_create_agentcore_runtime.py`에서 주석 해제:
+그런 다음 `create_agentcore_runtime_vpc.py`에서 주석 해제:
 
 ```python
 # 주석 해제

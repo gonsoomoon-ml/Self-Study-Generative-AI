@@ -1,1 +1,0 @@
-# AWS MCP Sandbox Server Package

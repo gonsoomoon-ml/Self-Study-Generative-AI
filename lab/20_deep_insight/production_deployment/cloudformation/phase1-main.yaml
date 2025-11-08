@@ -18,13 +18,44 @@ Parameters:
 
   AvailabilityZone1:
     Type: AWS::EC2::AvailabilityZone::Name
-    Description: First Availability Zone
-    Default: us-east-1a
+    Description: |
+      First Availability Zone - MUST map to a supported AgentCore VPC AZ ID.
+
+      IMPORTANT: AZ names (e.g., us-east-1a) are ACCOUNT-SPECIFIC and map to different
+      physical datacenters in different AWS accounts. You MUST verify which AZ names
+      in YOUR account map to supported AZ IDs.
+
+      Supported AZ IDs by region:
+        us-east-1: use1-az1, use1-az2, use1-az4
+        us-east-2: use2-az1, use2-az2, use2-az3
+        us-west-2: usw2-az1, usw2-az2, usw2-az3
+        ap-south-1: aps1-az1, aps1-az2, aps1-az3
+        ap-southeast-1: apse1-az1, apse1-az2, apse1-az3
+        ap-southeast-2: apse2-az1, apse2-az2, apse2-az3
+        ap-northeast-1: apne1-az1, apne1-az2, apne1-az4
+        eu-west-1: euw1-az1, euw1-az2, euw1-az3
+        eu-central-1: euc1-az1, euc1-az2, euc1-az3
+
+      To verify YOUR account's supported AZ names:
+        cd production_deployment/scripts
+        ./verify_agentcore_azs.sh <region>
+
+      For detailed documentation:
+        See production_deployment/docs/bedrock_agentcore_vpc_regions.md
 
   AvailabilityZone2:
     Type: AWS::EC2::AvailabilityZone::Name
-    Description: Second Availability Zone
-    Default: us-east-1c
+    Description: |
+      Second Availability Zone - MUST be different from AvailabilityZone1 and map
+      to a supported AgentCore VPC AZ ID.
+
+      IMPORTANT: Run the verification script to identify supported AZ names in YOUR account.
+
+      To verify:
+        cd production_deployment/scripts
+        ./verify_agentcore_azs.sh <region>
+
+      The script will provide the exact AZ names to use for your deployment.
 
   VpcCidr:
     Type: String

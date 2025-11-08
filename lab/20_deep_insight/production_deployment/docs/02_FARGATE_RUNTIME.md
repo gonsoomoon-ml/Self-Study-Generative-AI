@@ -38,8 +38,8 @@ Phase 2에서는 Python 코드를 실행하는 Fargate Runtime을 Docker 컨테�
 **Docker 이미지**:
 - Base: Python 3.12-slim
 - 한글 폰트: fonts-nanum
-- 필수 패키지: pandas, matplotlib, boto3, flask 등
-- Application: dynamic_executor_v2.py
+- Essential packages: boto3, flask, numpy, pandas, matplotlib, seaborn, plotly, weasyprint (11 packages)
+- Application: code_executor_server.py
 
 ---
 
@@ -108,7 +108,7 @@ ECR Repository URI: 738490718699.dkr.ecr.us-east-1.amazonaws.com/deep-insight-fa
 **Docker 이미지 빌드**:
 - Python 3.12 + 한글 폰트 설치
 - 필수 Python 패키지 설치
-- dynamic_executor_v2.py 복사
+- code_executor_server.py 복사
 - 두 개 태그 생성: `v20251102-083527`, `latest`
 
 **빌드 로그 예시**:
@@ -127,8 +127,8 @@ Step 3/11 : RUN apt-get update && apt-get install -y fonts-nanum...
 Step 4/11 : RUN fc-cache -f -v
 Step 5/11 : COPY requirements.txt .
 Step 6/11 : RUN pip install --no-cache-dir -r requirements.txt
-Step 7/11 : COPY dynamic_executor_v2.py .
-Step 8/11 : CMD ["python", "-u", "dynamic_executor_v2.py"]
+Step 7/11 : COPY code_executor_server.py .
+Step 8/11 : CMD ["python", "-u", "code_executor_server.py"]
 Successfully built 1234567890ab
 ✓ Docker image built successfully
 

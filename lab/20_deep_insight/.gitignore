@@ -63,6 +63,7 @@ logs/
 temp/
 tmp/
 artifacts/
+archive_*/
 
 # Runtime outputs
 .bedrock_agentcore/

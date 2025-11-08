@@ -1,15 +1,82 @@
 #!/usr/bin/env python3
 """
-Global Fargate Session Manager for Tools
-도구들이 공유하는 글로벌 세션 매니저
+Global Fargate Session Manager for Multi-Agent Workflows
 
-This module provides a singleton session manager for coordinating Fargate container
-sessions across multiple tools and concurrent requests. It handles:
-- Multi-request session isolation with separate HTTP clients and cookies
-- Container lifecycle management (creation, health checks, cleanup)
-- ALB sticky session management with subprocess-based cookie acquisition
-- S3 data synchronization for CSV files
-- Automatic cleanup on program exit
+This module provides a singleton session manager that coordinates Fargate container
+sessions across multiple tools and concurrent requests in a multi-agent data analysis
+environment.
+
+Architecture:
+    - Singleton Pattern: Single global instance manages all sessions
+    - Session Isolation: Each request gets its own HTTP client, cookies, and container
+    - Container Lifecycle: Automated creation, health checks, and cleanup
+    - ALB Integration: Sticky session management with subprocess-based cookie acquisition
+    - S3 Integration: Automatic data synchronization for CSV files
+    - Error Handling: Exponential backoff retry with fail-fast for configuration errors
+
+Key Features:
+    1. Multi-Request Session Isolation
+       - Separate HTTP clients per request (cookie isolation)
+       - IP-based container ownership tracking
+       - Prevents session conflicts in concurrent workflows
+
+    2. Container Lifecycle Management
+       - Fargate task creation with ECS
+       - ALB target registration and health checks
+       - Automatic cleanup on workflow completion
+       - Orphaned container detection and cleanup
+
+    3. ALB Sticky Session Management
+       - Subprocess-based cookie acquisition (process isolation)
+       - Round-robin retry logic for target IP matching
+       - Session ID validation for multi-job support
+
+    4. Robust Error Handling
+       - Exponential backoff for transient errors (3^attempt)
+       - Fail-fast for configuration errors (IAM, VPC, etc.)
+       - Per-request failure tracking with limits
+
+    5. S3 Data Synchronization
+       - CSV file upload with session ID prefixes
+       - Container file sync via HTTP API
+       - Automatic cleanup on session completion
+
+Usage Example:
+    ```python
+    # Get singleton instance
+    session_mgr = get_global_session()
+
+    # Set request context (required)
+    session_mgr.set_request_context("request-123")
+
+    # Create session with data
+    success = session_mgr.ensure_session_with_data("data.csv")
+
+    # Execute code in container
+    result = session_mgr.execute_code("import pandas as pd\\ndf = pd.read_csv('data.csv')")
+
+    # Cleanup when done
+    session_mgr.cleanup_session()
+    ```
+
+Environment Variables Required:
+    - AWS_REGION: AWS region for service calls
+    - ECS_CLUSTER_NAME: ECS cluster for Fargate tasks
+    - ALB_TARGET_GROUP_ARN: ALB target group ARN
+    - S3_BUCKET_NAME: S3 bucket for data/results
+    - TASK_DEFINITION_ARN: ECS task definition ARN
+    - CONTAINER_NAME: Container name in task definition
+
+Thread Safety:
+    This module is NOT thread-safe by design. It uses a singleton pattern with
+    request context switching (`set_request_context()`). Each request should run
+    sequentially or use separate process instances.
+
+Notes:
+    - Automatic cleanup registered via atexit
+    - Cookies are session-specific (AWSALB sticky sessions)
+    - Health checks wait up to 150 seconds for container readiness
+    - Cookie acquisition timeout: 240 seconds (4 minutes)
 """
 
 # ============================================================================
@@ -73,15 +140,38 @@ class GlobalFargateSessionManager:
 
     _instance = None
     _session_manager = None
-    _sessions = {}  # {request_id: session_info} - 요청별 세션 관리
-    _http_clients = {}  # {request_id: http_session} - 요청별 HTTP 클라이언트 (쿠키 격리)
-    _used_container_ips = {}  # {container_ip: request_id} - IP 기반 컨테이너 소유권 추적
-    _current_request_id = None  # 현재 컨텍스트의 요청 ID
-    _retry_count = 0
-    _max_retries = 2
-    _session_creation_failures = {}  # {request_id: failure_count} - 세션 생성 실패 횟수 추적
-    _max_session_failures = 5  # 최대 세션 생성 실패 허용 횟수 (ECS Task Limit 대응)
-    _cleaned_up_requests = set()  # 이미 cleanup된 요청 ID 추적 (재생성 방지)
+    _sessions = {}  # {request_id: session_info} - Per-request session management
+    _http_clients = {}  # {request_id: http_session} - Per-request HTTP client (cookie isolation)
+    _used_container_ips = {}  # {container_ip: request_id} - IP-based container ownership tracking
+    _current_request_id = None  # Current context request ID
+    _session_creation_failures = {}  # {request_id: failure_count} - Session creation failure tracking
+    _cleaned_up_requests = set()  # Cleaned-up request IDs (prevents recreation)
+
+    # ========================================================================
+    # CONSTANTS (TIMEOUTS AND RETRY LIMITS)
+    # ========================================================================
+
+    # Session Creation
+    SESSION_CREATION_MAX_RETRIES = 5  # Maximum session creation retry attempts
+    EXPONENTIAL_BACKOFF_BASE = 3      # Base for exponential backoff (3^attempt)
+
+    # Code Execution
+    CODE_EXECUTION_MAX_RETRIES = 3    # Maximum code execution retry attempts
+    CODE_EXECUTION_RETRY_DELAY = 2    # Delay between retries (seconds)
+
+    # ALB Health Check Wait Times (seconds)
+    ALB_INITIAL_WAIT_DURATION = 60    # Total wait before health checks start
+    ALB_WAIT_ITERATIONS = 6           # Number of keep-alive log iterations
+    ALB_WAIT_INTERVAL = 10            # Interval for each iteration (60s / 6 = 10s)
+
+    # Container Health Check (seconds)
+    HEALTH_CHECK_MAX_ATTEMPTS = 30    # Maximum health check attempts
+    HEALTH_CHECK_INTERVAL = 5         # Interval between health checks
+
+    # Timeouts (seconds)
+    COOKIE_ACQUISITION_TIMEOUT = 240  # Cookie acquisition subprocess timeout (4 minutes)
+    FILE_SYNC_TIMEOUT = 30            # File sync HTTP request timeout
+    FILE_SYNC_WAIT = 10               # Wait after file sync for completion
 
     # ========================================================================
     # 📦 INITIALIZATION (SINGLETON PATTERN)
@@ -105,13 +195,13 @@ class GlobalFargateSessionManager:
     # ========================================================================
 
     def set_request_context(self, request_id: str):
-        """현재 요청 컨텍스트 설정"""
+        """Set current request context"""
         self._current_request_id = request_id
         logger.info(f"📋 Request context set: {request_id}")
 
     def ensure_session(self):
         """
-        세션이 없거나 비활성화된 경우 새 세션 생성 (요청별 세션 관리, Exponential Backoff 적용)
+        Ensure session exists or create new one (with exponential backoff retry)
 
         Returns:
             bool: True if session exists or was created successfully, False otherwise
@@ -120,23 +210,23 @@ class GlobalFargateSessionManager:
             if not self._current_request_id:
                 raise Exception("Request context not set. Call set_request_context() first.")
 
-            # ✅ 이미 cleanup된 요청은 새 세션 생성 금지 (중복 컨테이너 방지)
+            # Prevent new session creation for already cleaned-up requests
             if self._current_request_id in self._cleaned_up_requests:
                 error_msg = f"❌ FATAL: Request {self._current_request_id} already cleaned up - cannot create new session. This prevents duplicate container creation after workflow completion."
                 logger.error(error_msg)
                 raise Exception(error_msg)
 
-            # 현재 요청의 세션 확인
+            # Check if session exists for current request
             if self._current_request_id in self._sessions:
                 return self._reuse_existing_session()
 
-            # 새 세션 생성 (Exponential Backoff 적용)
+            # Create new session with exponential backoff
             return self._create_new_session()
 
         except Exception as e:
             logger.error(f"❌ Failed to ensure session: {e}")
 
-            # ✅ 치명적 에러는 재발생 (워크플로우 중단)
+            # Re-raise fatal errors (stop workflow)
             if "FATAL" in str(e):
                 raise
 
@@ -144,7 +234,7 @@ class GlobalFargateSessionManager:
 
     def ensure_session_with_data(self, csv_file_path: str):
         """
-        CSV 파일과 함께 세션 생성 (세션 확인 → S3 업로드 → 컨테이너 동기화)
+        Create session with CSV data (session creation → S3 upload → container sync)
 
         Args:
             csv_file_path: Path to CSV file to upload
@@ -155,16 +245,16 @@ class GlobalFargateSessionManager:
         try:
             logger.info(f"🚀 Creating session with data: {csv_file_path}")
 
-            # ✅ 1. 먼저 세션 생성 (Timestamp 생성)
+            # 1. Create session first (generates timestamp)
             if not self.ensure_session():
                 raise Exception("Failed to create Fargate session")
 
-            # ✅ 2. 생성된 세션 ID를 사용하여 S3 업로드
+            # 2. Upload to S3 using generated session ID
             session_id = self._sessions[self._current_request_id]['session_id']
             s3_key = self._upload_csv_to_s3_with_session_id(csv_file_path, session_id)
             logger.info(f"📤 CSV uploaded to S3: {s3_key}")
 
-            # 3. 컨테이너에 S3 → 로컬 동기화
+            # 3. Sync S3 → container local storage
             self._sync_csv_from_s3_to_container(s3_key)
             logger.info("✅ CSV file synced to container")
 
@@ -176,7 +266,7 @@ class GlobalFargateSessionManager:
 
     def execute_code(self, code: str, description: str = ""):
         """
-        코드 실행 with 자동 세션 관리 및 연결 재시도
+        Execute code with automatic session management and connection retry
 
         Args:
             code: Python code to execute
@@ -185,25 +275,22 @@ class GlobalFargateSessionManager:
         Returns:
             dict: Execution result or error
         """
-        max_retries = 3
-        retry_delay = 2  # seconds
-
-        for attempt in range(1, max_retries + 1):
+        for attempt in range(1, self.CODE_EXECUTION_MAX_RETRIES + 1):
             try:
-                # 세션 확인 및 생성
+                # Ensure session exists
                 if not self.ensure_session():
                     return {"error": "Failed to create or maintain session"}
 
-                # 코드 실행
+                # Execute code
                 result = self._session_manager.execute_code(code, description)
 
-                # 성공하면 바로 반환
+                # Return immediately on success
                 return result
 
             except Exception as e:
                 error_msg = str(e)
 
-                # 연결 관련 에러인지 확인
+                # Check if it's a connection error
                 is_connection_error = any(keyword in error_msg.upper() for keyword in [
                     "CONNECTION FAILED",
                     "NOT RESPONDING",
@@ -213,34 +300,34 @@ class GlobalFargateSessionManager:
                 ])
 
                 if is_connection_error:
-                    # 연결 에러 - 재시도
-                    logger.warning(f"⚠️ Connection error (attempt {attempt}/{max_retries}): {error_msg}")
+                    # Connection error - retry
+                    logger.warning(f"⚠️ Connection error (attempt {attempt}/{self.CODE_EXECUTION_MAX_RETRIES}): {error_msg}")
 
-                    if attempt < max_retries:
-                        logger.info(f"🔄 Retrying in {retry_delay} seconds...")
-                        time.sleep(retry_delay)
+                    if attempt < self.CODE_EXECUTION_MAX_RETRIES:
+                        logger.info(f"🔄 Retrying in {self.CODE_EXECUTION_RETRY_DELAY} seconds...")
+                        time.sleep(self.CODE_EXECUTION_RETRY_DELAY)
                     else:
-                        logger.error(f"❌ Connection failed after {max_retries} attempts. Giving up.")
+                        logger.error(f"❌ Connection failed after {self.CODE_EXECUTION_MAX_RETRIES} attempts. Giving up.")
                         return {
-                            "error": f"Connection failed after {max_retries} attempts: {error_msg}"
+                            "error": f"Connection failed after {self.CODE_EXECUTION_MAX_RETRIES} attempts: {error_msg}"
                         }
                 else:
-                    # 코드 실행 에러 등 - 재시도 안 함
+                    # Code execution error - don't retry
                     logger.error(f"❌ Code execution failed: {e}")
-                    # ⚠️ 세션을 None으로 리셋하지 않음!
-                    # 컨테이너 통신 에러가 발생해도 다음 Agent가 재시도할 수 있도록 세션 유지
-                    # 여러 Agent가 같은 컨테이너를 공유해야 하므로 세션 초기화 금지
+                    # NOTE: Don't reset session to None!
+                    # Keep session alive so next agent can retry
+                    # Multiple agents share the same container, so don't reset session
                     return {"error": str(e)}
 
     def cleanup_session(self, request_id: str = None):
         """
-        특정 요청의 세션 정리
+        Clean up session for specific request
 
         Args:
             request_id: Request ID to cleanup (defaults to current request)
         """
         try:
-            # request_id가 없으면 현재 컨텍스트 사용
+            # Use current context if request_id not provided
             cleanup_request_id = request_id or self._current_request_id
 
             if not cleanup_request_id:
@@ -253,39 +340,39 @@ class GlobalFargateSessionManager:
 
                 container_ip = session_info.get('container_ip')
 
-                # ✅ FIX: complete_session()을 먼저 호출 (ALB 제거 전에)
-                # 1. 먼저 컨테이너가 S3에 업로드하도록 허용
+                # FIX: Call complete_session() first (before ALB removal)
+                # 1. Allow container to upload to S3 first
                 logger.info(f"🏁 Completing session (S3 upload)...")
                 self._session_manager.current_session = session_info['fargate_session']
                 self._session_manager.complete_session()
 
-                # 2. 그 다음 컨테이너 IP 해제 및 ALB 제거 (이제 안전함)
+                # 2. Then release container IP and remove from ALB (safe now)
                 if container_ip and container_ip in self._used_container_ips:
                     del self._used_container_ips[container_ip]
                     logger.info(f"🧹 Released container IP: {container_ip}")
                     logger.info(f"   Remaining IPs: {list(self._used_container_ips.keys())}")
 
-                    # ✅ ALB Target Group에서 컨테이너 제거 (zombie target 방지)
-                    # complete_session() 이후에 실행하여 HTTP 502 에러 방지
+                    # Remove container from ALB Target Group (prevents zombie targets)
+                    # Execute after complete_session() to prevent HTTP 502 errors
                     self._deregister_from_alb(container_ip)
 
-                # 세션 딕셔너리에서 제거
+                # Remove from session dictionary
                 del self._sessions[cleanup_request_id]
                 logger.info(f"✅ Session cleanup completed. Remaining sessions: {len(self._sessions)}")
             else:
                 logger.warning(f"⚠️ No session found for request {cleanup_request_id}")
 
-            # ✅ HTTP 클라이언트도 정리 (쿠키 제거)
+            # Clean up HTTP client (remove cookies)
             if cleanup_request_id in self._http_clients:
                 del self._http_clients[cleanup_request_id]
                 logger.info(f"🍪 Removed HTTP client for request {cleanup_request_id}")
 
-            # ✅ 실패 카운터도 정리
+            # Clean up failure counter
             if cleanup_request_id in self._session_creation_failures:
                 del self._session_creation_failures[cleanup_request_id]
                 logger.info(f"🧹 Cleared failure counter for request {cleanup_request_id}")
 
-            # ✅ cleanup된 요청 ID를 추적 (재생성 방지)
+            # Track cleaned-up request ID (prevent recreation)
             self._cleaned_up_requests.add(cleanup_request_id)
             logger.info(f"🔒 Request {cleanup_request_id} marked as cleaned up - new session creation blocked")
 
@@ -296,8 +383,137 @@ class GlobalFargateSessionManager:
     # 🔧 SESSION MANAGEMENT (PRIVATE HELPERS)
     # ========================================================================
 
+    def _get_aws_region(self) -> str:
+        """
+        Get AWS region from environment with validation
+
+        Returns:
+            str: AWS region name
+
+        Raises:
+            ValueError: If AWS_REGION environment variable is not set
+        """
+        aws_region = os.getenv('AWS_REGION')
+        if not aws_region:
+            raise ValueError("AWS_REGION environment variable is required but not set")
+        return aws_region
+
+    def _cleanup_failed_session(self):
+        """Clean up session state after creation failure"""
+        if self._current_request_id in self._sessions:
+            del self._sessions[self._current_request_id]
+        self._cleanup_orphaned_containers()
+
+    def _increment_failure_counter(self):
+        """Increment session creation failure counter for current request"""
+        failure_count = self._session_creation_failures.get(self._current_request_id, 0)
+        self._session_creation_failures[self._current_request_id] = failure_count + 1
+
+    def _log_active_sessions(self, attempt: int):
+        """Log information about currently active sessions"""
+        active_sessions = [req_id for req_id in self._sessions.keys() if req_id not in self._cleaned_up_requests]
+        logger.info(f"📦 Creating new Fargate session for request {self._current_request_id} (attempt {attempt}/{self.SESSION_CREATION_MAX_RETRIES})...")
+        logger.info(f"   Current active sessions: {len(active_sessions)}")
+        if active_sessions:
+            logger.info(f"   Active request IDs: {active_sessions}")
+            logger.info(f"   Active container IPs: {[self._sessions[req_id]['container_ip'] for req_id in active_sessions if req_id in self._sessions]}")
+
+    def _create_fargate_container(self):
+        """Create and configure Fargate container with HTTP session"""
+        timestamp_id = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+
+        fargate_session_info = self._session_manager.create_session(
+            session_id=timestamp_id,
+            max_executions=300
+        )
+
+        # Inject HTTP session (per-request cookie isolation)
+        http_client = self._get_http_client(self._current_request_id)
+        self._session_manager.set_http_session(http_client)
+        logger.info(f"🔗 HTTP session injected for request {self._current_request_id}")
+
+        return fargate_session_info
+
+    def _register_container_ip(self, private_ip: str):
+        """Register container IP for current request"""
+        self._used_container_ips[private_ip] = self._current_request_id
+        logger.info(f"📝 Registered container IP: {private_ip}")
+        logger.info(f"   Request ID: {self._current_request_id}")
+        logger.info(f"   All registered IPs: {list(self._used_container_ips.keys())}")
+
+    def _save_session(self, fargate_session_info: dict, container_ip: str):
+        """Save session information after successful creation"""
+        self._sessions[self._current_request_id] = {
+            'session_id': fargate_session_info['session_id'],
+            'request_id': self._current_request_id,
+            'container_ip': container_ip,
+            'fargate_session': self._session_manager.current_session,
+            'created_at': datetime.now()
+        }
+        logger.info(f"✅ Session created and saved for request {self._current_request_id}: {fargate_session_info['session_id']}")
+        logger.info(f"   Total active sessions: {len(self._sessions)}")
+
+        # Session creation success - reset failure counter
+        if self._current_request_id in self._session_creation_failures:
+            del self._session_creation_failures[self._current_request_id]
+
+    def _handle_aws_session_error(self, error_code: str, error_message: str, attempt: int) -> bool:
+        """
+        Handle AWS ClientError during session creation
+
+        Returns:
+            True to continue retry loop, False to stop (error was raised)
+        """
+        # Configuration errors - FAIL FAST (don't retry)
+        NON_RETRYABLE_ERRORS = [
+            'ValidationException',
+            'InvalidParameterException',
+            'AccessDeniedException',
+            'ResourceNotFoundException',
+            'UnauthorizedException',
+        ]
+
+        if error_code in NON_RETRYABLE_ERRORS:
+            logger.error(f"❌ FATAL: Non-retryable configuration error detected: {error_code}")
+            logger.error(f"   Error: {error_message}")
+            logger.error(f"   Fix the configuration and try again. Not retrying.")
+            self._increment_failure_counter()
+            raise
+
+        # Transient errors - retry with exponential backoff
+        if attempt < self.SESSION_CREATION_MAX_RETRIES:
+            wait_time = self.EXPONENTIAL_BACKOFF_BASE ** attempt
+            logger.warning(f"⏳ Transient error - waiting {wait_time}s before retry (exponential backoff: {self.EXPONENTIAL_BACKOFF_BASE}^{attempt})...")
+            time.sleep(wait_time)
+            return True
+        else:
+            # Last attempt failed
+            self._increment_failure_counter()
+            logger.error(f"❌ FATAL: Session creation failed {self.SESSION_CREATION_MAX_RETRIES} times for request {self._current_request_id}")
+            logger.error(f"   Total backoff time: {sum(self.EXPONENTIAL_BACKOFF_BASE ** i for i in range(1, self.SESSION_CREATION_MAX_RETRIES + 1))} seconds")
+            raise
+
+    def _handle_generic_session_error(self, attempt: int) -> bool:
+        """
+        Handle generic exceptions during session creation
+
+        Returns:
+            True to continue retry loop, False to stop (error was raised)
+        """
+        if attempt < self.SESSION_CREATION_MAX_RETRIES:
+            wait_time = self.EXPONENTIAL_BACKOFF_BASE ** attempt
+            logger.warning(f"⏳ Waiting {wait_time}s before retry (exponential backoff: {self.EXPONENTIAL_BACKOFF_BASE}^{attempt})...")
+            time.sleep(wait_time)
+            return True
+        else:
+            # Last attempt failed
+            self._increment_failure_counter()
+            logger.error(f"❌ FATAL: Session creation failed {self.SESSION_CREATION_MAX_RETRIES} times for request {self._current_request_id}")
+            logger.error(f"   Total backoff time: {sum(self.EXPONENTIAL_BACKOFF_BASE ** i for i in range(1, self.SESSION_CREATION_MAX_RETRIES + 1))} seconds")
+            raise
+
     def _reuse_existing_session(self):
-        """기존 세션 재사용 (헬스 체크 포함)"""
+        """Reuse existing session (with health check)"""
         session_info = self._sessions[self._current_request_id]
         container_ip = session_info.get('container_ip', 'unknown')
 
@@ -315,163 +531,83 @@ class GlobalFargateSessionManager:
                 logger.warning(f"   Session ID: {session_info['session_id']}")
                 logger.warning(f"   Consider implementing automatic cleanup for stopped containers")
 
-        # SessionBasedFargateManager의 current_session 업데이트
+        # Update SessionBasedFargateManager's current_session
         self._session_manager.current_session = session_info['fargate_session']
 
-        # ✅ HTTP Session도 재주입 (세션 재사용 시에도 필요)
+        # Re-inject HTTP session (required even when reusing session)
         http_client = self._get_http_client(self._current_request_id)
         self._session_manager.set_http_session(http_client)
 
         return True
 
     def _create_new_session(self):
-        """새 세션 생성 (Exponential Backoff 적용)"""
-        for attempt in range(1, self._max_session_failures + 1):
+        """Create new session (with exponential backoff retry)"""
+        for attempt in range(1, self.SESSION_CREATION_MAX_RETRIES + 1):
             try:
-                # 🔍 동시 실행 감지 로그
-                active_sessions = [req_id for req_id in self._sessions.keys() if req_id not in self._cleaned_up_requests]
-                logger.info(f"📦 Creating new Fargate session for request {self._current_request_id} (attempt {attempt}/{self._max_session_failures})...")
-                logger.info(f"   Current active sessions: {len(active_sessions)}")
-                if active_sessions:
-                    logger.info(f"   Active request IDs: {active_sessions}")
-                    logger.info(f"   Active container IPs: {[self._sessions[req_id]['container_ip'] for req_id in active_sessions if req_id in self._sessions]}")
+                # Log concurrent execution detection
+                self._log_active_sessions(attempt)
 
-                timestamp_id = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+                # Create Fargate container and inject HTTP session
+                fargate_session_info = self._create_fargate_container()
 
-                fargate_session_info = self._session_manager.create_session(
-                    session_id=timestamp_id,
-                    max_executions=300
-                )
-
-                # ✅ HTTP Session 주입 (요청별 쿠키 격리)
-                http_client = self._get_http_client(self._current_request_id)
-                self._session_manager.set_http_session(http_client)
-                logger.info(f"🔗 HTTP session injected for request {self._current_request_id}")
-
-                # ✅ 컨테이너 IP 등록 (AWS VPC가 유니크한 IP 보장)
+                # Register container IP
                 expected_private_ip = self._session_manager.current_session['private_ip']
-                self._used_container_ips[expected_private_ip] = self._current_request_id
-                logger.info(f"📝 Registered container IP: {expected_private_ip}")
-                logger.info(f"   Request ID: {self._current_request_id}")
-                logger.info(f"   All registered IPs: {list(self._used_container_ips.keys())}")
-
-                # ⚠️ FIX: 세션 저장을 Health Check 완료 후로 이동 (Race Condition 방지)
-                # 이 시점에는 self._sessions에 저장하지 않음!
-                # → ensure_session() 동시 호출 시 unhealthy 세션 재사용 방지
+                self._register_container_ip(expected_private_ip)
 
                 # Wait for ALB health check and acquire cookie
                 if not self._wait_for_container_ready(expected_private_ip, fargate_session_info['session_id']):
-                    # 실패 시 IP 등록 해제
+                    # Release IP registration on failure
                     if expected_private_ip in self._used_container_ips:
                         del self._used_container_ips[expected_private_ip]
                     return False
 
-                # ✅ FIX: Health Check + Cookie 획득 완료 후 세션 저장 (Race Condition 방지)
-                # 이제 안전하게 세션을 self._sessions에 저장
-                # → 다른 스레드가 ensure_session() 호출 시 healthy 세션만 재사용
-                self._sessions[self._current_request_id] = {
-                    'session_id': fargate_session_info['session_id'],
-                    'request_id': self._current_request_id,
-                    'container_ip': expected_private_ip,
-                    'fargate_session': self._session_manager.current_session,
-                    'created_at': datetime.now()
-                }
-                logger.info(f"✅ Session created and saved for request {self._current_request_id}: {fargate_session_info['session_id']}")
-                logger.info(f"   Total active sessions: {len(self._sessions)}")
+                # Save session after health check + cookie acquisition
+                self._save_session(fargate_session_info, expected_private_ip)
 
-                # ✅ 세션 생성 성공 - 실패 카운터 리셋
-                if self._current_request_id in self._session_creation_failures:
-                    del self._session_creation_failures[self._current_request_id]
-
-                self._retry_count = 0
                 return True
 
             except ClientError as create_error:
                 error_code = create_error.response['Error']['Code']
                 error_message = create_error.response['Error']['Message']
-                logger.error(f"❌ Session creation failed (attempt {attempt}/{self._max_session_failures}): [{error_code}] {error_message}")
+                logger.error(f"❌ Session creation failed (attempt {attempt}/{self.SESSION_CREATION_MAX_RETRIES}): [{error_code}] {error_message}")
 
-                # 세션 생성 자체가 실패한 경우만 cleanup
-                if self._current_request_id in self._sessions:
-                    del self._sessions[self._current_request_id]
-                self._cleanup_orphaned_containers()
+                # Cleanup only if session creation itself failed
+                self._cleanup_failed_session()
 
-                # ❌ Configuration errors - FAIL FAST (don't retry)
-                NON_RETRYABLE_ERRORS = [
-                    'ValidationException',  # Invalid parameters (e.g., wrong VPC, subnet, etc.)
-                    'InvalidParameterException',  # Invalid parameters
-                    'AccessDeniedException',  # IAM permission issues
-                    'ResourceNotFoundException',  # Resource not found
-                    'UnauthorizedException',  # Auth issues
-                ]
-
-                if error_code in NON_RETRYABLE_ERRORS:
-                    logger.error(f"❌ FATAL: Non-retryable configuration error detected: {error_code}")
-                    logger.error(f"   Error: {error_message}")
-                    logger.error(f"   Fix the configuration and try again. Not retrying.")
-                    failure_count = self._session_creation_failures.get(self._current_request_id, 0)
-                    self._session_creation_failures[self._current_request_id] = failure_count + 1
-                    raise
-
-                # ✅ Transient errors - retry with exponential backoff
-                # (e.g., ThrottlingException, ServiceUnavailable, etc.)
-                if attempt < self._max_session_failures:
-                    wait_time = 3 ** attempt  # 3, 9, 27, 81초
-                    logger.warning(f"⏳ Transient error - waiting {wait_time}s before retry (exponential backoff: 3^{attempt})...")
-                    time.sleep(wait_time)
-                else:
-                    # 마지막 시도 실패 - 실패 카운터 증가 후 에러 발생
-                    failure_count = self._session_creation_failures.get(self._current_request_id, 0)
-                    self._session_creation_failures[self._current_request_id] = failure_count + 1
-                    logger.error(f"❌ FATAL: Session creation failed {self._max_session_failures} times for request {self._current_request_id}")
-                    logger.error(f"   Total backoff time: {3 + 9 + 27 + 81} seconds")
-                    raise
+                # Handle AWS error (may raise exception)
+                self._handle_aws_session_error(error_code, error_message, attempt)
 
             except Exception as create_error:
                 # Handle non-AWS exceptions (e.g., network errors, Python exceptions)
-                logger.error(f"❌ Session creation failed (attempt {attempt}/{self._max_session_failures}): {create_error}")
+                logger.error(f"❌ Session creation failed (attempt {attempt}/{self.SESSION_CREATION_MAX_RETRIES}): {create_error}")
 
-                # 세션 생성 자체가 실패한 경우만 cleanup
-                if self._current_request_id in self._sessions:
-                    del self._sessions[self._current_request_id]
-                self._cleanup_orphaned_containers()
+                # Cleanup only if session creation itself failed
+                self._cleanup_failed_session()
 
-                # Retry non-AWS exceptions
-                if attempt < self._max_session_failures:
-                    wait_time = 3 ** attempt  # 3, 9, 27, 81초
-                    logger.warning(f"⏳ Waiting {wait_time}s before retry (exponential backoff: 3^{attempt})...")
-                    time.sleep(wait_time)
-                else:
-                    # 마지막 시도 실패 - 실패 카운터 증가 후 에러 발생
-                    failure_count = self._session_creation_failures.get(self._current_request_id, 0)
-                    self._session_creation_failures[self._current_request_id] = failure_count + 1
-                    logger.error(f"❌ FATAL: Session creation failed {self._max_session_failures} times for request {self._current_request_id}")
-                    logger.error(f"   Total backoff time: {3 + 9 + 27 + 81} seconds")
-                    raise
+                # Handle generic error (may raise exception)
+                self._handle_generic_session_error(attempt)
 
     def _wait_for_container_ready(self, expected_ip: str, session_id: str) -> bool:
-        """컨테이너 준비 대기 (ALB Health Check + Cookie 획득)"""
-        # 🐛 DEBUG: Checkpoint before health check
-        logger.info(f"🔍 DEBUG: About to start ALB health check wait for {expected_ip}")
-
-        # 🆕 ALB가 Health Check를 시작할 시간 확보 (60초 대기, keep-alive 로그)
-        logger.info(f"⏳ Waiting 60 seconds for ALB to begin health checks...")
+        """Wait for container readiness (ALB Health Check + Cookie acquisition)"""
+        # Wait for ALB to begin health checks (with keep-alive logging)
+        logger.info(f"⏳ Waiting {self.ALB_INITIAL_WAIT_DURATION} seconds for ALB to begin health checks...")
         logger.info(f"   This prevents 'ALB never sent health checks' issue")
 
-        # Keep-alive: 60초를 6번의 10초로 나누어 중간에 로그 출력
-        for wait_i in range(6):
-            time.sleep(10)
-            logger.info(f"   ⏱️  Waiting for ALB... ({(wait_i+1)*10}/60s)")
+        # Keep-alive: Split 60s into 6 iterations of 10s with logging
+        for wait_i in range(self.ALB_WAIT_ITERATIONS):
+            time.sleep(self.ALB_WAIT_INTERVAL)
+            logger.info(f"   ⏱️  Waiting for ALB... ({(wait_i+1)*self.ALB_WAIT_INTERVAL}/{self.ALB_INITIAL_WAIT_DURATION}s)")
 
-        # ⏰ ALB Health Check 대기 (Container가 healthy 상태가 될 때까지)
+        # Wait for ALB Health Check (until container becomes healthy)
         logger.info(f"⏰ Waiting for container {expected_ip} to be healthy in ALB...")
         alb_healthy = False
-        for wait_attempt in range(1, 31):  # 최대 150초 (30 * 5s)
+        max_wait_time = self.HEALTH_CHECK_MAX_ATTEMPTS * self.HEALTH_CHECK_INTERVAL
+        for wait_attempt in range(1, self.HEALTH_CHECK_MAX_ATTEMPTS + 1):
             target_health = self._check_alb_target_health(expected_ip)
-            logger.info(f"   Attempt {wait_attempt}/30: ALB health = {target_health}")
+            logger.info(f"   Attempt {wait_attempt}/{self.HEALTH_CHECK_MAX_ATTEMPTS}: ALB health = {target_health}")
 
             if target_health == 'healthy':
-                logger.info(f"✅ Container is healthy in ALB after {wait_attempt * 5}s")
+                logger.info(f"✅ Container is healthy in ALB after {wait_attempt * self.HEALTH_CHECK_INTERVAL}s")
                 alb_healthy = True
                 break
             elif target_health in ['unhealthy', 'draining']:
@@ -479,13 +615,13 @@ class GlobalFargateSessionManager:
             elif target_health == 'not_registered':
                 logger.info(f"   Container not yet registered to ALB - waiting...")
 
-            if wait_attempt < 30:
-                time.sleep(5)
+            if wait_attempt < self.HEALTH_CHECK_MAX_ATTEMPTS:
+                time.sleep(self.HEALTH_CHECK_INTERVAL)
 
         if not alb_healthy:
-            logger.warning(f"⚠️ Container not healthy after 150s, but will try cookie acquisition anyway")
+            logger.warning(f"⚠️ Container not healthy after {max_wait_time}s, but will try cookie acquisition anyway")
 
-        # 🍪 IP 기반 쿠키 획득 (세션 ID 검증 포함)
+        # Acquire IP-based cookie (with session ID validation)
         cookie_acquired = self._acquire_cookie_for_ip(expected_ip, session_id)
 
         if not cookie_acquired:
@@ -497,7 +633,7 @@ class GlobalFargateSessionManager:
         return True
 
     def _get_http_client(self, request_id: str):
-        """요청별 HTTP 클라이언트 반환 (쿠키 격리)"""
+        """Return HTTP client for request (cookie isolation)"""
         if request_id not in self._http_clients:
             self._http_clients[request_id] = requests.Session()
             logger.info(f"🍪 Created new HTTP client for request {request_id}")
@@ -514,7 +650,7 @@ class GlobalFargateSessionManager:
             if not ALB_TARGET_GROUP_ARN:
                 raise ValueError("ALB_TARGET_GROUP_ARN environment variable is required")
 
-            elbv2_client = boto3.client('elbv2', region_name='us-east-1')
+            elbv2_client = boto3.client('elbv2', region_name=self._get_aws_region())
             response = elbv2_client.describe_target_health(TargetGroupArn=ALB_TARGET_GROUP_ARN)
 
             for target_health in response.get('TargetHealthDescriptions', []):
@@ -531,35 +667,74 @@ class GlobalFargateSessionManager:
     # 🍪 COOKIE ACQUISITION (SUBPROCESS-BASED)
     # ========================================================================
 
+    def _run_cookie_subprocess(self, script_path: Path, expected_ip: str, session_id: str) -> subprocess.CompletedProcess:
+        """Run cookie acquisition subprocess and return result"""
+        logger.info(f"🔧 Launching subprocess for cookie acquisition...")
+        logger.info(f"   Script: {script_path}")
+
+        result = subprocess.run(
+            ["python3", str(script_path), self._session_manager.alb_dns, expected_ip, session_id],
+            capture_output=True,
+            text=True,
+            timeout=self.COOKIE_ACQUISITION_TIMEOUT
+        )
+
+        # Log subprocess stderr
+        if result.stderr:
+            for line in result.stderr.strip().split('\n'):
+                if line.strip():
+                    logger.info(f"   {line}")
+
+        return result
+
+    def _parse_cookie_result(self, result: subprocess.CompletedProcess) -> dict:
+        """Parse cookie acquisition subprocess result"""
+        output = result.stdout.strip()
+        if not output:
+            logger.error(f"❌ Subprocess produced no output")
+            if result.stderr:
+                logger.error(f"   Full stderr: {result.stderr}")
+            return None
+
+        try:
+            data = json.loads(output)
+            return data
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ Failed to parse subprocess output: {e}")
+            logger.error(f"   Output: {result.stdout}")
+            if result.stderr:
+                logger.error(f"   Full stderr: {result.stderr}")
+            return None
+
+    def _store_acquired_cookie(self, cookie_value: str, attempt: int, actual_ip: str) -> bool:
+        """Store acquired cookie in HTTP client"""
+        logger.info(f"✅ Cookie acquired! (attempt {attempt})")
+        logger.info(f"   My container IP: {actual_ip}")
+        logger.info(f"   Cookie value: {cookie_value[:20]}...")
+
+        # Set cookie in HTTP client (reuse existing session)
+        http_client = self._get_http_client(self._current_request_id)
+        http_client.cookies.set('AWSALB', cookie_value)
+
+        return True
+
     def _acquire_cookie_for_ip(self, expected_ip: str, session_id: str) -> bool:
         """
-        subprocess를 사용하여 특정 IP의 컨테이너로부터 Sticky Session 쿠키 획득
+        Acquire sticky session cookie from container with specific IP using subprocess
 
-        subprocess 사용 이유:
-        - 완전한 프로세스 격리 → 독립적인 TCP Connection Pool
-        - ALB Round Robin이 정상 작동 (Connection: close/Pool Control 불필요)
-        - 멀티 Job 환경에서 각 Job이 독립적으로 쿠키 획득 가능
+        Why use subprocess:
+        - Complete process isolation → Independent TCP Connection Pool
+        - ALB Round Robin works correctly (no Connection: close/Pool Control needed)
+        - Multi-job environment: Each job can acquire cookies independently
 
-        작동 원리:
-        1. 독립된 Python 프로세스로 인라인 스크립트 실행
-        2. subprocess 내부에서 40번 시도 (각각 새로운 TCP 연결)
-        3. ALB Round Robin으로 목표 컨테이너 도달 시 쿠키 획득
-        4. 세션 ID 검증을 통해 올바른 컨테이너인지 확인 (멀티 Job 지원)
-        5. JSON 형태로 결과 반환 (stdout)
-        6. Parent process에서 쿠키를 HTTP Client에 설정
+        How it works:
+        1. Run inline script in isolated Python process
+        2. Try 40 times inside subprocess (each with new TCP connection)
+        3. Reach target container via ALB Round Robin and acquire cookie
+        4. Validate session ID to confirm correct container (multi-job support)
+        5. Return result as JSON (stdout)
+        6. Parent process sets cookie in HTTP client
         """
-        # ✅ CloudWatch 공인 IP 로깅 (AgentCore Runtime → ALB 첫 연결)
-        # ALB Security Group이 실제로 검증하는 공인 IP (NAT Gateway IP) 기록
-        # NOTE: Disabled to keep all traffic 100% private (no internet access needed)
-        # try:
-        #     # AWS checkip 서비스를 통해 공인 IP 확인
-        #     response = requests.get("https://checkip.amazonaws.com", timeout=3)
-        #     public_ip = response.text.strip()
-        #     logger.info(f"🌐🌐🌐 PUBLIC IP DETECTED 🌐🌐🌐 First ALB connection from public IP: {public_ip} to ALB: {self._session_manager.alb_dns}")
-        # except Exception as ip_err:
-        #     logger.warning(f"⚠️ Failed to detect public IP: {ip_err}")
-        #     public_ip = "unknown"
-
         logger.info(f"🍪 Acquiring cookie for container: {expected_ip}")
         logger.info(f"   Session ID: {session_id}")
         other_ips = [ip for ip in self._used_container_ips.keys() if ip != expected_ip]
@@ -576,49 +751,20 @@ class GlobalFargateSessionManager:
             if not script_path.exists():
                 raise FileNotFoundError(f"Cookie acquisition script not found: {script_path}")
 
-            # subprocess로 별도 파일 실행
-            logger.info(f"🔧 Launching subprocess for cookie acquisition...")
-            logger.info(f"   Script: {script_path}")
+            # Run subprocess
+            result = self._run_cookie_subprocess(script_path, expected_ip, session_id)
 
-            result = subprocess.run(
-                ["python3", str(script_path), self._session_manager.alb_dns, expected_ip, session_id],
-                capture_output=True,
-                text=True,
-                timeout=240  # 4분 (40 attempts * 5s = 200s + buffer)
-            )
-
-            # ✅ Subprocess stderr 로깅 (진행 상황 및 디버깅 정보)
-            if result.stderr:
-                for line in result.stderr.strip().split('\n'):
-                    if line.strip():
-                        logger.info(f"   {line}")
-
-            # stdout 파싱
-            output = result.stdout.strip()
-            if not output:
-                logger.error(f"❌ Subprocess produced no output")
-                if result.stderr:
-                    logger.error(f"   Full stderr: {result.stderr}")
+            # Parse result
+            data = self._parse_cookie_result(result)
+            if not data:
                 return False
 
-            data = json.loads(output)
-
+            # Check success
             if data.get("success"):
                 cookie_value = data.get("cookie")
                 attempt = data.get("attempt")
                 actual_ip = data.get("ip")
-
-                logger.info(f"✅ Cookie acquired! (attempt {attempt})")
-                logger.info(f"   My container IP: {actual_ip}")
-                logger.info(f"   Cookie value: {cookie_value[:20]}...")
-
-                # HTTP Client에 쿠키 설정
-                http_client = requests.Session()
-                http_client.cookies.set('AWSALB', cookie_value)
-
-                # 저장
-                self._http_clients[self._current_request_id] = http_client
-                return True
+                return self._store_acquired_cookie(cookie_value, attempt, actual_ip)
             else:
                 error_msg = data.get("error", "Unknown error")
                 logger.error(f"❌ Cookie acquisition failed: {error_msg}")
@@ -627,20 +773,14 @@ class GlobalFargateSessionManager:
                 return False
 
         except subprocess.TimeoutExpired as e:
-            logger.error(f"❌ Cookie acquisition timeout (4 minutes)")
+            logger.error(f"❌ Cookie acquisition timeout ({self.COOKIE_ACQUISITION_TIMEOUT} seconds)")
             logger.error(f"   Expected IP: {expected_ip}")
             if e.stderr:
-                # ✅ Timeout stderr도 로깅 (bytes → string 안전 변환)
+                # Also log timeout stderr (safe bytes → string conversion)
                 stderr_text = str(e.stderr, 'utf-8') if isinstance(e.stderr, bytes) else e.stderr
                 for line in stderr_text.strip().split('\n'):
                     if line.strip():
                         logger.error(f"   {line}")
-            return False
-        except json.JSONDecodeError as e:
-            logger.error(f"❌ Failed to parse subprocess output: {e}")
-            logger.error(f"   Output: {result.stdout}")
-            if result.stderr:
-                logger.error(f"   Full stderr: {result.stderr}")
             return False
         except Exception as e:
             logger.error(f"❌ Cookie acquisition subprocess failed: {e}")
@@ -652,14 +792,14 @@ class GlobalFargateSessionManager:
     # ========================================================================
 
     def _upload_csv_to_s3_with_session_id(self, csv_file_path: str, session_id: str) -> str:
-        """세션 ID를 받아서 S3에 업로드 (Timestamp 불일치 방지)"""
+        """Upload CSV file to S3 using existing session ID (prevents timestamp mismatch)"""
         try:
-            # ✅ 세션 ID를 그대로 사용 (새 timestamp 생성 안함)
+            # Use existing session ID (no new timestamp generation)
             original_filename = os.path.basename(csv_file_path)
-            s3_key = f"manus/fargate_sessions/{session_id}/input/{original_filename}"
+            s3_key = f"deep-insight/fargate_sessions/{session_id}/input/{original_filename}"
 
-            # S3 업로드
-            s3_client = boto3.client('s3', region_name='us-east-1')
+            # S3 upload
+            s3_client = boto3.client('s3', region_name=self._get_aws_region())
             s3_client.upload_file(
                 csv_file_path,
                 S3_BUCKET_NAME,
@@ -675,44 +815,44 @@ class GlobalFargateSessionManager:
             raise
 
     def _sync_csv_from_s3_to_container(self, s3_key: str):
-        """S3에서 컨테이너로 CSV 파일 동기화 (Enhanced Logging)"""
+        """Synchronize CSV file from S3 to container (Enhanced Logging)"""
         try:
-            # ALB DNS (세션 매니저에서 가져오기)
+            # ALB DNS (get from session manager)
             alb_dns = self._session_manager.alb_dns
             filename = s3_key.split('/')[-1]
 
-            # ✅ 1. 시작 로그
+            # ✅ 1. Start log
             logger.info(f"🔄 Starting file sync...")
             logger.info(f"   S3 Key: {s3_key}")
             logger.info(f"   Filename: {filename}")
             logger.info(f"   Target: /app/data/{filename}")
 
-            # 파일 동기화 요청
-            # s3_key 형태: "manus/fargate_sessions/{session_id}/input/file.csv"
+            # File sync request
+            # s3_key format: "deep-insight/fargate_sessions/{session_id}/input/file.csv"
             sync_request = {
                 "action": "sync_data_from_s3",
                 "bucket_name": S3_BUCKET_NAME,
-                "s3_key_prefix": f"manus/fargate_sessions/{s3_key.split('/')[2]}/input/",
+                "s3_key_prefix": f"deep-insight/fargate_sessions/{s3_key.split('/')[2]}/input/",
                 "local_path": "/app/data/"
             }
 
-            # ✅ 2. 요청 로그
+            # ✅ 2. Request log
             logger.info(f"📤 Sending file sync request:")
             logger.info(f"   URL: {alb_dns}/file-sync")
             logger.info(f"   Request: {sync_request}")
 
-            # ✅ 요청별 HTTP 클라이언트 사용 (쿠키 격리)
+            # ✅ Use per-request HTTP client (cookie isolation)
             http_client = self._get_http_client(self._current_request_id)
             response = http_client.post(
                 f"http://{alb_dns}/file-sync",
                 json=sync_request,
-                timeout=30
+                timeout=self.FILE_SYNC_TIMEOUT
             )
 
-            # ✅ 3. 응답 로그
+            # ✅ 3. Response log
             logger.info(f"📥 File sync response:")
             logger.info(f"   Status: {response.status_code}")
-            logger.info(f"   Body: {response.text[:500]}")  # 처음 500자만
+            logger.info(f"   Body: {response.text[:500]}")  # First 500 chars only
 
             if response.status_code != 200:
                 logger.error(f"❌ File sync failed with status {response.status_code}")
@@ -722,16 +862,16 @@ class GlobalFargateSessionManager:
             files_count = result.get('files_count', 0)
             downloaded_files = result.get('downloaded_files', [])
 
-            # ✅ 4. 결과 로그
+            # ✅ 4. Result log
             logger.info(f"✅ File sync completed:")
             logger.info(f"   Files synced: {files_count}")
             logger.info(f"   Downloaded: {downloaded_files}")
 
-            # ✅ 5. 대기 시작 로그
-            logger.info("⏳ Waiting 10 seconds for file sync to complete...")
-            time.sleep(10)  # 10초 대기 (파일 동기화 완료 시간)
+            # ✅ 5. Wait start log
+            logger.info(f"⏳ Waiting {self.FILE_SYNC_WAIT} seconds for file sync to complete...")
+            time.sleep(self.FILE_SYNC_WAIT)
 
-            # ✅ 6. 대기 완료 로그
+            # ✅ 6. Wait complete log
             logger.info("✅ File sync wait complete")
 
         except Exception as e:
@@ -745,11 +885,11 @@ class GlobalFargateSessionManager:
     # ========================================================================
 
     def _cleanup_orphaned_containers(self):
-        """세션 생성 실패 시 현재 요청의 컨테이너만 정리 (다른 요청의 컨테이너는 보호)"""
+        """Clean up only current request's container on session creation failure (protect other requests' containers)"""
         try:
-            ecs_client = boto3.client('ecs', region_name='us-east-1')
+            ecs_client = boto3.client('ecs', region_name=self._get_aws_region())
 
-            # 현재 요청의 Task ARN 확인
+            # Check current request's Task ARN
             current_task_arn = None
             if self._current_request_id and self._current_request_id in self._sessions:
                 session_info = self._sessions[self._current_request_id]
@@ -760,7 +900,7 @@ class GlobalFargateSessionManager:
                 logger.warning(f"⚠️ No task ARN found for current request {self._current_request_id} - skipping cleanup")
                 return
 
-            # ✅ 현재 요청의 컨테이너만 종료 (다른 요청의 컨테이너는 건드리지 않음)
+            # ✅ Stop only current request's container (don't touch other requests' containers)
             try:
                 logger.info(f"🧹 Cleaning up orphaned container for request {self._current_request_id}: {current_task_arn.split('/')[-1][:12]}...")
                 ecs_client.stop_task(
@@ -776,9 +916,9 @@ class GlobalFargateSessionManager:
             logger.warning(f"⚠️ Orphaned container cleanup failed: {e}")
 
     def _deregister_from_alb(self, container_ip: str):
-        """ALB Target Group에서 컨테이너 제거"""
+        """Remove container from ALB Target Group"""
         try:
-            elbv2_client = boto3.client('elbv2', region_name=self._session_manager.region)
+            elbv2_client = boto3.client('elbv2', region_name=self._get_aws_region())
             elbv2_client.deregister_targets(
                 TargetGroupArn=self._session_manager.alb_target_group_arn,
                 Targets=[{
@@ -788,98 +928,44 @@ class GlobalFargateSessionManager:
             )
             logger.info(f"🔗 Deregistered target from ALB: {container_ip}:8080")
         except Exception as alb_error:
-            # ALB 제거 실패해도 세션 정리는 계속 진행
+            # Continue session cleanup even if ALB deregistration fails
             logger.warning(f"⚠️ Failed to deregister ALB target {container_ip}: {alb_error}")
 
     def _auto_cleanup(self):
-        """프로그램 종료 시 자동으로 모든 세션 정리"""
+        """Automatically clean up all sessions on program exit"""
         try:
             if self._sessions:
                 logger.info(f"🧹 Auto-cleanup: Closing {len(self._sessions)} Fargate sessions on exit...")
-                # 모든 세션 정리
+                # Clean up all sessions
                 for request_id in list(self._sessions.keys()):
                     self.cleanup_session(request_id)
 
-            # ✅ 모든 HTTP 클라이언트 정리
+            # ✅ Clear all HTTP clients
             if self._http_clients:
                 logger.info(f"🧹 Auto-cleanup: Clearing {len(self._http_clients)} HTTP clients...")
                 self._http_clients.clear()
 
-            # ✅ 모든 실패 카운터 정리
+            # ✅ Clear all failure counters
             if self._session_creation_failures:
                 logger.info(f"🧹 Auto-cleanup: Clearing {len(self._session_creation_failures)} failure counters...")
                 self._session_creation_failures.clear()
 
-            # ✅ 모든 cleanup 추적 정리
+            # ✅ Clear all cleanup trackers
             if self._cleaned_up_requests:
                 logger.info(f"🧹 Auto-cleanup: Clearing {len(self._cleaned_up_requests)} cleaned-up request trackers...")
                 self._cleaned_up_requests.clear()
         except Exception as e:
             logger.warning(f"⚠️ Auto-cleanup failed: {e}")
 
-    # ========================================================================
-    # ⚠️ UNUSED FUNCTIONS (COMMENTED OUT FOR REFERENCE)
-    # ========================================================================
-
-    # ⚠️ UNUSED FUNCTION - Commented out (2025-10-12)
-    # Not used anywhere in the codebase (only found commented reference in fargate_python_tool.py:120)
-    # Kept for potential future reference
-    # def get_session_info(self):
-    #     """현재 요청의 세션 정보 반환"""
-    #     if not self._current_request_id:
-    #         return {"status": "no_context"}
-    #
-    #     if self._current_request_id in self._sessions:
-    #         session_info = self._sessions[self._current_request_id]
-    #         return {
-    #             "request_id": self._current_request_id,
-    #             "session_id": session_info['session_id'],
-    #             "status": "active",
-    #             "private_ip": session_info['fargate_session']['private_ip']
-    #         }
-    #     else:
-    #         return {"status": "no_session", "request_id": self._current_request_id}
-
-    # ⚠️ UNUSED FUNCTION - Commented out (2025-10-12)
-    # LEGACY function that creates new timestamp (causes timestamp mismatch)
-    # Replaced by _upload_csv_to_s3_with_session_id which uses existing session_id
-    # Not used anywhere in the codebase
-    # Kept for potential future reference
-    # def _upload_csv_to_s3(self, csv_file_path: str) -> str:
-    #     """CSV 파일을 S3에 업로드 (레거시 - 새 timestamp 생성)"""
-    #     try:
-    #         # 현재 세션 ID 기반 S3 키 생성
-    #         timestamp_id = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    #
-    #         # 원본 파일명 추출
-    #         original_filename = os.path.basename(csv_file_path)
-    #         s3_key = f"manus/fargate_sessions/{timestamp_id}/input/{original_filename}"
-    #
-    #         # S3 업로드
-    #         s3_client = boto3.client('s3', region_name='us-east-1')
-    #         s3_client.upload_file(
-    #             csv_file_path,
-    #             'bedrock-logs-gonsoomoon',
-    #             s3_key,
-    #             ExtraArgs={'ContentType': 'text/csv'}
-    #         )
-    #
-    #         logger.info(f"📤 Uploaded {csv_file_path} → s3://bedrock-logs-gonsoomoon/{s3_key}")
-    #         return s3_key
-    #
-    #     except Exception as e:
-    #         logger.error(f"❌ S3 upload failed: {e}")
-    #         raise
-
 
 # ============================================================================
 # GLOBAL INSTANCE (SINGLETON)
 # ============================================================================
 
-# 글로벌 인스턴스 (싱글톤)
+# Global instance (Singleton)
 global_fargate_session = GlobalFargateSessionManager()
 
 
 def get_global_session():
-    """글로벌 세션 매니저 인스턴스 반환"""
+    """Return global session manager instance"""
     return global_fargate_session

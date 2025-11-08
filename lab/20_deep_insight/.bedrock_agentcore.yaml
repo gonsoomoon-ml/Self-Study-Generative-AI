@@ -28,8 +28,8 @@ agents:
         idle_runtime_session_timeout: null
         max_lifetime: null
     bedrock_agentcore:
-      agent_id: deep_insight_runtime_vpc-Id77BBHcNl
-      agent_arn: arn:aws:bedrock-agentcore:us-east-1:738490718699:runtime/deep_insight_runtime_vpc-Id77BBHcNl
+      agent_id: deep_insight_runtime_vpc-TrdYasChDc
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:738490718699:runtime/deep_insight_runtime_vpc-TrdYasChDc
       agent_session_id: null
     codebuild:
       project_name: bedrock-agentcore-deep_insight_runtime_vpc-builder

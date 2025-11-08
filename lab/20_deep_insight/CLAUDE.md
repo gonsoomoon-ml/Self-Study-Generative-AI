@@ -143,7 +143,7 @@ FARGATE_SECURITY_GROUP_IDS=${SG_FARGATE_ID}
 ```
 
 ### 4. OTEL 환경 변수 추가 ✅
-**파일**: `.env.example`, `01_create_agentcore_runtime.py`
+**파일**: `.env.example`, `01_create_agentcore_runtime_vpc.py`
 - 6개 OTEL 변수로 per-invocation 로그 스트림 활성화
 
 ### 5. 자동화 스크립트 생성 ✅
@@ -232,7 +232,7 @@ self.container_name = container_name or CONTAINER_NAME or "dynamic-executor"
 **파일 수정**:
 1. `.env.example:87` - `CONTAINER_NAME=fargate-runtime` 추가
 2. `setup_env.sh:158,231` - CONTAINER_NAME 자동 생성, PHASE2_COUNT=8
-3. `01_create_agentcore_runtime.py:105,158,286` - CONTAINER_NAME 로드 및 전달
+3. `01_create_agentcore_runtime_vpc.py:105,158,286` - CONTAINER_NAME 로드 및 전달
 
 **효과**: Production container name 자동 사용
 - Dev: `dynamic-executor` (env var not set)
@@ -261,7 +261,7 @@ self.container_name = container_name or CONTAINER_NAME or "dynamic-executor"
 ### 11. Flask 패키지 누락 🚨 Critical!
 **문제**: Production에서 Fargate 컨테이너 Health Check 실패 - "ModuleNotFoundError: No module named 'flask'"
 **근본 원인**: `fargate-runtime/requirements.txt`에 Flask가 없음
-**위치**: `fargate-runtime/dynamic_executor_v2.py:20` (Flask import 시도)
+**위치**: `fargate-runtime/code_executor_server.py:20` (Flask import 시도)
 
 **왜 Development는 작동했는가?**:
 - Development: 3주 전 이미지 (`dynamic-executor:v19-fix-exec-exception`, 2025-10-11 빌드) 사용
@@ -307,10 +307,10 @@ cd production_deployment/scripts/phase2
    - Three-Stage: ECR → Docker → Full Stack
 
 3. **Phase 3**: AgentCore Runtime (10-15분)
-   - Script: `01_create_agentcore_runtime.py`
+   - Script: `01_create_agentcore_runtime_vpc.py`
 
 4. **Phase 4**: 통합 테스트 (10-30분)
-   - Script: `03_invoke_agentcore_job_vpc.py`
+   - Script: `02_invoke_agentcore_runtime_vpc.py`
 
 **총 예상 시간**: 65-105분 (약 1-2시간)
 
@@ -328,8 +328,8 @@ cd production_deployment/scripts/phase2
 - `CLAUDE.md.backup_20251105_detailed` - 상세 이슈 히스토리
 
 **스크립트**:
-- `01_create_agentcore_runtime.py` - Runtime 생성/업데이트
-- `03_invoke_agentcore_job_vpc.py` - Runtime 호출 테스트
+- `01_create_agentcore_runtime_vpc.py` - Runtime 생성/업데이트
+- `02_invoke_agentcore_runtime_vpc.py` - Runtime 호출 테스트
 
 ---
 
@@ -416,7 +416,7 @@ for wait_i in range(6):
 
 **결론**: 정상 동작, 비용 영향 미미 (<30초 실행)
 
-### 5. 03_invoke_agentcore_job_vpc.py 리팩토링 ✅
+### 5. 02_invoke_agentcore_runtime_vpc.py 리팩토링 ✅
 **목적**: 불필요한 코드 제거 및 영어 문서화
 
 **제거된 코드 (93줄, 36% 감소)**:

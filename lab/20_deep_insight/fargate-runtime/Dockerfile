@@ -1,47 +1,68 @@
+# ==============================================================================
+# Fargate Runtime Container - Code Executor Server
+# ==============================================================================
+#
+# Docker image for AWS Fargate container that executes Python/Bash code
+# dynamically via HTTP API. This container runs a Flask server that receives
+# code execution requests from the AgentCore Runtime.
+#
+# Base Image: Python 3.12-slim
+# Architecture: Multi-agent workflow execution environment
+#
+# Key Features:
+#   - Flask HTTP server for code execution
+#   - Korean font support (NanumGothic)
+#   - Data visualization libraries (matplotlib, seaborn, plotly)
+#   - PDF generation support (weasyprint)
+#   - AWS SDK integration (boto3)
+#   - Session-based execution with S3 result storage
+#
+# Network: Private VPC with ALB routing
+# Storage: Ephemeral container storage + S3 for results
+# ==============================================================================
 
 FROM python:3.12-slim
 
 WORKDIR /app
 
-# 시스템 패키지 업데이트 및 필수 도구 설치
+# Update system packages and install essential tools
 RUN apt-get update && apt-get install -y \
-    # 한글 폰트
+    # Korean fonts
     fonts-nanum \
-    # 폰트 관리
+    # Font management
     fontconfig \
-    # pandoc과 texlive (문서 변환용)
+    # pandoc and texlive (for document conversion)
     pandoc \
     texlive \
     texlive-xetex \
     texlive-fonts-recommended \
-    # PDF 처리
+    # PDF processing
     poppler-utils \
-    # 기타 유용한 도구
+    # Other useful tools
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 폰트 캐시 갱신
+# Refresh font cache
 RUN fc-cache -f -v
 
-# Python 패키지 설치를 위한 requirements.txt 복사
+# Copy requirements.txt for Python packages installation
 COPY requirements.txt .
 
-# Python 패키지 설치
+# Install Python packages
 RUN pip install --no-cache-dir -r requirements.txt
 
-# matplotlib 폰트 캐시 정리
+# Clear matplotlib font cache
 RUN python -c "import matplotlib.font_manager as fm; fm.get_font_names()" || true
 
-# 애플리케이션 코드 복사
-COPY dynamic_executor_v2.py .
+# Copy application code
+COPY code_executor_server.py .
 
-# 데이터 파일은 동적 업로드로만 제공됨 (Dockerfile에서 복사하지 않음)
+# Data files are provided via dynamic upload only (not copied in Dockerfile)
 
-# 환경 변수 설정
+# Set environment variables
+# Note: AWS_REGION and S3_BUCKET_NAME are passed at runtime via ECS task overrides
 ENV PYTHONUNBUFFERED=1
 ENV ENV_NAME=production
-ENV AWS_DEFAULT_REGION=us-east-1
 
-# 컨테이너 실행 시 Python 스크립트 실행
-# 컨테이너 실행 시 Python 스크립트 실행
-CMD ["python", "-u", "dynamic_executor_v2.py"]
+# Run Python script when container starts
+CMD ["python", "-u", "code_executor_server.py"]

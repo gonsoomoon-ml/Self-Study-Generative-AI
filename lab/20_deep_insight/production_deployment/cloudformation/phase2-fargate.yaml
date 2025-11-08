@@ -146,7 +146,7 @@ Resources:
           Base: 0
       ClusterSettings:
         - Name: containerInsights
-          Value: enabled
+          Value: disabled
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-cluster-${Environment}'
