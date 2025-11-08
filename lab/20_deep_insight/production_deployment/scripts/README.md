@@ -54,7 +54,7 @@ Key Point: deploy_phase1_phase2.sh is a WRAPPER that calls the same
 | **phase2/deploy.sh** | Phase 2: Fargate Runtime | `cd phase2 && ./deploy.sh prod` |
 | **phase2/verify.sh** | Verify Phase 2 resources | `cd phase2 && ./verify.sh prod` |
 | **phase2/cleanup.sh** | Delete Phase 2 resources | `cd phase2 && ./cleanup.sh prod` |
-| **phase3/01_extract_env_vars_from_cf.sh** | Phase 3: Generate .env from CFN | `cd phase3 && ./01_extract_env_vars_from_cf.sh prod` |
+| **phase3/01_extract_env_vars_from_cf.sh** | Phase 3: Generate .env from CFN | `cd phase3 && ./01_extract_env_vars_from_cf.sh prod us-west-2` |
 | **phase3/02_create_uv_env.sh** | Phase 3: Setup UV environment | `cd phase3 && ./02_create_uv_env.sh deep-insight` |
 | **phase3/03_patch_dockerignore.sh** | Phase 3: Patch toolkit template | `cd phase3 && ./03_patch_dockerignore.sh` |
 | **01_create_agentcore_runtime_vpc.py** | Phase 4: Create AgentCore Runtime | `uv run 01_create_agentcore_runtime_vpc.py` |
@@ -276,14 +276,30 @@ cd phase2
 
 ## 📋 Phase 3 Scripts
 
-### phase3/setup_env.sh
+### phase3/01_extract_env_vars_from_cf.sh
 
 **Purpose**: Generate `.env` file from CloudFormation stack outputs (Phase 1 & 2).
 
 **Syntax**:
 ```bash
 cd phase3
-./setup_env.sh
+./01_extract_env_vars_from_cf.sh <environment> <region>
+```
+
+**Parameters**:
+- `environment` - Environment name (dev, staging, prod)
+- `region` - AWS region where stacks are deployed (e.g., us-east-1, us-west-2, eu-west-1)
+
+**Examples**:
+```bash
+# Extract from us-west-2 production stacks
+./01_extract_env_vars_from_cf.sh prod us-west-2
+
+# Extract from us-east-1 production stacks
+./01_extract_env_vars_from_cf.sh prod us-east-1
+
+# Extract from eu-west-1 development stacks
+./01_extract_env_vars_from_cf.sh dev eu-west-1
 ```
 
 **What it does**:
@@ -298,6 +314,20 @@ cd phase3
 - After deploying Phase 1 and Phase 2
 - When CloudFormation stack outputs change
 - Before creating AgentCore Runtime
+
+**Important**: Always specify the same region where you deployed your CloudFormation stacks!
+
+**Supported Regions**:
+The region parameter accepts any valid AWS region code. Common examples:
+- **US**: `us-east-1`, `us-east-2`, `us-west-2`
+- **Europe**: `eu-west-1`, `eu-central-1`
+- **Asia Pacific**: `ap-south-1`, `ap-southeast-1`, `ap-southeast-2`, `ap-northeast-1`
+
+**Region Mismatch Error**:
+If you see "Phase 1 stack not found" or "DELETE_FAILED" errors, verify:
+1. You're using the correct region parameter
+2. The stacks exist in that region: `aws cloudformation list-stacks --region us-west-2`
+3. Your AWS CLI default region matches or you override it
 
 ---
 
@@ -666,9 +696,9 @@ cd production_deployment/scripts
 
 # Phase 3: Environment Preparation
 cd phase3
-./01_extract_env_vars_from_cf.sh prod     # Generate .env
-./02_create_uv_env.sh deep-insight        # Setup UV + dependencies
-./03_patch_dockerignore.sh                # Patch toolkit template
+./01_extract_env_vars_from_cf.sh prod us-west-2  # Generate .env (specify your region!)
+./02_create_uv_env.sh deep-insight               # Setup UV + dependencies
+./03_patch_dockerignore.sh                       # Patch toolkit template
 
 # Phase 4: Runtime Creation and Testing
 cd ../../../                               # Back to project root
@@ -706,7 +736,7 @@ cd ../phase2
 
 # 6. Setup environment (Phase 3)
 cd ../phase3
-./01_extract_env_vars_from_cf.sh prod
+./01_extract_env_vars_from_cf.sh prod us-east-1  # Use your deployment region
 ./02_create_uv_env.sh deep-insight
 ./03_patch_dockerignore.sh
 
@@ -732,7 +762,7 @@ cd production_deployment/scripts
 
 # Setup environment for new region (Phase 3)
 cd phase3
-./01_extract_env_vars_from_cf.sh prod
+./01_extract_env_vars_from_cf.sh prod us-west-2  # Specify us-west-2 for new region
 ./02_create_uv_env.sh deep-insight
 ./03_patch_dockerignore.sh
 
@@ -758,7 +788,7 @@ cd production_deployment/scripts
 
 # 4. Setup environment (Phase 3)
 cd phase3
-./01_extract_env_vars_from_cf.sh prod
+./01_extract_env_vars_from_cf.sh prod us-east-1  # Specify region
 ./02_create_uv_env.sh deep-insight
 ./03_patch_dockerignore.sh
 

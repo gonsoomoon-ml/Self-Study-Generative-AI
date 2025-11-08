@@ -40,7 +40,7 @@ cd production_deployment/scripts
 
 # Phase 3: Environment Setup
 cd phase3
-./01_extract_env_vars_from_cf.sh prod
+./01_extract_env_vars_from_cf.sh prod us-west-2  # Specify your deployment region
 ./02_create_uv_env.sh deep-insight
 ./03_patch_dockerignore.sh
 

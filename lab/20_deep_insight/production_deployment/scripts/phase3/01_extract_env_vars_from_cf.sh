@@ -4,8 +4,8 @@
 # Environment Setup Script
 #==============================================================================
 # Automatically generates .env file from CloudFormation stack outputs
-# Usage: ./setup_env.sh [environment]
-# Example: ./setup_env.sh prod
+# Usage: ./01_extract_env_vars_from_cf.sh [environment] [region]
+# Example: ./01_extract_env_vars_from_cf.sh prod us-west-2
 #==============================================================================
 
 set -e
@@ -19,6 +19,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 ENVIRONMENT=${1:-prod}
+REGION=${2:-""}
 PROJECT_NAME="deep-insight"
 PHASE1_STACK_NAME="${PROJECT_NAME}-infrastructure-${ENVIRONMENT}"
 PHASE2_STACK_NAME="${PROJECT_NAME}-fargate-${ENVIRONMENT}"
@@ -36,7 +37,11 @@ PROJECT_ROOT="$(cd "$PROD_DEPLOY_DIR/.." && pwd)"
 ENV_FILE="$PROJECT_ROOT/.env"
 
 # Detect AWS region and account
-AWS_REGION=$(aws configure get region 2>/dev/null || echo "us-east-1")
+if [ -z "$REGION" ]; then
+    AWS_REGION=$(aws configure get region 2>/dev/null || echo "us-east-1")
+else
+    AWS_REGION="$REGION"
+fi
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null)
 
 if [ -z "$AWS_ACCOUNT_ID" ]; then
