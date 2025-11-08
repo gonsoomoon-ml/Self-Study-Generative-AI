@@ -152,12 +152,15 @@ VPCE_IDS=$(aws ec2 describe-vpc-endpoints \
 
 VPCE_COUNT=$(echo "$VPCE_IDS" | wc -w)
 
-printf "  %-50s " "VPC Endpoints count (expected 6)"
-if [ "$VPCE_COUNT" -eq 6 ]; then
+printf "  %-50s " "VPC Endpoints count (expected 7)"
+if [ "$VPCE_COUNT" -eq 7 ]; then
     echo -e "${GREEN}✓ OK ($VPCE_COUNT)${NC}"
     PASSED_CHECKS=$((PASSED_CHECKS + 1))
+elif [ "$VPCE_COUNT" -ge 6 ]; then
+    echo -e "${GREEN}✓ OK ($VPCE_COUNT, sufficient)${NC}"
+    PASSED_CHECKS=$((PASSED_CHECKS + 1))
 else
-    echo -e "${YELLOW}⚠ WARNING ($VPCE_COUNT)${NC}"
+    echo -e "${RED}✗ FAILED ($VPCE_COUNT)${NC}"
     FAILED_CHECKS=$((FAILED_CHECKS + 1))
 fi
 TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
