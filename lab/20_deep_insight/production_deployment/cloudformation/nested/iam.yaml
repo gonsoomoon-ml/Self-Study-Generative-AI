@@ -130,8 +130,8 @@ Resources:
                   - s3:ListBucket
                   - s3:DeleteObject
                 Resource:
-                  - !Sub 'arn:aws:s3:::bedrock-logs-${AWS::AccountId}'
-                  - !Sub 'arn:aws:s3:::bedrock-logs-${AWS::AccountId}/*'
+                  - !Sub 'arn:aws:s3:::deep-insight-logs-${AWS::Region}-${AWS::AccountId}'
+                  - !Sub 'arn:aws:s3:::deep-insight-logs-${AWS::Region}-${AWS::AccountId}/*'
         - PolicyName: ECSAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -154,6 +154,16 @@ Resources:
                   - elasticloadbalancing:RegisterTargets
                   - elasticloadbalancing:DeregisterTargets
                   - elasticloadbalancing:DescribeTargetHealth
+                Resource: '*'
+        - PolicyName: ServiceWildcardAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:*
+                  - logs:*
+                  - ec2:*
                 Resource: '*'
       Tags:
         - Key: Name
@@ -189,8 +199,8 @@ Resources:
                   - s3:ListBucket
                   - s3:DeleteObject
                 Resource:
-                  - !Sub 'arn:aws:s3:::bedrock-logs-${AWS::AccountId}'
-                  - !Sub 'arn:aws:s3:::bedrock-logs-${AWS::AccountId}/*'
+                  - !Sub 'arn:aws:s3:::deep-insight-logs-${AWS::Region}-${AWS::AccountId}'
+                  - !Sub 'arn:aws:s3:::deep-insight-logs-${AWS::Region}-${AWS::AccountId}/*'
         - PolicyName: BedrockAccess
           PolicyDocument:
             Version: '2012-10-17'

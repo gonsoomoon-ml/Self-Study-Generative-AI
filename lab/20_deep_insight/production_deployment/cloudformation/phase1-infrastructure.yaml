@@ -65,8 +65,8 @@ Parameters:
 
   S3BucketName:
     Type: String
-    Description: S3 bucket name for logs and artifacts (will append account ID)
-    Default: bedrock-logs-prod
+    Description: S3 bucket name for logs and artifacts (will append region and account ID)
+    Default: deep-insight-logs-prod
 
 # ============================================
 # Resources
@@ -815,8 +815,8 @@ Resources:
                   - s3:ListBucket
                   - s3:DeleteObject
                 Resource:
-                  - !Sub 'arn:aws:s3:::bedrock-logs-${AWS::AccountId}'
-                  - !Sub 'arn:aws:s3:::bedrock-logs-${AWS::AccountId}/*'
+                  - !Sub 'arn:aws:s3:::deep-insight-logs-${AWS::Region}-${AWS::AccountId}'
+                  - !Sub 'arn:aws:s3:::deep-insight-logs-${AWS::Region}-${AWS::AccountId}/*'
         - PolicyName: ServiceWildcardAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -859,8 +859,8 @@ Resources:
                   - s3:ListBucket
                   - s3:DeleteObject
                 Resource:
-                  - !Sub 'arn:aws:s3:::bedrock-logs-${AWS::AccountId}'
-                  - !Sub 'arn:aws:s3:::bedrock-logs-${AWS::AccountId}/*'
+                  - !Sub 'arn:aws:s3:::deep-insight-logs-${AWS::Region}-${AWS::AccountId}'
+                  - !Sub 'arn:aws:s3:::deep-insight-logs-${AWS::Region}-${AWS::AccountId}/*'
         - PolicyName: BedrockAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -927,7 +927,7 @@ Resources:
   SessionDataBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub 'bedrock-logs-${AWS::AccountId}'
+      BucketName: !Sub 'deep-insight-logs-${AWS::Region}-${AWS::AccountId}'
       VersioningConfiguration:
         Status: Enabled
       LifecycleConfiguration:
