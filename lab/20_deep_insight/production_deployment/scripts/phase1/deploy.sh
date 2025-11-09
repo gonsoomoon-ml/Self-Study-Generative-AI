@@ -3,8 +3,10 @@
 # Phase 1: Infrastructure Deployment (Nested Stacks)
 # Deploy VPC, Subnets, Security Groups, VPC Endpoints, ALB, IAM Roles
 #
-# Usage: ./scripts/phase1/deploy.sh [environment]
+# Usage: ./scripts/phase1/deploy.sh <environment> --region <region> [options]
 #   environment: dev, staging, prod (default: prod)
+#   --region: AWS region (REQUIRED, e.g., us-east-1, us-west-2)
+#   --parameter-overrides: CloudFormation parameter overrides (optional)
 #
 
 set -e
@@ -46,6 +48,21 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Region is REQUIRED to prevent accidental deployments to wrong region
+if [ -z "$REGION" ]; then
+    echo -e "${RED}Error: --region parameter is required${NC}"
+    echo ""
+    echo "Usage: $0 <environment> --region <region> [options]"
+    echo ""
+    echo "Examples:"
+    echo "  $0 prod --region us-east-1"
+    echo "  $0 prod --region us-west-2"
+    echo "  $0 dev --region us-east-1"
+    echo ""
+    echo "This is a safety measure to ensure deployment to the correct region."
+    exit 1
+fi
+
 STACK_NAME="deep-insight-infrastructure-${ENVIRONMENT}"
 TEMPLATE_FILE="$PROJECT_ROOT/cloudformation/phase1-main.yaml"
 PARAMS_FILE="$PROJECT_ROOT/cloudformation/parameters/phase1-${ENVIRONMENT}-params.json"
@@ -57,6 +74,7 @@ echo -e "${BLUE}Phase 1: Infrastructure Deployment (Nested)${NC}"
 echo -e "${BLUE}============================================${NC}"
 echo ""
 echo "Environment: $ENVIRONMENT"
+echo "Region: $REGION"
 echo "Stack Name: $STACK_NAME"
 echo ""
 
@@ -75,14 +93,9 @@ if ! aws sts get-caller-identity &> /dev/null; then
     exit 1
 fi
 
-# Get AWS Account ID and Region
+# Get AWS Account ID and set Region
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-# Use provided region or fall back to configured region
-if [ -z "$REGION" ]; then
-    AWS_REGION=$(aws configure get region || echo "us-east-1")
-else
-    AWS_REGION="$REGION"
-fi
+AWS_REGION="$REGION"
 
 echo -e "${GREEN}✓${NC} AWS CLI configured"
 echo "  Account ID: $AWS_ACCOUNT_ID"

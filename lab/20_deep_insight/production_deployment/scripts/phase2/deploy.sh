@@ -5,8 +5,10 @@
 # Stage 2: Build and push Docker image
 # Stage 3: Deploy full stack with ECS (CloudFormation)
 #
-# Usage: ./scripts/phase2/deploy.sh [environment]
+# Usage: ./scripts/phase2/deploy.sh <environment> --region <region> [options]
 #   environment: dev, staging, prod (default: prod)
+#   --region: AWS region (REQUIRED, e.g., us-east-1, us-west-2)
+#   --stage: Deployment stage (optional: ecr, docker, stack, all)
 #
 
 set -e
@@ -45,6 +47,21 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Region is REQUIRED to prevent accidental deployments to wrong region
+if [ -z "$REGION" ]; then
+    echo -e "${RED}Error: --region parameter is required${NC}"
+    echo ""
+    echo "Usage: $0 <environment> --region <region> [options]"
+    echo ""
+    echo "Examples:"
+    echo "  $0 prod --region us-east-1"
+    echo "  $0 prod --region us-west-2"
+    echo "  $0 prod --region us-east-1 --stage docker"
+    echo ""
+    echo "This is a safety measure to ensure deployment to the correct region."
+    exit 1
+fi
+
 STACK_NAME="${PROJECT_NAME}-fargate-${ENVIRONMENT}"
 TEMPLATE_FILE="$PROJECT_ROOT/cloudformation/phase2-fargate.yaml"
 ENV_FILE="$PROJECT_ROOT/.env"
@@ -55,7 +72,9 @@ echo -e "${BLUE}Phase 2: Two-Stage Fargate Deployment${NC}"
 echo -e "${BLUE}============================================${NC}"
 echo ""
 echo "Environment: $ENVIRONMENT"
+echo "Region: $REGION"
 echo "Stack Name: $STACK_NAME"
+echo "Stage: $STAGE"
 echo ""
 
 # ============================================
@@ -104,12 +123,7 @@ fi
 echo -e "${GREEN}✓${NC} CloudFormation template found"
 
 # Get AWS region and account
-# Use provided region or fall back to configured region
-if [ -z "$REGION" ]; then
-    AWS_REGION=$(aws configure get region || echo "us-east-1")
-else
-    AWS_REGION="$REGION"
-fi
+AWS_REGION="$REGION"
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 # ============================================
