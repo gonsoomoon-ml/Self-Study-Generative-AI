@@ -90,6 +90,15 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
+                  - logs:CreateDelivery
+                  - logs:PutDeliverySource
+                  - logs:PutDeliveryDestination
+                  - logs:GetDelivery
+                  - logs:DescribeDeliveries
+                  - logs:DescribeDeliverySource
+                  - logs:DescribeDeliveryDestination
+                  - logs:DeleteDelivery
+                  - logs:UpdateDeliveryConfiguration
                 Resource: '*'
         - PolicyName: BedrockAccess
           PolicyDocument:
@@ -99,6 +108,7 @@ Resources:
                 Action:
                   - bedrock:InvokeModel
                   - bedrock:InvokeModelWithResponseStream
+                  - bedrock:AllowVendedLogDeliveryForResource
                 Resource: '*'
         - PolicyName: XRayAccess
           PolicyDocument:
@@ -122,6 +132,29 @@ Resources:
                 Resource:
                   - !Sub 'arn:aws:s3:::bedrock-logs-${AWS::AccountId}'
                   - !Sub 'arn:aws:s3:::bedrock-logs-${AWS::AccountId}/*'
+        - PolicyName: ECSAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:RunTask
+                  - ecs:DescribeTasks
+                  - ecs:DescribeTaskDefinition
+                  - ecs:ListTasks
+                  - ecs:StopTask
+                  - iam:PassRole
+                Resource: '*'
+        - PolicyName: ELBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - elasticloadbalancing:RegisterTargets
+                  - elasticloadbalancing:DeregisterTargets
+                  - elasticloadbalancing:DescribeTargetHealth
+                Resource: '*'
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-task-execution-role-${Environment}'
@@ -166,6 +199,7 @@ Resources:
                 Action:
                   - bedrock:InvokeModel
                   - bedrock:InvokeModelWithResponseStream
+                  - bedrock:AllowVendedLogDeliveryForResource
                 Resource: '*'
         - PolicyName: ECSAccess
           PolicyDocument:

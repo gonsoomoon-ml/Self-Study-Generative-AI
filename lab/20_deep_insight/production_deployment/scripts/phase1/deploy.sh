@@ -321,6 +321,56 @@ if [ $DEPLOY_STATUS -eq 0 ]; then
     echo -e "${GREEN}============================================${NC}"
     echo ""
 
+    # ============================================
+    # Create CloudWatch Logs Resource Policy
+    # ============================================
+    echo -e "${YELLOW}Creating CloudWatch Logs resource policy for Bedrock AgentCore...${NC}"
+
+    # Check if policy already exists
+    EXISTING_POLICY=$(aws logs describe-resource-policies \
+        --region "$AWS_REGION" \
+        --query "resourcePolicies[?policyName=='BedrockAgentCoreLogsAccess'].policyName" \
+        --output text 2>/dev/null || echo "")
+
+    if [ -z "$EXISTING_POLICY" ]; then
+        # Create the policy
+        aws logs put-resource-policy \
+            --policy-name BedrockAgentCoreLogsAccess \
+            --region "$AWS_REGION" \
+            --policy-document '{
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "BedrockAgentCoreRuntimeLogsAccess",
+                  "Effect": "Allow",
+                  "Principal": {
+                    "Service": "bedrock-agentcore.amazonaws.com"
+                  },
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": "arn:aws:logs:'"$AWS_REGION"':'"$AWS_ACCOUNT_ID"':log-group:/aws/bedrock-agentcore/runtimes/*"
+                },
+                {
+                  "Sid": "BedrockAgentCoreObservabilityAccess",
+                  "Effect": "Allow",
+                  "Principal": {
+                    "Service": "bedrock-agentcore.amazonaws.com"
+                  },
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": "arn:aws:logs:'"$AWS_REGION"':'"$AWS_ACCOUNT_ID"':log-group:bedrock-agentcore-observability:*"
+                }
+              ]
+            }' > /dev/null 2>&1
+        echo -e "${GREEN}✓${NC} CloudWatch Logs resource policy created"
+    else
+        echo -e "${GREEN}✓${NC} CloudWatch Logs resource policy already exists"
+    fi
+
     # Get stack outputs
     echo -e "${YELLOW}Retrieving stack outputs...${NC}"
 
