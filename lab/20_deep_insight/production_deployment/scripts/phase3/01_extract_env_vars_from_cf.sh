@@ -4,7 +4,7 @@
 # Environment Setup Script
 #==============================================================================
 # Automatically generates .env file from CloudFormation stack outputs
-# Usage: ./01_extract_env_vars_from_cf.sh [environment] [region]
+# Usage: ./01_extract_env_vars_from_cf.sh <environment> <region>
 # Example: ./01_extract_env_vars_from_cf.sh prod us-west-2
 #==============================================================================
 
@@ -24,9 +24,25 @@ PROJECT_NAME="deep-insight"
 PHASE1_STACK_NAME="${PROJECT_NAME}-infrastructure-${ENVIRONMENT}"
 PHASE2_STACK_NAME="${PROJECT_NAME}-fargate-${ENVIRONMENT}"
 
+# Region is REQUIRED to prevent accidental misconfigurations
+if [ -z "$REGION" ]; then
+    echo -e "${RED}Error: Region parameter is required${NC}"
+    echo ""
+    echo "Usage: $0 <environment> <region>"
+    echo ""
+    echo "Examples:"
+    echo "  $0 prod us-east-1"
+    echo "  $0 prod us-west-2"
+    echo "  $0 dev us-east-1"
+    echo ""
+    echo "This is a safety measure to ensure .env is generated for the correct region."
+    exit 1
+fi
+
 echo -e "${BLUE}============================================${NC}"
 echo -e "${BLUE}Environment Setup - Auto-generate .env${NC}"
 echo -e "${BLUE}Environment: ${ENVIRONMENT}${NC}"
+echo -e "${BLUE}Region: ${REGION}${NC}"
 echo -e "${BLUE}============================================${NC}"
 echo ""
 
@@ -46,12 +62,8 @@ if [[ "$PROJECT_ROOT" == *"/production_deployment" ]]; then
     exit 1
 fi
 
-# Detect AWS region and account
-if [ -z "$REGION" ]; then
-    AWS_REGION=$(aws configure get region 2>/dev/null || echo "us-east-1")
-else
-    AWS_REGION="$REGION"
-fi
+# Set AWS region from parameter
+AWS_REGION="$REGION"
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null)
 
 if [ -z "$AWS_ACCOUNT_ID" ]; then
