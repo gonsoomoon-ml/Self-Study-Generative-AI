@@ -153,10 +153,28 @@ PHASE2_STATUS=$(aws cloudformation describe-stacks --stack-name "$PHASE2_STACK" 
 if [ "$PHASE2_STATUS" != "NOT_FOUND" ]; then
     echo "Deleting Phase 2 CloudFormation stack: $PHASE2_STACK"
     aws cloudformation delete-stack --stack-name "$PHASE2_STACK" --region "$REGION"
-    
+
     echo "Waiting for stack deletion..."
-    aws cloudformation wait stack-delete-complete --stack-name "$PHASE2_STACK" --region "$REGION" 2>/dev/null || true
-    echo -e "${GREEN}✓${NC} Phase 2 stack deleted"
+    aws cloudformation wait stack-delete-complete --stack-name "$PHASE2_STACK" --region "$REGION" 2>&1
+    WAIT_EXIT_CODE=$?
+
+    # Verify actual deletion status
+    FINAL_STATUS=$(aws cloudformation describe-stacks --stack-name "$PHASE2_STACK" --region "$REGION" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DELETED")
+
+    if [ "$FINAL_STATUS" == "DELETED" ] || [[ "$FINAL_STATUS" == *"does not exist"* ]]; then
+        echo -e "${GREEN}✓${NC} Phase 2 stack deleted"
+    elif [ "$FINAL_STATUS" == "DELETE_FAILED" ]; then
+        echo -e "${RED}✗${NC} Phase 2 stack deletion FAILED!"
+        echo ""
+        echo "Failed resources:"
+        aws cloudformation describe-stack-events --stack-name "$PHASE2_STACK" --region "$REGION" --max-items 10 --query 'StackEvents[?ResourceStatus==`DELETE_FAILED`].[LogicalResourceId,ResourceType,ResourceStatusReason]' --output table
+        echo ""
+        echo -e "${YELLOW}Manual intervention required. Check the AWS Console or run:${NC}"
+        echo "  aws cloudformation describe-stack-events --stack-name $PHASE2_STACK --region $REGION"
+        exit 1
+    else
+        echo -e "${GREEN}✓${NC} Phase 2 stack status: $FINAL_STATUS"
+    fi
 else
     echo "Phase 2 stack not found"
 fi
@@ -198,15 +216,75 @@ echo ""
 
 PHASE1_STACK="deep-insight-infrastructure-${ENVIRONMENT}"
 
+# Get VPC ID before attempting deletion
+VPC_ID=$(aws cloudformation describe-stacks --stack-name "$PHASE1_STACK" --region "$REGION" --query 'Stacks[0].Outputs[?OutputKey==`VPCId`].OutputValue' --output text 2>/dev/null || echo "")
+
+if [ -n "$VPC_ID" ]; then
+    echo "Checking for orphaned resources in VPC: $VPC_ID"
+
+    # Check for GuardDuty VPC Endpoints
+    GUARDDUTY_ENDPOINTS=$(aws ec2 describe-vpc-endpoints --region "$REGION" --filters "Name=vpc-id,Values=$VPC_ID" "Name=service-name,Values=*guardduty*" --query 'VpcEndpoints[].VpcEndpointId' --output text 2>/dev/null || echo "")
+
+    if [ -n "$GUARDDUTY_ENDPOINTS" ]; then
+        echo "Found GuardDuty VPC endpoints - deleting..."
+        for ENDPOINT in $GUARDDUTY_ENDPOINTS; do
+            echo "  Deleting VPC endpoint: $ENDPOINT"
+            aws ec2 delete-vpc-endpoints --region "$REGION" --vpc-endpoint-ids "$ENDPOINT" 2>/dev/null || true
+        done
+        echo "Waiting 30 seconds for VPC endpoints to delete..."
+        sleep 30
+    fi
+
+    # Check for GuardDuty Security Groups
+    GUARDDUTY_SGS=$(aws ec2 describe-security-groups --region "$REGION" --filters "Name=vpc-id,Values=$VPC_ID" "Name=group-name,Values=*GuardDuty*" --query 'SecurityGroups[].GroupId' --output text 2>/dev/null || echo "")
+
+    if [ -n "$GUARDDUTY_SGS" ]; then
+        echo "Found GuardDuty security groups - deleting..."
+        for SG in $GUARDDUTY_SGS; do
+            echo "  Deleting security group: $SG"
+            aws ec2 delete-security-group --region "$REGION" --group-id "$SG" 2>/dev/null || true
+        done
+    fi
+
+    echo -e "${GREEN}✓${NC} Orphaned resources cleanup complete"
+    echo ""
+fi
+
 PHASE1_STATUS=$(aws cloudformation describe-stacks --stack-name "$PHASE1_STACK" --region "$REGION" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "NOT_FOUND")
 
 if [ "$PHASE1_STATUS" != "NOT_FOUND" ]; then
     echo "Deleting Phase 1 CloudFormation stack: $PHASE1_STACK"
     aws cloudformation delete-stack --stack-name "$PHASE1_STACK" --region "$REGION"
-    
+
     echo "Waiting for stack deletion (this may take 10-15 minutes)..."
-    aws cloudformation wait stack-delete-complete --stack-name "$PHASE1_STACK" --region "$REGION" 2>/dev/null || true
-    echo -e "${GREEN}✓${NC} Phase 1 stack deleted"
+    aws cloudformation wait stack-delete-complete --stack-name "$PHASE1_STACK" --region "$REGION" 2>&1
+    WAIT_EXIT_CODE=$?
+
+    # Verify actual deletion status
+    FINAL_STATUS=$(aws cloudformation describe-stacks --stack-name "$PHASE1_STACK" --region "$REGION" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DELETED")
+
+    if [ "$FINAL_STATUS" == "DELETED" ] || [[ "$FINAL_STATUS" == *"does not exist"* ]]; then
+        echo -e "${GREEN}✓${NC} Phase 1 stack deleted"
+    elif [ "$FINAL_STATUS" == "DELETE_FAILED" ]; then
+        echo -e "${RED}✗${NC} Phase 1 stack deletion FAILED!"
+        echo ""
+        echo "Failed resources:"
+        aws cloudformation describe-stack-events --stack-name "$PHASE1_STACK" --region "$REGION" --max-items 10 --query 'StackEvents[?ResourceStatus==`DELETE_FAILED`].[LogicalResourceId,ResourceType,ResourceStatusReason]' --output table
+        echo ""
+        echo -e "${YELLOW}Manual intervention required.${NC}"
+        echo -e "${YELLOW}Common issues:${NC}"
+        echo "  1. VPC Endpoints created outside CloudFormation (e.g., GuardDuty)"
+        echo "  2. Security Groups with dependencies"
+        echo "  3. Network Interfaces still attached"
+        echo ""
+        echo "To investigate, run:"
+        echo "  aws cloudformation describe-stack-events --stack-name $PHASE1_STACK --region $REGION"
+        echo ""
+        echo "Check for orphaned VPC resources in VPC ID from stack outputs"
+        exit 1
+    else
+        echo -e "${GREEN}✓${NC} Phase 1 stack status: $FINAL_STATUS"
+    fi
 else
     echo "Phase 1 stack not found"
 fi

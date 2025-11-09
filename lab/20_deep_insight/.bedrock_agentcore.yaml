@@ -21,9 +21,9 @@ agents:
         network_mode: VPC
         network_mode_config:
           security_groups:
-          - sg-06929ae2d9507bc87
+          - sg-0fab79fd375f54de1
           subnets:
-          - subnet-05d36f11225224c70
+          - subnet-07e0cfe40a3c8aee0
       protocol_configuration:
         server_protocol: HTTP
       observability:
@@ -32,8 +32,8 @@ agents:
         idle_runtime_session_timeout: null
         max_lifetime: null
     bedrock_agentcore:
-      agent_id: deep_insight_runtime_vpc-6BH9f9As6c
-      agent_arn: arn:aws:bedrock-agentcore:us-east-1:057716757052:runtime/deep_insight_runtime_vpc-6BH9f9As6c
+      agent_id: deep_insight_runtime_vpc-LQ5zu733Tb
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:057716757052:runtime/deep_insight_runtime_vpc-LQ5zu733Tb
       agent_session_id: null
     codebuild:
       project_name: bedrock-agentcore-deep_insight_runtime_vpc-builder
