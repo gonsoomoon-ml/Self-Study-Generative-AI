@@ -8,14 +8,6 @@
     "ParameterValue": "deep-insight"
   },
   {
-    "ParameterKey": "AvailabilityZone1",
-    "ParameterValue": "us-east-1a"
-  },
-  {
-    "ParameterKey": "AvailabilityZone2",
-    "ParameterValue": "us-east-1b"
-  },
-  {
     "ParameterKey": "VpcCidr",
     "ParameterValue": "10.0.0.0/16"
   },

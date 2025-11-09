@@ -21,13 +21,17 @@ Parameters:
 
   AvailabilityZone1:
     Type: AWS::EC2::AvailabilityZone::Name
-    Description: First Availability Zone (e.g., us-east-1a)
-    Default: us-east-1a
+    Description: |
+      First Availability Zone (e.g., us-east-1a, us-west-2a).
+      Must be provided via parameter file or --parameter-overrides.
+      Use deploy_phase1_phase2.sh for automatic AZ detection.
 
   AvailabilityZone2:
     Type: AWS::EC2::AvailabilityZone::Name
-    Description: Second Availability Zone (e.g., us-east-1c)
-    Default: us-east-1c
+    Description: |
+      Second Availability Zone (e.g., us-east-1c, us-west-2b).
+      Must be different from AvailabilityZone1.
+      Use deploy_phase1_phase2.sh for automatic AZ detection.
 
   VpcCidr:
     Type: String
