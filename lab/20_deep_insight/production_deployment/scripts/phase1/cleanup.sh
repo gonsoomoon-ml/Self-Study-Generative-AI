@@ -220,7 +220,26 @@ if aws s3 ls "s3://${S3_BUCKET_NAME}" 2>/dev/null; then
     if [ "$FORCE_MODE" = false ]; then
         read -p "Delete S3 bucket '$S3_BUCKET_NAME'? (y/N): " DELETE_BUCKET
         if [ "$DELETE_BUCKET" == "y" ] || [ "$DELETE_BUCKET" == "Y" ]; then
-            aws s3 rb "s3://${S3_BUCKET_NAME}" --force
+            # Delete all object versions and delete markers (handles versioned buckets)
+            echo "Deleting all object versions and delete markers..."
+            aws s3api delete-objects \
+                --bucket "${S3_BUCKET_NAME}" \
+                --delete "$(aws s3api list-object-versions \
+                    --bucket "${S3_BUCKET_NAME}" \
+                    --output json \
+                    --query '{Objects: Versions[].{Key:Key,VersionId:VersionId}, Quiet: `true`}')" \
+                2>/dev/null || true
+
+            aws s3api delete-objects \
+                --bucket "${S3_BUCKET_NAME}" \
+                --delete "$(aws s3api list-object-versions \
+                    --bucket "${S3_BUCKET_NAME}" \
+                    --output json \
+                    --query '{Objects: DeleteMarkers[].{Key:Key,VersionId:VersionId}, Quiet: `true`}')" \
+                2>/dev/null || true
+
+            # Now delete the empty bucket
+            aws s3 rb "s3://${S3_BUCKET_NAME}"
             echo -e "${GREEN}✓ S3 bucket deleted${NC}"
         else
             echo -e "${YELLOW}S3 bucket kept: $S3_BUCKET_NAME${NC}"
@@ -228,7 +247,26 @@ if aws s3 ls "s3://${S3_BUCKET_NAME}" 2>/dev/null; then
         fi
     else
         echo -e "${YELLOW}⚡ Force mode: Auto-deleting S3 bucket${NC}"
-        aws s3 rb "s3://${S3_BUCKET_NAME}" --force
+        # Delete all object versions and delete markers (handles versioned buckets)
+        echo "Deleting all object versions and delete markers..."
+        aws s3api delete-objects \
+            --bucket "${S3_BUCKET_NAME}" \
+            --delete "$(aws s3api list-object-versions \
+                --bucket "${S3_BUCKET_NAME}" \
+                --output json \
+                --query '{Objects: Versions[].{Key:Key,VersionId:VersionId}, Quiet: `true`}')" \
+            2>/dev/null || true
+
+        aws s3api delete-objects \
+            --bucket "${S3_BUCKET_NAME}" \
+            --delete "$(aws s3api list-object-versions \
+                --bucket "${S3_BUCKET_NAME}" \
+                --output json \
+                --query '{Objects: DeleteMarkers[].{Key:Key,VersionId:VersionId}, Quiet: `true`}')" \
+            2>/dev/null || true
+
+        # Now delete the empty bucket
+        aws s3 rb "s3://${S3_BUCKET_NAME}"
         echo -e "${GREEN}✓ S3 bucket deleted${NC}"
     fi
 else
