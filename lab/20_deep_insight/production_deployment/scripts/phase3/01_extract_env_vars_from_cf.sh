@@ -114,9 +114,10 @@ EXISTING_RUNTIME_NAME=""
 EXISTING_RUNTIME_ID=""
 if [ -f "$ENV_FILE" ]; then
     echo -e "${YELLOW}Preserving existing Runtime configuration...${NC}"
-    EXISTING_RUNTIME_ARN=$(grep "^RUNTIME_ARN=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2-)
-    EXISTING_RUNTIME_NAME=$(grep "^RUNTIME_NAME=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2-)
-    EXISTING_RUNTIME_ID=$(grep "^RUNTIME_ID=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2-)
+    # Use tail -1 to get last occurrence (handles duplicates, prefers populated values)
+    EXISTING_RUNTIME_ARN=$(grep "^RUNTIME_ARN=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d'=' -f2-)
+    EXISTING_RUNTIME_NAME=$(grep "^RUNTIME_NAME=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d'=' -f2-)
+    EXISTING_RUNTIME_ID=$(grep "^RUNTIME_ID=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d'=' -f2-)
     if [ -n "$EXISTING_RUNTIME_ARN" ]; then
         echo -e "${GREEN}✓${NC} Preserved RUNTIME_ARN: $EXISTING_RUNTIME_ARN"
     fi
@@ -263,26 +264,17 @@ cat >> "$ENV_FILE" <<EOF
 # S3 Configuration
 # ============================================================
 S3_BUCKET_NAME=$S3_BUCKET_NAME
-
-# ============================================================
-# Phase 3: AgentCore Runtime (After deployment)
-# ============================================================
 EOF
 
-# Preserve or add Runtime configuration
+# Preserve existing Runtime configuration (if exists)
+# Note: Phase 3 section is managed by 01_create_agentcore_runtime_vpc.py
 if [ -n "$EXISTING_RUNTIME_ARN" ]; then
     cat >> "$ENV_FILE" <<EOF
+
+# Phase 3: AgentCore Runtime (Preserved from previous deployment)
 RUNTIME_NAME=$EXISTING_RUNTIME_NAME
 RUNTIME_ARN=$EXISTING_RUNTIME_ARN
 RUNTIME_ID=$EXISTING_RUNTIME_ID
-EOF
-else
-    cat >> "$ENV_FILE" <<EOF
-# These values are populated after running 01_create_agentcore_runtime.py
-# Leave empty until Runtime is deployed
-RUNTIME_NAME=
-RUNTIME_ARN=
-RUNTIME_ID=
 EOF
 fi
 
