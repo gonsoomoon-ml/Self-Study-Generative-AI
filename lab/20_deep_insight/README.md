@@ -82,17 +82,17 @@ This will delete:
 If you need to clean up specific phases:
 
 ```bash
-# Phase 4: Delete Runtime only
+# Phase 4: Delete Runtime only (region REQUIRED)
 cd production_deployment/scripts/phase4
-./cleanup.sh prod
+./cleanup.sh prod --region us-west-2
 
-# Phase 2: Delete Fargate resources
+# Phase 2: Delete Fargate resources (region REQUIRED)
 cd production_deployment/scripts/phase2
-./cleanup.sh prod us-west-2
+./cleanup.sh prod --region us-west-2
 
-# Phase 1: Delete VPC infrastructure
+# Phase 1: Delete VPC infrastructure (region REQUIRED)
 cd production_deployment/scripts/phase1
-./cleanup.sh prod us-west-2
+./cleanup.sh prod --region us-west-2
 ```
 
 **Important**: Always delete in reverse order (4 → 3 → 2 → 1)

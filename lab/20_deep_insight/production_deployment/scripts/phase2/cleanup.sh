@@ -4,12 +4,18 @@
 # Safely delete CloudFormation stack and related resources
 #
 # Usage:
-#   ./scripts/phase2/cleanup.sh [environment]           # Interactive mode
-#   ./scripts/phase2/cleanup.sh [environment] --force   # Auto mode (no confirmation)
+#   ./scripts/phase2/cleanup.sh [environment] [options]
+#
+# Arguments:
+#   environment  - Environment name (dev, staging, prod) [default: prod]
+#
+# Options:
+#   --region REGION  - AWS region (e.g., us-west-2, us-east-1)
+#   --force, -f      - Force delete without confirmation
 #
 # Examples:
-#   ./scripts/phase2/cleanup.sh prod          # Interactive cleanup
-#   ./scripts/phase2/cleanup.sh prod --force  # Force delete everything
+#   ./scripts/phase2/cleanup.sh prod --region us-east-1
+#   ./scripts/phase2/cleanup.sh prod --region us-west-2 --force
 #
 
 set -e
@@ -24,15 +30,23 @@ NC='\033[0m'
 # Parse arguments
 ENVIRONMENT="prod"
 FORCE_MODE=false
+REGION=""
 
-for arg in "$@"; do
-    case $arg in
+while [[ $# -gt 0 ]]; do
+    case $1 in
         --force|-f)
             FORCE_MODE=true
             shift
             ;;
+        --region)
+            REGION="$2"
+            shift 2
+            ;;
         dev|staging|prod)
-            ENVIRONMENT=$arg
+            ENVIRONMENT=$1
+            shift
+            ;;
+        *)
             shift
             ;;
     esac
@@ -40,7 +54,23 @@ done
 
 PROJECT_NAME="deep-insight"
 STACK_NAME="${PROJECT_NAME}-fargate-${ENVIRONMENT}"
-AWS_REGION=$(aws configure get region || echo "us-east-1")
+
+# Region is REQUIRED for cleanup to prevent accidental deletions
+if [ -z "$REGION" ]; then
+    echo -e "${RED}Error: Region parameter is required for cleanup${NC}"
+    echo ""
+    echo "Usage: $0 [environment] --region <region> [--force]"
+    echo ""
+    echo "Examples:"
+    echo "  $0 prod --region us-east-1"
+    echo "  $0 prod --region us-west-2"
+    echo ""
+    echo "This is a safety measure to prevent accidental deletion in the wrong region."
+    exit 1
+fi
+
+AWS_REGION="$REGION"
+
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 echo -e "${RED}============================================${NC}"

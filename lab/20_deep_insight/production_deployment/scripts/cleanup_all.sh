@@ -15,7 +15,21 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 ENVIRONMENT=${1:-prod}
-REGION=${2:-us-east-1}
+REGION=$2
+
+# Region is REQUIRED for cleanup to prevent accidental deletions
+if [ -z "$REGION" ]; then
+    echo -e "${RED}Error: Region parameter is required for cleanup${NC}"
+    echo ""
+    echo "Usage: $0 <environment> <region>"
+    echo ""
+    echo "Examples:"
+    echo "  $0 prod us-east-1"
+    echo "  $0 prod us-west-2"
+    echo ""
+    echo "This is a safety measure to prevent accidental deletion in the wrong region."
+    exit 1
+fi
 
 echo -e "${BLUE}============================================${NC}"
 echo -e "${BLUE}Deep Insight - Complete Cleanup${NC}"

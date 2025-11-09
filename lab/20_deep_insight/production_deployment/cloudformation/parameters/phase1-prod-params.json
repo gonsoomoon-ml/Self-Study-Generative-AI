@@ -34,9 +34,5 @@
   {
     "ParameterKey": "PublicSubnet2Cidr",
     "ParameterValue": "10.0.12.0/24"
-  },
-  {
-    "ParameterKey": "S3BucketName",
-    "ParameterValue": "bedrock-logs-prod-ACCOUNT_ID"
   }
 ]

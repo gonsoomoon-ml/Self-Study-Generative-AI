@@ -37,6 +37,15 @@ PROD_DEPLOY_DIR="$(cd "$SCRIPTS_DIR/.." && pwd)"
 PROJECT_ROOT="$(cd "$PROD_DEPLOY_DIR/.." && pwd)"
 ENV_FILE="$PROJECT_ROOT/.env"
 
+# Verify PROJECT_ROOT is correct (should end with "20_deep_insight", not "production_deployment")
+if [[ "$PROJECT_ROOT" == *"/production_deployment" ]]; then
+    echo -e "${RED}✗ Error: PROJECT_ROOT calculation incorrect${NC}"
+    echo "  PROJECT_ROOT: $PROJECT_ROOT"
+    echo "  Expected to end with: 20_deep_insight"
+    echo "  Please check script path calculation"
+    exit 1
+fi
+
 # Detect AWS region and account
 if [ -z "$REGION" ]; then
     AWS_REGION=$(aws configure get region 2>/dev/null || echo "us-east-1")
@@ -278,6 +287,9 @@ EOF
 fi
 
 echo -e "${GREEN}✓${NC} Generated .env at: $ENV_FILE"
+echo ""
+echo -e "${BLUE}Project Root: ${NC}$PROJECT_ROOT"
+echo -e "${BLUE}Environment file: ${NC}$ENV_FILE"
 echo ""
 
 # Summary

@@ -10,10 +10,6 @@ Parameters:
     Type: String
     Description: Project name for resource naming
 
-  S3BucketName:
-    Type: String
-    Description: S3 bucket name for logs and artifacts
-
 Resources:
   # ============================================
   # S3 Bucket for Logs and Artifacts

@@ -1,12 +1,21 @@
 #!/bin/bash
 
 #==============================================================================
-# Phase 3: AgentCore Runtime 정리 스크립트
+# Phase 4: AgentCore Runtime Cleanup Script
 #==============================================================================
-# 설명: Phase 3에서 생성한 AgentCore Runtime을 삭제합니다.
-# 사용법: ./cleanup.sh <environment> [--force]
-# 예시: ./cleanup.sh prod
-#       ./cleanup.sh prod --force  # 확인 없이 자동 삭제
+# Description: Delete AgentCore Runtime created in Phase 4
+# Usage: ./cleanup.sh [environment] --region <region> [--force]
+#
+# Arguments:
+#   environment  - Environment name (dev, staging, prod) [default: prod]
+#
+# Options:
+#   --region REGION  - AWS region (e.g., us-west-2, us-east-1) [REQUIRED]
+#   --force, -f      - Force delete without confirmation
+#
+# Examples:
+#   ./cleanup.sh prod --region us-east-1
+#   ./cleanup.sh prod --region us-west-2 --force
 #==============================================================================
 
 set -e
@@ -18,71 +27,107 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Environment 설정
-ENVIRONMENT=${1:-prod}
+# Parse arguments
+ENVIRONMENT="prod"
 FORCE_MODE=false
+REGION=""
 
-if [ "$2" = "--force" ]; then
-    FORCE_MODE=true
-fi
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --force|-f)
+            FORCE_MODE=true
+            shift
+            ;;
+        --region)
+            REGION="$2"
+            shift 2
+            ;;
+        dev|staging|prod)
+            ENVIRONMENT=$1
+            shift
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
 
-echo -e "${BLUE}============================================${NC}"
-echo -e "${BLUE}Phase 3: AgentCore Runtime 정리${NC}"
-echo -e "${BLUE}Environment: ${ENVIRONMENT}${NC}"
-if [ "$FORCE_MODE" = true ]; then
-    echo -e "${YELLOW}Mode: FORCE (자동 삭제)${NC}"
-else
-    echo -e "${YELLOW}Mode: INTERACTIVE (확인 필요)${NC}"
-fi
-echo -e "${BLUE}============================================${NC}"
-echo ""
-
-# 현재 디렉토리 확인
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROD_DEPLOY_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-
-# .env 파일 확인
-ENV_FILE="$PROD_DEPLOY_DIR/.env"
-if [ ! -f "$ENV_FILE" ]; then
-    echo -e "${RED}✗ .env 파일이 없습니다.${NC}"
+# Region is REQUIRED for cleanup to prevent accidental deletions
+if [ -z "$REGION" ]; then
+    echo -e "${RED}Error: Region parameter is required for cleanup${NC}"
+    echo ""
+    echo "Usage: $0 [environment] --region <region> [--force]"
+    echo ""
+    echo "Examples:"
+    echo "  $0 prod --region us-east-1"
+    echo "  $0 prod --region us-west-2"
+    echo ""
+    echo "This is a safety measure to prevent accidental deletion in the wrong region."
     exit 1
 fi
 
-# .env 로드
+AWS_REGION="$REGION"
+
+echo -e "${BLUE}============================================${NC}"
+echo -e "${BLUE}Phase 4: AgentCore Runtime Cleanup${NC}"
+echo -e "${BLUE}Environment: ${ENVIRONMENT}${NC}"
+echo -e "${BLUE}Region: ${AWS_REGION}${NC}"
+if [ "$FORCE_MODE" = true ]; then
+    echo -e "${YELLOW}Mode: FORCE (automatic deletion)${NC}"
+else
+    echo -e "${YELLOW}Mode: INTERACTIVE (confirmation required)${NC}"
+fi
+echo -e "${BLUE}============================================${NC}"
+echo ""
+
+# Check current directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROD_DEPLOY_DIR="$(cd "$SCRIPTS_DIR/.." && pwd)"
+PROJECT_ROOT="$(cd "$PROD_DEPLOY_DIR/.." && pwd)"
+
+# .env file check (must be at project root, not production_deployment)
+ENV_FILE="$PROJECT_ROOT/.env"
+if [ ! -f "$ENV_FILE" ]; then
+    echo -e "${RED}✗ .env file not found${NC}"
+    exit 1
+fi
+
+# Load .env
 source "$ENV_FILE"
 
-# RUNTIME_ARN 확인
+# Check RUNTIME_ARN
 if [ -z "$RUNTIME_ARN" ]; then
-    echo -e "${YELLOW}⚠ RUNTIME_ARN이 설정되지 않았습니다.${NC}"
-    echo -e "${YELLOW}  Phase 3가 배포되지 않았거나 이미 정리되었습니다.${NC}"
+    echo -e "${YELLOW}⚠ RUNTIME_ARN is not set${NC}"
+    echo -e "${YELLOW}  Phase 4 not deployed or already cleaned up${NC}"
     exit 0
 fi
 
-echo -e "${YELLOW}다음 리소스가 삭제됩니다:${NC}"
+echo -e "${YELLOW}The following resources will be deleted:${NC}"
 echo -e "  - AgentCore Runtime: ${RUNTIME_ARN}"
-echo -e "  - ECR Repository: ${RUNTIME_NAME} (bedrock_agentcore가 생성한 경우)"
-echo -e "  - agentcore-runtime/ 디렉토리"
-echo -e "  - .env 파일의 Phase 3 섹션"
+echo -e "  - ECR Repository: ${RUNTIME_NAME} (if created by bedrock_agentcore)"
+echo -e "  - agentcore-runtime/ directory"
+echo -e "  - Phase 4 section in .env file"
 echo ""
 
-# 확인 (Force 모드가 아닐 경우)
+# Confirm (if not Force mode)
 if [ "$FORCE_MODE" = false ]; then
-    read -p "계속하시겠습니까? (y/N): " -n 1 -r
+    read -p "Do you want to continue? (y/N): " -n 1 -r
     echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo -e "${YELLOW}정리가 취소되었습니다.${NC}"
+        echo -e "${YELLOW}Cleanup cancelled${NC}"
         exit 0
     fi
     echo ""
 fi
 
 #------------------------------------------------------------------------------
-# Step 1: AgentCore Runtime 삭제
+# Step 1: Delete AgentCore Runtime
 #------------------------------------------------------------------------------
 
-echo -e "${YELLOW}[1/4] AgentCore Runtime 삭제...${NC}"
+echo -e "${YELLOW}[1/4] Deleting AgentCore Runtime...${NC}"
 
-# Runtime 존재 확인
+# Check if runtime exists
 RUNTIME_INFO=$(aws bedrock-agentcore get-agent-runtime \
     --agent-runtime-arn "$RUNTIME_ARN" \
     --region "$AWS_REGION" \
@@ -91,14 +136,14 @@ RUNTIME_INFO=$(aws bedrock-agentcore get-agent-runtime \
 if [ -n "$RUNTIME_INFO" ]; then
     echo "  - Runtime ARN: $RUNTIME_ARN"
 
-    # Runtime 삭제
+    # Delete runtime
     if aws bedrock-agentcore delete-agent-runtime \
         --agent-runtime-arn "$RUNTIME_ARN" \
         --region "$AWS_REGION" 2>/dev/null; then
-        echo -e "${GREEN}  ✓ Runtime 삭제 요청 완료${NC}"
+        echo -e "${GREEN}  ✓ Runtime deletion request completed${NC}"
 
-        # 삭제 대기 (최대 5분)
-        echo "  - 삭제 진행 중... (최대 5분)"
+        # Wait for deletion (max 5 minutes)
+        echo "  - Deletion in progress... (max 5 minutes)"
         MAX_WAIT=300
         ELAPSED=0
         while [ $ELAPSED -lt $MAX_WAIT ]; do
@@ -109,7 +154,7 @@ if [ -n "$RUNTIME_INFO" ]; then
                 --output text 2>/dev/null || echo "DELETED")
 
             if [ "$RUNTIME_STATUS" = "DELETED" ] || [ -z "$RUNTIME_STATUS" ]; then
-                echo -e "${GREEN}  ✓ Runtime 삭제 완료${NC}"
+                echo -e "${GREEN}  ✓ Runtime deletion completed${NC}"
                 break
             fi
 
@@ -119,43 +164,43 @@ if [ -n "$RUNTIME_INFO" ]; then
         done
 
         if [ $ELAPSED -ge $MAX_WAIT ]; then
-            echo -e "${YELLOW}  ⚠ Runtime 삭제 시간 초과 (5분)${NC}"
-            echo -e "${YELLOW}    AWS Console에서 수동으로 확인하세요.${NC}"
+            echo -e "${YELLOW}  ⚠ Runtime deletion timeout (5 minutes)${NC}"
+            echo -e "${YELLOW}    Please check manually in AWS Console${NC}"
         fi
     else
-        echo -e "${YELLOW}  ⚠ Runtime 삭제 실패 (이미 삭제되었을 수 있음)${NC}"
+        echo -e "${YELLOW}  ⚠ Runtime deletion failed (may have already been deleted)${NC}"
     fi
 else
-    echo -e "${YELLOW}  ⚠ Runtime을 찾을 수 없습니다 (이미 삭제됨)${NC}"
+    echo -e "${YELLOW}  ⚠ Runtime not found (already deleted)${NC}"
 fi
 
 echo ""
 
 #------------------------------------------------------------------------------
-# Step 2: ECR Repository 삭제 (bedrock_agentcore가 생성한 경우)
+# Step 2: Delete ECR Repository (if created by bedrock_agentcore)
 #------------------------------------------------------------------------------
 
-echo -e "${YELLOW}[2/4] ECR Repository 확인...${NC}"
+echo -e "${YELLOW}[2/4] Checking ECR Repository...${NC}"
 
-# bedrock_agentcore toolkit이 생성한 ECR Repository 검색
+# Search for ECR Repository created by bedrock_agentcore toolkit
 ECR_REPOS=$(aws ecr describe-repositories \
     --region "$AWS_REGION" \
     --query "repositories[?contains(repositoryName, '${RUNTIME_NAME}') || contains(repositoryName, 'bedrock') && contains(repositoryName, 'agentcore')].repositoryName" \
     --output text 2>/dev/null || echo "")
 
 if [ -n "$ECR_REPOS" ]; then
-    echo -e "${YELLOW}  다음 ECR Repository가 발견되었습니다:${NC}"
+    echo -e "${YELLOW}  Found the following ECR Repositories:${NC}"
     for REPO in $ECR_REPOS; do
         echo "    - $REPO"
     done
     echo ""
 
-    # 확인 (Force 모드가 아닐 경우)
+    # Confirm (if not Force mode)
     DELETE_ECR=false
     if [ "$FORCE_MODE" = true ]; then
         DELETE_ECR=true
     else
-        read -p "  ECR Repository를 삭제하시겠습니까? (y/N): " -n 1 -r
+        read -p "  Do you want to delete ECR Repository? (y/N): " -n 1 -r
         echo ""
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             DELETE_ECR=true
@@ -169,37 +214,37 @@ if [ -n "$ECR_REPOS" ]; then
                 --repository-name "$REPO" \
                 --region "$AWS_REGION" \
                 --force 2>/dev/null; then
-                echo -e "${GREEN}    ✓ $REPO 삭제 완료${NC}"
+                echo -e "${GREEN}    ✓ $REPO deletion completed${NC}"
             else
-                echo -e "${YELLOW}    ⚠ $REPO 삭제 실패${NC}"
+                echo -e "${YELLOW}    ⚠ $REPO deletion failed${NC}"
             fi
         done
     else
-        echo -e "${YELLOW}  ECR Repository 삭제를 건너뛰었습니다.${NC}"
+        echo -e "${YELLOW}  ECR Repository deletion skipped${NC}"
     fi
 else
-    echo -e "${GREEN}  ✓ bedrock_agentcore가 생성한 ECR Repository 없음${NC}"
+    echo -e "${GREEN}  ✓ No ECR Repository created by bedrock_agentcore${NC}"
 fi
 
 echo ""
 
 #------------------------------------------------------------------------------
-# Step 3: agentcore-runtime/ 디렉토리 삭제
+# Step 3: Delete agentcore-runtime/ directory
 #------------------------------------------------------------------------------
 
-echo -e "${YELLOW}[3/4] agentcore-runtime/ 디렉토리 삭제...${NC}"
+echo -e "${YELLOW}[3/4] Deleting agentcore-runtime/ directory...${NC}"
 
 RUNTIME_DIR="$PROD_DEPLOY_DIR/agentcore-runtime"
 
 if [ -d "$RUNTIME_DIR" ]; then
     echo "  - Directory: $RUNTIME_DIR"
 
-    # 확인 (Force 모드가 아닐 경우)
+    # Confirm (if not Force mode)
     DELETE_DIR=false
     if [ "$FORCE_MODE" = true ]; then
         DELETE_DIR=true
     else
-        read -p "  agentcore-runtime/ 디렉토리를 삭제하시겠습니까? (y/N): " -n 1 -r
+        read -p "  Do you want to delete agentcore-runtime/ directory? (y/N): " -n 1 -r
         echo ""
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             DELETE_DIR=true
@@ -208,57 +253,57 @@ if [ -d "$RUNTIME_DIR" ]; then
 
     if [ "$DELETE_DIR" = true ]; then
         rm -rf "$RUNTIME_DIR"
-        echo -e "${GREEN}  ✓ 디렉토리 삭제 완료${NC}"
+        echo -e "${GREEN}  ✓ Directory deletion completed${NC}"
     else
-        echo -e "${YELLOW}  디렉토리 삭제를 건너뛰었습니다.${NC}"
+        echo -e "${YELLOW}  Directory deletion skipped${NC}"
     fi
 else
-    echo -e "${GREEN}  ✓ 디렉토리 없음 (이미 삭제됨)${NC}"
+    echo -e "${GREEN}  ✓ Directory not found (already deleted)${NC}"
 fi
 
 echo ""
 
 #------------------------------------------------------------------------------
-# Step 4: .env 파일 정리
+# Step 4: Cleanup .env file
 #------------------------------------------------------------------------------
 
-echo -e "${YELLOW}[4/4] .env 파일 정리...${NC}"
+echo -e "${YELLOW}[4/4] Cleaning up .env file...${NC}"
 
-# Phase 3 섹션 삭제
-if grep -q "# Phase 3: AgentCore Runtime" "$ENV_FILE"; then
-    # Phase 3 섹션부터 다음 Phase 섹션 전까지 또는 파일 끝까지 삭제
-    sed -i '/# Phase 3: AgentCore Runtime/,/# Phase [0-9]/{ /# Phase 3: AgentCore Runtime/d; /# Phase [0-9]/!d; }' "$ENV_FILE"
+# Delete Phase 4 section
+if grep -q "# Phase 4: AgentCore Runtime" "$ENV_FILE" || grep -q "# Phase 3: AgentCore Runtime" "$ENV_FILE"; then
+    # Delete from Phase 3/4 section to next Phase section or end of file
+    sed -i '/# Phase [34]: AgentCore Runtime/,/# Phase [0-9]/{ /# Phase [34]: AgentCore Runtime/d; /# Phase [0-9]/!d; }' "$ENV_FILE"
 
-    # 파일 끝까지 Phase 3만 있는 경우
-    sed -i '/# Phase 3: AgentCore Runtime/,$d' "$ENV_FILE"
+    # Delete if Phase 3/4 is at the end of file
+    sed -i '/# Phase [34]: AgentCore Runtime/,$d' "$ENV_FILE"
 
-    echo -e "${GREEN}  ✓ .env 파일에서 Phase 3 섹션 삭제 완료${NC}"
+    echo -e "${GREEN}  ✓ Phase 4 section removed from .env file${NC}"
 else
-    echo -e "${YELLOW}  ⚠ .env 파일에 Phase 3 섹션이 없습니다${NC}"
+    echo -e "${YELLOW}  ⚠ Phase 4 section not found in .env file${NC}"
 fi
 
 echo ""
 
 #------------------------------------------------------------------------------
-# 정리 완료
+# Cleanup Complete
 #------------------------------------------------------------------------------
 
 echo -e "${GREEN}============================================${NC}"
-echo -e "${GREEN}✓ Phase 3 정리 완료!${NC}"
+echo -e "${GREEN}✓ Phase 4 Cleanup Completed!${NC}"
 echo -e "${GREEN}============================================${NC}"
 echo ""
-echo -e "${BLUE}삭제된 리소스:${NC}"
+echo -e "${BLUE}Deleted Resources:${NC}"
 echo -e "  - AgentCore Runtime"
-echo -e "  - ECR Repository (선택적)"
-echo -e "  - agentcore-runtime/ 디렉토리 (선택적)"
-echo -e "  - .env 파일의 Phase 3 섹션"
+echo -e "  - ECR Repository (optional)"
+echo -e "  - agentcore-runtime/ directory (optional)"
+echo -e "  - Phase 4 section in .env file"
 echo ""
-echo -e "${YELLOW}참고:${NC}"
-echo -e "  - ENI는 Runtime 삭제 시 자동으로 삭제됩니다 (수 분 소요)"
-echo -e "  - CloudWatch Logs는 자동으로 삭제되지 않습니다 (수동 삭제 필요)"
+echo -e "${YELLOW}Note:${NC}"
+echo -e "  - ENIs will be automatically deleted when Runtime is deleted (takes several minutes)"
+echo -e "  - CloudWatch Logs will NOT be automatically deleted (manual deletion required)"
 echo ""
-echo -e "${BLUE}다음 단계:${NC}"
-echo -e "  - Phase 3를 재배포하려면: ./scripts/phase3/deploy.sh ${ENVIRONMENT}"
-echo -e "  - Phase 2 정리: ./scripts/phase2/cleanup.sh ${ENVIRONMENT}"
-echo -e "  - Phase 1 정리: ./scripts/phase1/cleanup.sh ${ENVIRONMENT}"
+echo -e "${BLUE}Next Steps:${NC}"
+echo -e "  - To redeploy Phase 4: cd ../../.. && uv run 01_create_agentcore_runtime_vpc.py"
+echo -e "  - Phase 2 cleanup: ./scripts/phase2/cleanup.sh ${ENVIRONMENT} --region ${AWS_REGION}"
+echo -e "  - Phase 1 cleanup: ./scripts/phase1/cleanup.sh ${ENVIRONMENT} --region ${AWS_REGION}"
 echo ""
