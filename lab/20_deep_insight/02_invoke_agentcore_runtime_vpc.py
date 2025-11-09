@@ -57,7 +57,7 @@ if not os.path.exists(env_file):
     print(f"{YELLOW}⚠️  Or run ./production_deployment/scripts/setup_env.sh{NC}")
     sys.exit(1)
 
-load_dotenv(env_file)
+load_dotenv(env_file, override=True)
 
 # Read configuration from environment variables
 AGENT_ARN = os.getenv("RUNTIME_ARN")

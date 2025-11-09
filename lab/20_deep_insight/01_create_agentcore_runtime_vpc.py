@@ -187,7 +187,7 @@ def load_and_validate_config():
         print_warning("Or run ./production_deployment/scripts/setup_env.sh")
         sys.exit(1)
 
-    load_dotenv(env_file)
+    load_dotenv(env_file, override=True)
 
     # Load all environment variables into organized groups
     config = load_environment_variables()
