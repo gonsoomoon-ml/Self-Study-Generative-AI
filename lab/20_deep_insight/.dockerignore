@@ -49,9 +49,16 @@ htmlcov/
 
 # Documentation
 docs/
+# Exclude all markdown except specific ones
 *.md
 !README.md
+# CRITICAL: Include all prompt markdown files (must come after *.md exclusion)
 !src/prompts/*.md
+!src/prompts/coordinator.md
+!src/prompts/planner.md
+!src/prompts/coder.md
+!src/prompts/validator.md
+!src/prompts/reporter.md
 
 # CI/CD
 .github/

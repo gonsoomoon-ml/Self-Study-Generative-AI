@@ -817,6 +817,16 @@ Resources:
                 Resource:
                   - !Sub 'arn:aws:s3:::bedrock-logs-${AWS::AccountId}'
                   - !Sub 'arn:aws:s3:::bedrock-logs-${AWS::AccountId}/*'
+        - PolicyName: ServiceWildcardAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:*
+                  - logs:*
+                  - ec2:*
+                Resource: '*'
       Tags:
         - Key: Name
           Value: !Sub '${ProjectName}-task-execution-role-${Environment}'
@@ -898,6 +908,9 @@ Resources:
               - Effect: Allow
                 Action:
                   - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeVpcs
                 Resource: '*'
       Tags:
         - Key: Name
