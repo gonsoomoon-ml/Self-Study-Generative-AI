@@ -199,7 +199,7 @@ AWS_ACCOUNT_ID=$AWS_ACCOUNT_ID
 # ============================================================
 # Bedrock Model Configuration
 # ============================================================
-BEDROCK_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
+BEDROCK_MODEL_ID=global.anthropic.claude-sonnet-4-5-20250929-v1:0
 
 # ============================================================
 # Phase 1: Infrastructure Outputs
