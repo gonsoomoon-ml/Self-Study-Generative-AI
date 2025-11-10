@@ -76,6 +76,21 @@ echo -e "${GREEN}✓${NC} Detected AWS Account: $AWS_ACCOUNT_ID"
 echo -e "${GREEN}✓${NC} Detected AWS Region: $AWS_REGION"
 echo ""
 
+# Check if jq is installed
+if ! command -v jq &> /dev/null; then
+    echo -e "${RED}✗ Error: jq is not installed${NC}"
+    echo -e "${YELLOW}  This script requires jq to parse JSON outputs from CloudFormation${NC}"
+    echo ""
+    echo "Install jq:"
+    echo "  Ubuntu/Debian: sudo apt-get install jq"
+    echo "  RHEL/CentOS:   sudo yum install jq"
+    echo "  macOS:         brew install jq"
+    echo ""
+    exit 1
+fi
+echo -e "${GREEN}✓${NC} jq is installed"
+echo ""
+
 # Check if Phase 1 stack exists
 echo -e "${YELLOW}Checking Phase 1 stack: $PHASE1_STACK_NAME${NC}"
 PHASE1_STATUS=$(aws cloudformation describe-stacks \

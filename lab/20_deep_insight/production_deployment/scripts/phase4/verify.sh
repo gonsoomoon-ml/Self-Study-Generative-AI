@@ -94,6 +94,19 @@ if [ -z "$RUNTIME_ARN" ]; then
     exit 1
 fi
 
+# Check if jq is installed (required for JSON parsing)
+if ! command -v jq &> /dev/null; then
+    echo -e "${RED}✗ Error: jq is not installed${NC}"
+    echo -e "${YELLOW}  This script requires jq to parse JSON outputs${NC}"
+    echo ""
+    echo "Install jq:"
+    echo "  Ubuntu/Debian: sudo apt-get install jq"
+    echo "  RHEL/CentOS:   sudo yum install jq"
+    echo "  macOS:         brew install jq"
+    echo ""
+    exit 1
+fi
+
 #------------------------------------------------------------------------------
 # 1. Check Runtime Status
 #------------------------------------------------------------------------------
