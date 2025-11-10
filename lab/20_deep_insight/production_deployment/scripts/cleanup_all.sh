@@ -295,22 +295,92 @@ echo -e "${BLUE}Cleanup S3 Buckets${NC}"
 echo -e "${BLUE}============================================${NC}"
 echo ""
 
-# Delete nested templates bucket
+# Delete nested templates bucket (with versioning support)
 TEMPLATE_BUCKET="deep-insight-templates-${ENVIRONMENT}-${REGION}-${AWS_ACCOUNT_ID}"
 echo "Checking for template bucket: $TEMPLATE_BUCKET"
 if aws s3 ls "s3://$TEMPLATE_BUCKET" --region "$REGION" 2>/dev/null; then
-    echo "Deleting template bucket..."
+    echo "Deleting template bucket (including all versions)..."
+
+    # Check if versioning is enabled
+    VERSIONING_STATUS=$(aws s3api get-bucket-versioning --bucket "$TEMPLATE_BUCKET" --region "$REGION" --query 'Status' --output text 2>/dev/null || echo "")
+
+    if [ "$VERSIONING_STATUS" = "Enabled" ]; then
+        echo "  Bucket has versioning enabled - deleting all versions and delete markers..."
+
+        # Delete all object versions
+        aws s3api list-object-versions \
+            --bucket "$TEMPLATE_BUCKET" \
+            --region "$REGION" \
+            --output json 2>/dev/null | \
+        jq -r '.Versions[]? | "--key \"\(.Key)\" --version-id \"\(.VersionId)\""' 2>/dev/null | \
+        while read -r line; do
+            if [ -n "$line" ]; then
+                eval aws s3api delete-object --bucket "$TEMPLATE_BUCKET" --region "$REGION" $line 2>/dev/null || true
+            fi
+        done
+
+        # Delete all delete markers
+        aws s3api list-object-versions \
+            --bucket "$TEMPLATE_BUCKET" \
+            --region "$REGION" \
+            --output json 2>/dev/null | \
+        jq -r '.DeleteMarkers[]? | "--key \"\(.Key)\" --version-id \"\(.VersionId)\""' 2>/dev/null | \
+        while read -r line; do
+            if [ -n "$line" ]; then
+                eval aws s3api delete-object --bucket "$TEMPLATE_BUCKET" --region "$REGION" $line 2>/dev/null || true
+            fi
+        done
+
+        echo "  All versions deleted"
+    fi
+
+    # Delete bucket
     aws s3 rb "s3://$TEMPLATE_BUCKET" --force --region "$REGION" 2>/dev/null || true
     echo -e "${GREEN}✓${NC} Template bucket deleted"
 else
     echo "Template bucket not found"
 fi
 
-# Delete session data bucket
+# Delete session data bucket (with versioning support)
 SESSION_BUCKET="deep-insight-logs-${REGION}-${AWS_ACCOUNT_ID}"
 echo "Checking for session data bucket: $SESSION_BUCKET"
 if aws s3 ls "s3://$SESSION_BUCKET" --region "$REGION" 2>/dev/null; then
-    echo "Deleting session data bucket..."
+    echo "Deleting session data bucket (including all versions)..."
+
+    # Check if versioning is enabled
+    VERSIONING_STATUS=$(aws s3api get-bucket-versioning --bucket "$SESSION_BUCKET" --region "$REGION" --query 'Status' --output text 2>/dev/null || echo "")
+
+    if [ "$VERSIONING_STATUS" = "Enabled" ]; then
+        echo "  Bucket has versioning enabled - deleting all versions and delete markers..."
+
+        # Delete all object versions
+        aws s3api list-object-versions \
+            --bucket "$SESSION_BUCKET" \
+            --region "$REGION" \
+            --output json 2>/dev/null | \
+        jq -r '.Versions[]? | "--key \"\(.Key)\" --version-id \"\(.VersionId)\""' 2>/dev/null | \
+        while read -r line; do
+            if [ -n "$line" ]; then
+                eval aws s3api delete-object --bucket "$SESSION_BUCKET" --region "$REGION" $line 2>/dev/null || true
+            fi
+        done
+
+        # Delete all delete markers
+        aws s3api list-object-versions \
+            --bucket "$SESSION_BUCKET" \
+            --region "$REGION" \
+            --output json 2>/dev/null | \
+        jq -r '.DeleteMarkers[]? | "--key \"\(.Key)\" --version-id \"\(.VersionId)\""' 2>/dev/null | \
+        while read -r line; do
+            if [ -n "$line" ]; then
+                eval aws s3api delete-object --bucket "$SESSION_BUCKET" --region "$REGION" $line 2>/dev/null || true
+            fi
+        done
+
+        echo "  All versions deleted"
+    fi
+
+    # Delete bucket
     aws s3 rb "s3://$SESSION_BUCKET" --force --region "$REGION" 2>/dev/null || true
     echo -e "${GREEN}✓${NC} Session data bucket deleted"
 else
