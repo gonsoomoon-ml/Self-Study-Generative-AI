@@ -233,10 +233,11 @@ DOCKER_IMAGE="$ECR_URI:$IMAGE_TAG"
 
 echo "Building Docker image..."
 echo "Image: $DOCKER_IMAGE"
+echo "Platform: linux/arm64 (AWS Graviton2)"
 echo "This may take 5-10 minutes (installing system packages + Python packages)"
 echo ""
 
-docker build -t "$DOCKER_IMAGE" -t "$ECR_URI:latest" .
+docker build --platform linux/arm64 -t "$DOCKER_IMAGE" -t "$ECR_URI:latest" .
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓${NC} Docker image built successfully"

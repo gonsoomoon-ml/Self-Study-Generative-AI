@@ -108,6 +108,9 @@ FARGATE_SUBNET_IDS = os.getenv("FARGATE_SUBNET_IDS")
 FARGATE_SECURITY_GROUP_IDS = os.getenv("FARGATE_SECURITY_GROUP_IDS")
 FARGATE_ASSIGN_PUBLIC_IP = os.getenv("FARGATE_ASSIGN_PUBLIC_IP", "DISABLED")  # Default to DISABLED for security
 
+# AWS Region Configuration
+AWS_REGION = os.getenv("AWS_REGION")
+
 class SessionBasedFargateManager:
     # ========================================================================
     # CLASS CONSTANTS - Timeouts and Intervals
@@ -222,7 +225,7 @@ class SessionBasedFargateManager:
                  alb_dns: str = None,
                  subnets: list = None,
                  security_groups: list = None,
-                 region: str = "us-east-1"):
+                 region: str = None):
         """
         Initialize session-based Fargate manager
         """
@@ -232,7 +235,7 @@ class SessionBasedFargateManager:
         self.container_name = container_name or CONTAINER_NAME or "dynamic-executor"
         self.alb_target_group_arn = alb_target_group_arn or ALB_TARGET_GROUP_ARN
         self.alb_dns = alb_dns or ALB_DNS
-        self.region = region
+        self.region = region or AWS_REGION or "us-east-1"  # Fallback: parameter → env var → default
 
         # Validate required configuration
         self._validate_required_config()

@@ -189,6 +189,9 @@ Resources:
       Memory: !Ref TaskMemory
       ExecutionRoleArn: !Ref TaskExecutionRoleArn
       TaskRoleArn: !Ref TaskRoleArn
+      RuntimePlatform:
+        CpuArchitecture: ARM64
+        OperatingSystemFamily: LINUX
       ContainerDefinitions:
         - Name: fargate-runtime
           Image: !Ref DockerImageUri
