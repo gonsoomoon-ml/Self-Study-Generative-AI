@@ -150,7 +150,34 @@ fi
 # Delete CloudFormation stack
 PHASE2_STATUS=$(aws cloudformation describe-stacks --stack-name "$PHASE2_STACK" --region "$REGION" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "NOT_FOUND")
 
-if [ "$PHASE2_STATUS" != "NOT_FOUND" ]; then
+if [ "$PHASE2_STATUS" = "NOT_FOUND" ]; then
+    echo "Phase 2 stack not found - already deleted"
+elif [ "$PHASE2_STATUS" = "DELETE_COMPLETE" ]; then
+    echo -e "${GREEN}✓${NC} Phase 2 stack already deleted (status: DELETE_COMPLETE)"
+elif [ "$PHASE2_STATUS" = "DELETE_IN_PROGRESS" ]; then
+    echo -e "${YELLOW}Stack deletion already in progress - waiting for completion${NC}"
+    echo "Waiting for stack deletion..."
+    aws cloudformation wait stack-delete-complete --stack-name "$PHASE2_STACK" --region "$REGION" 2>&1
+
+    FINAL_STATUS=$(aws cloudformation describe-stacks --stack-name "$PHASE2_STACK" --region "$REGION" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DELETED")
+
+    if [ "$FINAL_STATUS" = "DELETED" ] || [ "$FINAL_STATUS" = "NOT_FOUND" ]; then
+        echo -e "${GREEN}✓${NC} Phase 2 stack deleted"
+    elif [ "$FINAL_STATUS" = "DELETE_FAILED" ]; then
+        echo -e "${RED}✗${NC} Phase 2 stack deletion FAILED!"
+        echo ""
+        echo "Failed resources:"
+        aws cloudformation describe-stack-events --stack-name "$PHASE2_STACK" --region "$REGION" --max-items 20 --query 'StackEvents[?ResourceStatus==`DELETE_FAILED`].[LogicalResourceId,ResourceType,ResourceStatusReason]' --output table
+        exit 1
+    fi
+else
+    # Stack exists in a state that can be deleted
+    echo "Current Phase 2 stack status: $PHASE2_STATUS"
+
+    if [ "$PHASE2_STATUS" = "DELETE_FAILED" ]; then
+        echo -e "${YELLOW}Stack is in DELETE_FAILED state - retrying deletion${NC}"
+    fi
+
     echo "Deleting Phase 2 CloudFormation stack: $PHASE2_STACK"
     aws cloudformation delete-stack --stack-name "$PHASE2_STACK" --region "$REGION"
 
@@ -161,22 +188,19 @@ if [ "$PHASE2_STATUS" != "NOT_FOUND" ]; then
     # Verify actual deletion status
     FINAL_STATUS=$(aws cloudformation describe-stacks --stack-name "$PHASE2_STACK" --region "$REGION" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DELETED")
 
-    if [ "$FINAL_STATUS" == "DELETED" ] || [[ "$FINAL_STATUS" == *"does not exist"* ]]; then
+    if [ "$FINAL_STATUS" = "DELETED" ] || [ "$FINAL_STATUS" = "NOT_FOUND" ]; then
         echo -e "${GREEN}✓${NC} Phase 2 stack deleted"
-    elif [ "$FINAL_STATUS" == "DELETE_FAILED" ]; then
+    elif [ "$FINAL_STATUS" = "DELETE_FAILED" ]; then
         echo -e "${RED}✗${NC} Phase 2 stack deletion FAILED!"
         echo ""
         echo "Failed resources:"
-        aws cloudformation describe-stack-events --stack-name "$PHASE2_STACK" --region "$REGION" --max-items 10 --query 'StackEvents[?ResourceStatus==`DELETE_FAILED`].[LogicalResourceId,ResourceType,ResourceStatusReason]' --output table
+        aws cloudformation describe-stack-events --stack-name "$PHASE2_STACK" --region "$REGION" --max-items 20 --query 'StackEvents[?ResourceStatus==`DELETE_FAILED`].[LogicalResourceId,ResourceType,ResourceStatusReason]' --output table
         echo ""
-        echo -e "${YELLOW}Manual intervention required. Check the AWS Console or run:${NC}"
-        echo "  aws cloudformation describe-stack-events --stack-name $PHASE2_STACK --region $REGION"
+        echo -e "${YELLOW}Manual intervention required.${NC}"
         exit 1
     else
         echo -e "${GREEN}✓${NC} Phase 2 stack status: $FINAL_STATUS"
     fi
-else
-    echo "Phase 2 stack not found"
 fi
 
 # Clean up orphaned ECR repository (if exists outside CloudFormation)
@@ -210,6 +234,72 @@ echo -e "${GREEN}✓${NC} Phase 2 cleanup complete"
 
 echo ""
 echo -e "${BLUE}============================================${NC}"
+echo -e "${BLUE}Pre-Phase 1: Empty S3 Buckets${NC}"
+echo -e "${BLUE}============================================${NC}"
+echo ""
+
+# Empty S3 buckets BEFORE deleting CloudFormation stacks
+# This prevents "bucket not empty" errors during stack deletion
+
+function empty_s3_bucket() {
+    local BUCKET_NAME=$1
+    local BUCKET_REGION=$2
+
+    echo "Checking bucket: $BUCKET_NAME"
+    if ! aws s3 ls "s3://$BUCKET_NAME" --region "$BUCKET_REGION" 2>/dev/null; then
+        echo "  Bucket not found - skipping"
+        return 0
+    fi
+
+    echo "  Emptying bucket: $BUCKET_NAME"
+
+    # Check if versioning is enabled
+    VERSIONING_STATUS=$(aws s3api get-bucket-versioning --bucket "$BUCKET_NAME" --region "$BUCKET_REGION" --query 'Status' --output text 2>/dev/null || echo "")
+
+    if [ "$VERSIONING_STATUS" = "Enabled" ] || [ "$VERSIONING_STATUS" = "Suspended" ]; then
+        echo "    Deleting all versions and delete markers..."
+
+        # Delete all object versions
+        aws s3api list-object-versions \
+            --bucket "$BUCKET_NAME" \
+            --region "$BUCKET_REGION" \
+            --output json 2>/dev/null | \
+        jq -r '.Versions[]? | "--key \"\(.Key)\" --version-id \"\(.VersionId)\""' 2>/dev/null | \
+        while read -r line; do
+            if [ -n "$line" ]; then
+                eval aws s3api delete-object --bucket "$BUCKET_NAME" --region "$BUCKET_REGION" $line 2>/dev/null || true
+            fi
+        done
+
+        # Delete all delete markers
+        aws s3api list-object-versions \
+            --bucket "$BUCKET_NAME" \
+            --region "$BUCKET_REGION" \
+            --output json 2>/dev/null | \
+        jq -r '.DeleteMarkers[]? | "--key \"\(.Key)\" --version-id \"\(.VersionId)\""' 2>/dev/null | \
+        while read -r line; do
+            if [ -n "$line" ]; then
+                eval aws s3api delete-object --bucket "$BUCKET_NAME" --region "$BUCKET_REGION" $line 2>/dev/null || true
+            fi
+        done
+    else
+        echo "    Deleting all objects (non-versioned)..."
+        aws s3 rm "s3://$BUCKET_NAME" --recursive --region "$BUCKET_REGION" 2>/dev/null || true
+    fi
+
+    echo -e "  ${GREEN}✓${NC} Bucket emptied: $BUCKET_NAME"
+}
+
+# Empty session data bucket (this is in the CloudFormation stack)
+SESSION_BUCKET="deep-insight-logs-${REGION}-${AWS_ACCOUNT_ID}"
+empty_s3_bucket "$SESSION_BUCKET" "$REGION"
+
+# Empty template bucket
+TEMPLATE_BUCKET="deep-insight-templates-${ENVIRONMENT}-${REGION}-${AWS_ACCOUNT_ID}"
+empty_s3_bucket "$TEMPLATE_BUCKET" "$REGION"
+
+echo ""
+echo -e "${BLUE}============================================${NC}"
 echo -e "${BLUE}Phase 1: Cleanup VPC Infrastructure${NC}"
 echo -e "${BLUE}============================================${NC}"
 echo ""
@@ -217,32 +307,112 @@ echo ""
 PHASE1_STACK="deep-insight-infrastructure-${ENVIRONMENT}"
 
 # Get VPC ID before attempting deletion
-VPC_ID=$(aws cloudformation describe-stacks --stack-name "$PHASE1_STACK" --region "$REGION" --query 'Stacks[0].Outputs[?OutputKey==`VPCId`].OutputValue' --output text 2>/dev/null || echo "")
+VPC_ID=$(aws cloudformation describe-stacks --stack-name "$PHASE1_STACK" --region "$REGION" --query 'Stacks[0].Outputs[?OutputKey==`VpcId`].OutputValue' --output text 2>/dev/null || echo "")
 
 if [ -n "$VPC_ID" ]; then
     echo "Checking for orphaned resources in VPC: $VPC_ID"
 
-    # Check for GuardDuty VPC Endpoints
-    GUARDDUTY_ENDPOINTS=$(aws ec2 describe-vpc-endpoints --region "$REGION" --filters "Name=vpc-id,Values=$VPC_ID" "Name=service-name,Values=*guardduty*" --query 'VpcEndpoints[].VpcEndpointId' --output text 2>/dev/null || echo "")
+    # Get all CloudFormation-managed VPC Endpoint IDs to exclude them
+    CF_ENDPOINTS=$(aws cloudformation describe-stack-resources --stack-name "$PHASE1_STACK" --region "$REGION" --query 'StackResources[?ResourceType==`AWS::EC2::VPCEndpoint`].PhysicalResourceId' --output text 2>/dev/null || echo "")
+    echo "  CloudFormation-managed endpoints (will be skipped): $CF_ENDPOINTS"
 
-    if [ -n "$GUARDDUTY_ENDPOINTS" ]; then
-        echo "Found GuardDuty VPC endpoints - deleting..."
-        for ENDPOINT in $GUARDDUTY_ENDPOINTS; do
-            echo "  Deleting VPC endpoint: $ENDPOINT"
-            aws ec2 delete-vpc-endpoints --region "$REGION" --vpc-endpoint-ids "$ENDPOINT" 2>/dev/null || true
+    # Find ALL VPC endpoints in this VPC
+    ALL_ENDPOINTS=$(aws ec2 describe-vpc-endpoints --region "$REGION" --filters "Name=vpc-id,Values=$VPC_ID" --query 'VpcEndpoints[].VpcEndpointId' --output text 2>/dev/null || echo "")
+
+    if [ -n "$ALL_ENDPOINTS" ]; then
+        echo "  Found VPC endpoints in VPC, checking for orphans..."
+
+        for ENDPOINT in $ALL_ENDPOINTS; do
+            # Check if this endpoint is managed by CloudFormation
+            if echo "$CF_ENDPOINTS" | grep -q "$ENDPOINT"; then
+                echo "    $ENDPOINT - CloudFormation managed (skip)"
+            else
+                # Get endpoint details
+                ENDPOINT_INFO=$(aws ec2 describe-vpc-endpoints --region "$REGION" --vpc-endpoint-ids "$ENDPOINT" --query 'VpcEndpoints[0].[ServiceName,State]' --output text 2>/dev/null || echo "")
+                SERVICE_NAME=$(echo "$ENDPOINT_INFO" | awk '{print $1}')
+                STATE=$(echo "$ENDPOINT_INFO" | awk '{print $2}')
+
+                echo "    $ENDPOINT - $SERVICE_NAME ($STATE) - ORPHAN, deleting..."
+                aws ec2 delete-vpc-endpoints --region "$REGION" --vpc-endpoint-ids "$ENDPOINT" 2>/dev/null || true
+            fi
         done
-        echo "Waiting 30 seconds for VPC endpoints to delete..."
-        sleep 30
+
+        echo "  Waiting 60 seconds for VPC endpoints to delete and ENIs to detach..."
+        sleep 60
     fi
 
-    # Check for GuardDuty Security Groups
-    GUARDDUTY_SGS=$(aws ec2 describe-security-groups --region "$REGION" --filters "Name=vpc-id,Values=$VPC_ID" "Name=group-name,Values=*GuardDuty*" --query 'SecurityGroups[].GroupId' --output text 2>/dev/null || echo "")
+    # Check for orphaned Security Groups (GuardDuty and others)
+    echo "  Checking for orphaned security groups..."
 
-    if [ -n "$GUARDDUTY_SGS" ]; then
-        echo "Found GuardDuty security groups - deleting..."
-        for SG in $GUARDDUTY_SGS; do
-            echo "  Deleting security group: $SG"
-            aws ec2 delete-security-group --region "$REGION" --group-id "$SG" 2>/dev/null || true
+    # Get all security groups in VPC except default
+    ALL_SGS=$(aws ec2 describe-security-groups --region "$REGION" --filters "Name=vpc-id,Values=$VPC_ID" --query 'SecurityGroups[?GroupName!=`default`].[GroupId,GroupName,Description]' --output text 2>/dev/null || echo "")
+
+    # Get CloudFormation-managed security group IDs to exclude them
+    CF_SGS=$(aws cloudformation describe-stack-resources --stack-name "$PHASE1_STACK" --region "$REGION" --query 'StackResources[?ResourceType==`AWS::EC2::SecurityGroup`].PhysicalResourceId' --output text 2>/dev/null || echo "")
+
+    if [ -n "$ALL_SGS" ]; then
+        echo "$ALL_SGS" | while IFS=$'\t' read -r SG_ID SG_NAME SG_DESC; do
+            # Skip if CloudFormation-managed
+            if echo "$CF_SGS" | grep -q "$SG_ID"; then
+                echo "    $SG_ID ($SG_NAME) - CloudFormation managed (skip)"
+            else
+                echo "    $SG_ID ($SG_NAME) - ORPHAN, deleting..."
+                aws ec2 delete-security-group --region "$REGION" --group-id "$SG_ID" 2>/dev/null && echo "      ✓ Deleted" || echo "      ✗ Failed (may have dependencies)"
+            fi
+        done
+
+        echo "  Waiting 10 seconds after security group cleanup..."
+        sleep 10
+    fi
+
+    # Check for remaining VPC dependencies
+    echo "  Checking for other VPC dependencies..."
+
+    # Check for Internet Gateways (except those managed by CloudFormation)
+    IGW_IDS=$(aws ec2 describe-internet-gateways --region "$REGION" --filters "Name=attachment.vpc-id,Values=$VPC_ID" --query 'InternetGateways[].InternetGatewayId' --output text 2>/dev/null || echo "")
+    CF_IGWS=$(aws cloudformation describe-stack-resources --stack-name "$PHASE1_STACK" --region "$REGION" --query 'StackResources[?ResourceType==`AWS::EC2::InternetGateway`].PhysicalResourceId' --output text 2>/dev/null || echo "")
+
+    if [ -n "$IGW_IDS" ]; then
+        for IGW in $IGW_IDS; do
+            if echo "$CF_IGWS" | grep -q "$IGW"; then
+                echo "    IGW $IGW - CloudFormation managed (skip)"
+            else
+                echo "    IGW $IGW - ORPHAN, detaching and deleting..."
+                aws ec2 detach-internet-gateway --region "$REGION" --internet-gateway-id "$IGW" --vpc-id "$VPC_ID" 2>/dev/null || true
+                aws ec2 delete-internet-gateway --region "$REGION" --internet-gateway-id "$IGW" 2>/dev/null && echo "      ✓ Deleted" || echo "      ✗ Failed"
+            fi
+        done
+    fi
+
+    # Check for NAT Gateways (except those managed by CloudFormation)
+    NAT_IDS=$(aws ec2 describe-nat-gateways --region "$REGION" --filter "Name=vpc-id,Values=$VPC_ID" "Name=state,Values=available,pending" --query 'NatGateways[].NatGatewayId' --output text 2>/dev/null || echo "")
+    CF_NATS=$(aws cloudformation describe-stack-resources --stack-name "$PHASE1_STACK" --region "$REGION" --query 'StackResources[?ResourceType==`AWS::EC2::NatGateway`].PhysicalResourceId' --output text 2>/dev/null || echo "")
+
+    if [ -n "$NAT_IDS" ]; then
+        for NAT in $NAT_IDS; do
+            if echo "$CF_NATS" | grep -q "$NAT"; then
+                echo "    NAT Gateway $NAT - CloudFormation managed (skip)"
+            else
+                echo "    NAT Gateway $NAT - ORPHAN, deleting..."
+                aws ec2 delete-nat-gateway --region "$REGION" --nat-gateway-id "$NAT" 2>/dev/null && echo "      ✓ Deletion initiated" || echo "      ✗ Failed"
+            fi
+        done
+
+        if [ -n "$(echo $NAT_IDS | grep -v $CF_NATS)" ]; then
+            echo "  Waiting 30 seconds for NAT gateway deletion..."
+            sleep 30
+        fi
+    fi
+
+    # Check for remaining Network Interfaces
+    ENI_IDS=$(aws ec2 describe-network-interfaces --region "$REGION" --filters "Name=vpc-id,Values=$VPC_ID" "Name=status,Values=available" --query 'NetworkInterfaces[].NetworkInterfaceId' --output text 2>/dev/null || echo "")
+
+    if [ -n "$ENI_IDS" ]; then
+        echo "  Found orphaned network interfaces..."
+        for ENI in $ENI_IDS; do
+            ENI_DESC=$(aws ec2 describe-network-interfaces --region "$REGION" --network-interface-ids "$ENI" --query 'NetworkInterfaces[0].Description' --output text 2>/dev/null || echo "")
+            echo "    ENI $ENI ($ENI_DESC) - deleting..."
+            aws ec2 delete-network-interface --region "$REGION" --network-interface-id "$ENI" 2>/dev/null && echo "      ✓ Deleted" || echo "      ✗ Failed"
         done
     fi
 
@@ -252,7 +422,37 @@ fi
 
 PHASE1_STATUS=$(aws cloudformation describe-stacks --stack-name "$PHASE1_STACK" --region "$REGION" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "NOT_FOUND")
 
-if [ "$PHASE1_STATUS" != "NOT_FOUND" ]; then
+if [ "$PHASE1_STATUS" = "NOT_FOUND" ]; then
+    echo "Phase 1 stack not found - already deleted"
+elif [ "$PHASE1_STATUS" = "DELETE_COMPLETE" ]; then
+    echo -e "${GREEN}✓${NC} Phase 1 stack already deleted (status: DELETE_COMPLETE)"
+elif [ "$PHASE1_STATUS" = "DELETE_IN_PROGRESS" ]; then
+    echo -e "${YELLOW}Stack deletion already in progress - waiting for completion${NC}"
+    echo "Waiting for stack deletion (this may take 10-15 minutes)..."
+    aws cloudformation wait stack-delete-complete --stack-name "$PHASE1_STACK" --region "$REGION" 2>&1
+    WAIT_EXIT_CODE=$?
+
+    FINAL_STATUS=$(aws cloudformation describe-stacks --stack-name "$PHASE1_STACK" --region "$REGION" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DELETED")
+
+    if [ "$FINAL_STATUS" = "DELETED" ] || [ "$FINAL_STATUS" = "NOT_FOUND" ]; then
+        echo -e "${GREEN}✓${NC} Phase 1 stack deleted"
+    elif [ "$FINAL_STATUS" = "DELETE_FAILED" ]; then
+        echo -e "${RED}✗${NC} Phase 1 stack deletion FAILED!"
+        echo ""
+        echo "Failed resources:"
+        aws cloudformation describe-stack-events --stack-name "$PHASE1_STACK" --region "$REGION" --max-items 20 --query 'StackEvents[?ResourceStatus==`DELETE_FAILED`].[LogicalResourceId,ResourceType,ResourceStatusReason]' --output table
+        echo ""
+        echo -e "${YELLOW}Retry the cleanup script - S3 buckets are now empty${NC}"
+        exit 1
+    fi
+else
+    # Stack exists in a state that can be deleted
+    echo "Current stack status: $PHASE1_STATUS"
+
+    if [ "$PHASE1_STATUS" = "DELETE_FAILED" ]; then
+        echo -e "${YELLOW}Stack is in DELETE_FAILED state - retrying deletion after emptying buckets${NC}"
+    fi
+
     echo "Deleting Phase 1 CloudFormation stack: $PHASE1_STACK"
     aws cloudformation delete-stack --stack-name "$PHASE1_STACK" --region "$REGION"
 
@@ -263,129 +463,43 @@ if [ "$PHASE1_STATUS" != "NOT_FOUND" ]; then
     # Verify actual deletion status
     FINAL_STATUS=$(aws cloudformation describe-stacks --stack-name "$PHASE1_STACK" --region "$REGION" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DELETED")
 
-    if [ "$FINAL_STATUS" == "DELETED" ] || [[ "$FINAL_STATUS" == *"does not exist"* ]]; then
+    if [ "$FINAL_STATUS" = "DELETED" ] || [ "$FINAL_STATUS" = "NOT_FOUND" ]; then
         echo -e "${GREEN}✓${NC} Phase 1 stack deleted"
-    elif [ "$FINAL_STATUS" == "DELETE_FAILED" ]; then
+    elif [ "$FINAL_STATUS" = "DELETE_FAILED" ]; then
         echo -e "${RED}✗${NC} Phase 1 stack deletion FAILED!"
         echo ""
         echo "Failed resources:"
-        aws cloudformation describe-stack-events --stack-name "$PHASE1_STACK" --region "$REGION" --max-items 10 --query 'StackEvents[?ResourceStatus==`DELETE_FAILED`].[LogicalResourceId,ResourceType,ResourceStatusReason]' --output table
+        aws cloudformation describe-stack-events --stack-name "$PHASE1_STACK" --region "$REGION" --max-items 20 --query 'StackEvents[?ResourceStatus==`DELETE_FAILED`].[LogicalResourceId,ResourceType,ResourceStatusReason]' --output table
         echo ""
         echo -e "${YELLOW}Manual intervention required.${NC}"
         echo -e "${YELLOW}Common issues:${NC}"
-        echo "  1. VPC Endpoints created outside CloudFormation (e.g., GuardDuty)"
+        echo "  1. Network Interfaces (ENIs) still attached to subnets"
         echo "  2. Security Groups with dependencies"
-        echo "  3. Network Interfaces still attached"
+        echo "  3. VPC Endpoints created outside CloudFormation"
         echo ""
-        echo "To investigate, run:"
-        echo "  aws cloudformation describe-stack-events --stack-name $PHASE1_STACK --region $REGION"
+        echo "To investigate failed resources:"
+        echo "  aws cloudformation describe-stack-events --stack-name $PHASE1_STACK --region $REGION | grep DELETE_FAILED"
         echo ""
-        echo "Check for orphaned VPC resources in VPC ID from stack outputs"
         exit 1
     else
         echo -e "${GREEN}✓${NC} Phase 1 stack status: $FINAL_STATUS"
     fi
-else
-    echo "Phase 1 stack not found"
 fi
 
 echo ""
 echo -e "${BLUE}============================================${NC}"
-echo -e "${BLUE}Cleanup S3 Buckets${NC}"
+echo -e "${BLUE}Final Cleanup: Delete S3 Buckets${NC}"
 echo -e "${BLUE}============================================${NC}"
 echo ""
 
-# Delete nested templates bucket (with versioning support)
+# Delete buckets (they should already be empty from Pre-Phase 1)
 TEMPLATE_BUCKET="deep-insight-templates-${ENVIRONMENT}-${REGION}-${AWS_ACCOUNT_ID}"
-echo "Checking for template bucket: $TEMPLATE_BUCKET"
-if aws s3 ls "s3://$TEMPLATE_BUCKET" --region "$REGION" 2>/dev/null; then
-    echo "Deleting template bucket (including all versions)..."
+echo "Deleting template bucket: $TEMPLATE_BUCKET"
+aws s3 rb "s3://$TEMPLATE_BUCKET" --region "$REGION" 2>/dev/null && echo -e "${GREEN}✓${NC} Template bucket deleted" || echo "  Bucket not found or already deleted"
 
-    # Check if versioning is enabled
-    VERSIONING_STATUS=$(aws s3api get-bucket-versioning --bucket "$TEMPLATE_BUCKET" --region "$REGION" --query 'Status' --output text 2>/dev/null || echo "")
-
-    if [ "$VERSIONING_STATUS" = "Enabled" ]; then
-        echo "  Bucket has versioning enabled - deleting all versions and delete markers..."
-
-        # Delete all object versions
-        aws s3api list-object-versions \
-            --bucket "$TEMPLATE_BUCKET" \
-            --region "$REGION" \
-            --output json 2>/dev/null | \
-        jq -r '.Versions[]? | "--key \"\(.Key)\" --version-id \"\(.VersionId)\""' 2>/dev/null | \
-        while read -r line; do
-            if [ -n "$line" ]; then
-                eval aws s3api delete-object --bucket "$TEMPLATE_BUCKET" --region "$REGION" $line 2>/dev/null || true
-            fi
-        done
-
-        # Delete all delete markers
-        aws s3api list-object-versions \
-            --bucket "$TEMPLATE_BUCKET" \
-            --region "$REGION" \
-            --output json 2>/dev/null | \
-        jq -r '.DeleteMarkers[]? | "--key \"\(.Key)\" --version-id \"\(.VersionId)\""' 2>/dev/null | \
-        while read -r line; do
-            if [ -n "$line" ]; then
-                eval aws s3api delete-object --bucket "$TEMPLATE_BUCKET" --region "$REGION" $line 2>/dev/null || true
-            fi
-        done
-
-        echo "  All versions deleted"
-    fi
-
-    # Delete bucket
-    aws s3 rb "s3://$TEMPLATE_BUCKET" --force --region "$REGION" 2>/dev/null || true
-    echo -e "${GREEN}✓${NC} Template bucket deleted"
-else
-    echo "Template bucket not found"
-fi
-
-# Delete session data bucket (with versioning support)
 SESSION_BUCKET="deep-insight-logs-${REGION}-${AWS_ACCOUNT_ID}"
-echo "Checking for session data bucket: $SESSION_BUCKET"
-if aws s3 ls "s3://$SESSION_BUCKET" --region "$REGION" 2>/dev/null; then
-    echo "Deleting session data bucket (including all versions)..."
-
-    # Check if versioning is enabled
-    VERSIONING_STATUS=$(aws s3api get-bucket-versioning --bucket "$SESSION_BUCKET" --region "$REGION" --query 'Status' --output text 2>/dev/null || echo "")
-
-    if [ "$VERSIONING_STATUS" = "Enabled" ]; then
-        echo "  Bucket has versioning enabled - deleting all versions and delete markers..."
-
-        # Delete all object versions
-        aws s3api list-object-versions \
-            --bucket "$SESSION_BUCKET" \
-            --region "$REGION" \
-            --output json 2>/dev/null | \
-        jq -r '.Versions[]? | "--key \"\(.Key)\" --version-id \"\(.VersionId)\""' 2>/dev/null | \
-        while read -r line; do
-            if [ -n "$line" ]; then
-                eval aws s3api delete-object --bucket "$SESSION_BUCKET" --region "$REGION" $line 2>/dev/null || true
-            fi
-        done
-
-        # Delete all delete markers
-        aws s3api list-object-versions \
-            --bucket "$SESSION_BUCKET" \
-            --region "$REGION" \
-            --output json 2>/dev/null | \
-        jq -r '.DeleteMarkers[]? | "--key \"\(.Key)\" --version-id \"\(.VersionId)\""' 2>/dev/null | \
-        while read -r line; do
-            if [ -n "$line" ]; then
-                eval aws s3api delete-object --bucket "$SESSION_BUCKET" --region "$REGION" $line 2>/dev/null || true
-            fi
-        done
-
-        echo "  All versions deleted"
-    fi
-
-    # Delete bucket
-    aws s3 rb "s3://$SESSION_BUCKET" --force --region "$REGION" 2>/dev/null || true
-    echo -e "${GREEN}✓${NC} Session data bucket deleted"
-else
-    echo "Session data bucket not found"
-fi
+echo "Deleting session data bucket: $SESSION_BUCKET"
+aws s3 rb "s3://$SESSION_BUCKET" --region "$REGION" 2>/dev/null && echo -e "${GREEN}✓${NC} Session data bucket deleted" || echo "  Bucket not found or already deleted"
 
 echo ""
 echo -e "${GREEN}============================================${NC}"
