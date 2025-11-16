@@ -195,6 +195,10 @@ def main():
             print(f"  ... and {len(sessions) - 10} more")
 
         print()
+        print("💡 Tip: To download a specific session, run:")
+        print(f"   uv run 03_download_artifacts.py <session_id>")
+        print(f"   Example: uv run 03_download_artifacts.py {sessions[1] if len(sessions) > 1 else sessions[0]}")
+        print()
 
         # Use most recent session
         session_id = sessions[0]

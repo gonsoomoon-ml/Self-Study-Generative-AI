@@ -68,9 +68,27 @@ Environment Variables Required:
     - CONTAINER_NAME: Container name in task definition
 
 Thread Safety:
-    This module is NOT thread-safe by design. It uses a singleton pattern with
-    request context switching (`set_request_context()`). Each request should run
-    sequentially or use separate process instances.
+    This module has MIXED thread safety guarantees:
+
+    ✅ THREAD-SAFE operations (safe for concurrent requests):
+       - cleanup_session(request_id): Safe when explicit request_id is provided
+         → Each request cleans up its own isolated dictionary keys
+         → No shared state accessed during cleanup
+         → CPython GIL provides atomicity for dict operations
+
+    ❌ NOT THREAD-SAFE operations (require sequential execution):
+       - set_request_context(): Mutates shared _current_request_id
+       - ensure_session(): Relies on shared _current_request_id
+       - ensure_session_with_data(): Relies on shared _current_request_id
+
+    Current AgentCore Integration:
+       ✅ Safe - Runtime always passes explicit request_id to cleanup_session()
+       ⚠️  Session creation requires sequential execution or process isolation
+
+    Recommendation:
+       Use separate process instances for concurrent requests, OR ensure
+       set_request_context() → ensure_session() → cleanup_session(request_id)
+       sequence runs sequentially per request.
 
 Notes:
     - Automatic cleanup registered via atexit

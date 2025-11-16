@@ -1,20 +1,20 @@
 # Deep Insight: Multi-Agent Data Analysis System
 
-> AWS Bedrock AgentCore Runtime으로 구현한 자동화된 데이터 분석 시스템
+> Automated data analysis system built with AWS Bedrock AgentCore Runtime
 
 ---
 
 ## 🎯 Overview
 
-CSV 데이터를 분석하여 인사이트를 추출하고 PDF 보고서를 자동 생성하는 Multi-Agent 시스템입니다.
+Multi-agent system that analyzes CSV data, extracts insights, and automatically generates PDF reports.
 
-**핵심 기능**:
-- 📊 자동화된 데이터 분석 및 계산 (Coder Agent)
-- ✅ 결과 검증 및 인용 생성 (Validator Agent)
-- 📄 PDF 보고서 자동 생성 (Reporter Agent)
-- 🔒 VPC Private 모드 완전 지원
+**Core Features**:
+- 📊 Automated data analysis and computation (Coder Agent)
+- ✅ Result validation and citation generation (Validator Agent)
+- 📄 Automatic PDF report generation (Reporter Agent)
+- 🔒 Full VPC Private mode support
 
-**기술 스택**:
+**Technology Stack**:
 - AWS Bedrock AgentCore Runtime (VPC Private Mode)
 - AWS Fargate (Dynamic Code Execution)
 - Strands Agent Multi-Agent Workflow
@@ -99,6 +99,35 @@ cd production_deployment/scripts/phase1
 
 For detailed cleanup instructions, see: [`production_deployment/scripts/README.md#cleanup`](production_deployment/scripts/README.md#-cleanup-order-enforcement)
 
+### Orphaned Container Cleanup
+
+**Standalone cleanup script** for Fargate tasks and ALB targets:
+
+**📍 Location**: `09.cleanup_orphaned_fargate_tasks.sh`
+
+**What it does**:
+- Deregisters orphaned targets from ALB Target Group
+- Stops all running ECS Fargate tasks
+- Automatically loads configuration from `.env` file
+
+**Usage**:
+```bash
+# Interactive mode (asks for confirmation)
+./09.cleanup_orphaned_fargate_tasks.sh
+
+# Force mode (for automation/scripts)
+./09.cleanup_orphaned_fargate_tasks.sh --force
+```
+
+**Use cases**:
+- Manual cleanup during development/debugging
+- Container shutdown hooks (ECS task stop)
+- Periodic cleanup (cron / AWS Lambda)
+- Emergency cleanup of orphaned resources
+
+**Why separated from Python?**
+Per-request cleanup (Python) handles normal operations. This script provides independent infrastructure-level cleanup for edge cases (crashes, orphaned resources, manual intervention).
+
 ---
 
 ## 📁 Project Structure
@@ -146,6 +175,7 @@ For detailed cleanup instructions, see: [`production_deployment/scripts/README.m
 ├── 01_create_agentcore_runtime_vpc.py  # Phase 4: Runtime creation
 ├── 02_invoke_agentcore_runtime_vpc.py  # Phase 4: Runtime testing
 ├── 03_download_artifacts.py             # Phase 4: Download S3 artifacts
+├── 09.cleanup_orphaned_fargate_tasks.sh # 🧹 Orphaned container cleanup script
 │
 ├── .venv → production_deployment/scripts/phase3/.venv  # Symlink
 ├── pyproject.toml → production_deployment/scripts/phase3/pyproject.toml  # Symlink
@@ -165,6 +195,8 @@ For detailed cleanup instructions, see: [`production_deployment/scripts/README.m
 ### Technical Guides
 - **[production_deployment/docs/bedrock_agentcore_vpc_regions.md](production_deployment/docs/bedrock_agentcore_vpc_regions.md)** - Supported regions & AZ IDs
 - **[production_deployment/docs/CLOUDFORMATION_GUIDE.md](production_deployment/docs/CLOUDFORMATION_GUIDE.md)** - CloudFormation details
+- **[production_deployment/docs/FARGATE_CLEANUP_ANALYSIS.md](production_deployment/docs/FARGATE_CLEANUP_ANALYSIS.md)** - Fargate cleanup workflow analysis
+- **[production_deployment/docs/CLEANUP_LOGIC_EXPLAINED.md](production_deployment/docs/CLEANUP_LOGIC_EXPLAINED.md)** - Cleanup logic and when to use each method
 
 
 ---

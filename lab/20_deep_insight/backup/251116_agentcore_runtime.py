@@ -72,7 +72,8 @@ Related Files:
 import os
 import shutil
 import asyncio
-# Removed: atexit, subprocess (process-level cleanup now in external script)
+import atexit
+import subprocess
 from typing import Dict, Any, AsyncGenerator
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from src.utils.strands_sdk_utils import strands_utils
@@ -85,7 +86,7 @@ ECS_CLUSTER_NAME = os.getenv("ECS_CLUSTER_NAME", "my-fargate-cluster")
 
 # Configuration constants
 ARTIFACTS_FOLDER = "./artifacts/"
-RUNTIME_SOURCE = "deep_insight_agentcore"
+RUNTIME_SOURCE = "bedrock_manus_agentcore"
 RUNTIME_VERSION = "2.0"
 AGENTCORE_SESSION_NAME = "agentcore-session"
 TRACER_MODULE_NAME_DEFAULT = "agentcore_insight_extractor"
@@ -132,16 +133,74 @@ def remove_artifact_folder(folder_path: str = ARTIFACTS_FOLDER) -> None:
     else:
         print(f"'{folder_path}' folder does not exist.")
 
-# NOTE: Process-level cleanup has been removed and separated into an external script
-# See: scripts/cleanup_orphaned_fargate_tasks.sh
-#
-# This decouples infrastructure cleanup from Python runtime and provides:
-# - Independent operations tool (can run without Python)
-# - Container shutdown hook integration
-# - Periodic cleanup via cron
-# - Manual cleanup capability
-#
-# Per-request cleanup (below) is sufficient for normal operations
+def cleanup_fargate_session() -> None:
+    """
+    Clean up Fargate session with guaranteed task termination.
+
+    Performs two-stage cleanup:
+    1. Graceful session completion with S3 upload wait
+    2. Forced termination of any remaining ECS tasks (fail-safe)
+
+    This function should only be called at process termination via atexit.
+    """
+    try:
+        # 1. Attempt graceful session cleanup
+        fargate_manager = get_global_session()
+        if fargate_manager and fargate_manager._session_manager and fargate_manager._session_manager.current_session:
+            print("\n🧹 Starting final Fargate session cleanup...", flush=True)
+
+            # Send session completion signal and wait for S3 upload
+            print("📤 Initiating final S3 upload and waiting for completion...", flush=True)
+            completion_result = fargate_manager._session_manager.complete_session(wait_for_s3=True)
+
+            if completion_result and completion_result.get("status") == "success":
+                print("✅ S3 upload confirmed - all Fargate artifacts uploaded", flush=True)
+            else:
+                print("⚠️ S3 upload status unclear, but proceeding with cleanup", flush=True)
+
+        # 2. Force cleanup of all Fargate tasks (fail-safe)
+        print("🔍 Checking for any remaining Fargate tasks...", flush=True)
+        try:
+            result = subprocess.run([
+                'aws', 'ecs', 'list-tasks',
+                '--cluster', ECS_CLUSTER_NAME,
+                '--query', 'taskArns[*]',
+                '--output', 'text'
+            ], capture_output=True, text=True, timeout=AWS_CLI_LIST_TIMEOUT)
+
+            if result.returncode == 0 and result.stdout.strip():
+                task_arns = result.stdout.strip().split('\t')
+                task_ids = [arn.split('/')[-1] for arn in task_arns if arn.strip()]
+
+                if task_ids:
+                    print(f"🛑 Found {len(task_ids)} running tasks, terminating...", flush=True)
+                    for task_id in task_ids:
+                        subprocess.run([
+                            'aws', 'ecs', 'stop-task',
+                            '--cluster', ECS_CLUSTER_NAME,
+                            '--task', task_id
+                        ], capture_output=True, timeout=AWS_CLI_STOP_TIMEOUT)
+                        print(f"   • Stopped task: {task_id[:12]}...", flush=True)
+                    print("✅ All orphaned Fargate tasks terminated", flush=True)
+                else:
+                    print("✅ No running Fargate tasks found", flush=True)
+            else:
+                print("ℹ️ Could not list Fargate tasks (cluster may not exist)", flush=True)
+
+        except subprocess.TimeoutExpired:
+            print("⚠️ Timeout while checking Fargate tasks", flush=True)
+        except subprocess.CalledProcessError as e:
+            print(f"⚠️ AWS CLI error during task cleanup: {e}", flush=True)
+        except FileNotFoundError:
+            print("⚠️ AWS CLI not found - cannot list/stop tasks", flush=True)
+        except Exception as cleanup_error:
+            print(f"⚠️ Unexpected error during task cleanup: {cleanup_error}", flush=True)
+
+        print("✅ Fargate session cleanup completed", flush=True)
+    except (AttributeError, KeyError) as e:
+        print(f"⚠️ Fargate session manager not properly initialized: {e}", flush=True)
+    except Exception as e:
+        print(f"⚠️ Unexpected error during Fargate session cleanup: {e}", flush=True)
 
 def _setup_execution() -> None:
     """
@@ -252,10 +311,7 @@ def _extract_csv_path_from_prompt(prompt: str) -> str:
         prompt (str): User's prompt text
 
     Returns:
-        str: Extracted CSV file path
-
-    Raises:
-        ValueError: If no CSV file path is found in the prompt
+        str: Extracted CSV file path, or None if not found
 
     Examples:
         "./data/file.csv 파일 분석해줘" → "./data/file.csv"
@@ -265,15 +321,7 @@ def _extract_csv_path_from_prompt(prompt: str) -> str:
     # Match file paths ending with .csv
     # Supports: ./path/file.csv, /absolute/path/file.csv, relative/file.csv
     match = re.search(r'([./\w\-]+\.csv)', prompt)
-
-    if not match:
-        raise ValueError(
-            "No CSV file path found in prompt. "
-            "Please include a CSV file path in your request (e.g., './data/file.csv'). "
-            "Example: 'Analyze ./data/sales.csv and generate a report'"
-        )
-
-    return match.group(1)
+    return match.group(1) if match else None
 
 def _build_graph_input(user_query: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -438,8 +486,8 @@ async def agentcore_streaming_execution(
         otel_context.detach(context_token)
 
 if __name__ == "__main__":
-    # Per-request cleanup is sufficient for normal operations
-    # Process-level cleanup is now handled externally (see scripts/cleanup_orphaned_fargate_tasks.sh)
+    # Register cleanup to run only at process termination (once)
+    atexit.register(cleanup_fargate_session)
 
     # Run with AgentCore app.run()
     print(SEPARATOR_LINE)
