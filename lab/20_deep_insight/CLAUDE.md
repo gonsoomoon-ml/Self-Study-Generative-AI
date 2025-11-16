@@ -44,6 +44,46 @@ S3 Bucket:        bedrock-logs-gonsoomoon
 
 ---
 
+## 🔧 Cleanup Architecture Refactoring (2025-11-16)
+
+### What Changed ✅
+
+**Separated cleanup responsibilities**:
+- Python runtime → Per-request cleanup only
+- Shell script → Infrastructure/manual cleanup
+
+### Key Improvements
+
+**1. Created Standalone Cleanup Script** (`09.cleanup_orphaned_fargate_tasks.sh`)
+- ✅ ALB target deregistration (prevents zombie targets)
+- ✅ Auto-loads configuration from `.env`
+- ✅ Interactive + force modes
+- ✅ ~370 lines, production-ready
+
+**2. Simplified Python Runtime** (`agentcore_runtime.py`)
+- ✅ Removed process-level cleanup (~75 lines)
+- ✅ Removed `atexit`, `subprocess` imports
+- ✅ Focus: per-request cleanup only
+
+**3. Documentation Updates**
+- ✅ Thread safety clarified (`global_fargate_coordinator.py:70-91`)
+- ✅ README: Added cleanup section, translated Korean to English
+- ✅ Created cleanup analysis docs (moved to `production_deployment/docs/`)
+- ✅ Added session selector tip to `03_download_artifacts.py`
+
+**4. Testing & Validation**
+- ✅ Multi-job test: 2 concurrent jobs
+- ✅ All containers cleaned up (0 running tasks)
+- ✅ All ALB targets deregistered (0 zombie targets)
+- ✅ Thread-safe operation confirmed
+
+### Files Changed
+- Modified: `agentcore_runtime.py`, `global_fargate_coordinator.py`, `README.md`, `03_download_artifacts.py`
+- Created: `09.cleanup_orphaned_fargate_tasks.sh`, cleanup analysis docs
+- Removed: `/scripts` directory
+
+---
+
 ## 🚨 CRITICAL BUG (2025-11-05 밤) - ✅ 해결됨 (2025-11-06)
 
 ### 문제: Missing HTTP Scheme in URL Requests
