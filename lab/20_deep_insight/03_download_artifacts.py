@@ -8,8 +8,8 @@ Creates a local 'artifacts/' folder in the project root with the following struc
 artifacts/
 ├── {session_id}/
 │   ├── artifacts/     # Generated files (charts, PDFs, reports)
-│   ├── data/          # Data files (CSV, input files)
-│   └── debug/         # Debug info (execution logs, session status)
+│   ├── debug/         # Debug info (execution logs, session status)
+│   └── input/         # Input files (CSV, data files) - created dynamically if files exist
 
 Usage:
     python3 download_artifacts.py [session_id]
@@ -88,7 +88,7 @@ def download_session(s3_client, session_id):
     print()
 
     # Create local directories
-    for subdir in ['artifacts', 'data', 'debug']:
+    for subdir in ['artifacts', 'debug']:
         (local_session_dir / subdir).mkdir(parents=True, exist_ok=True)
 
     # List all objects in session
