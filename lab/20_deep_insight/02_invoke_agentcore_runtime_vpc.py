@@ -27,6 +27,7 @@ import sys
 import os
 from datetime import datetime
 import traceback
+from textwrap import dedent
 from dotenv import load_dotenv
 
 # Terminal color codes
@@ -70,11 +71,27 @@ if not AGENT_ARN:
     sys.exit(1)
 
 # User prompt (expected runtime: 2-5 minutes for quick VPC test)
-PROMPT = "./data/Dat-fresh-food-claude.csv 파일의 총 매출액 계산해줘. PDF 보고서는 만들지 마."
+# PROMPT = dedent("""
+#     ./data/Dat-fresh-food-claude.csv 파일의 총 매출액 계산해줘. PDF 보고서는 만들지 마.
+# """).strip()
 # Alternative prompts:
-# PROMPT = "./data/Dat-fresh-food-claude.csv 파일의 총 매출액을 계산하고 차트 1개와 PDF 보고서를 생성해줘"  # 15-20 min
-# PROMPT = "./data/Dat-fresh-food-claude.csv 파일을 분석해서 총 매출액을 계산하고, 카테고리별 매출 비중도 함께 보여줘. 그리고 pdf 로 보고서 생성해줘"  # 20-25 min
+# PROMPT = dedent("""
+#     ./data/Dat-fresh-food-claude.csv 파일의 총 매출액을 계산하고 차트 1개와 PDF 보고서를 생성해줘
+# """).strip()  # 15-20 min
+# PROMPT = dedent("""
+#     ./data/Dat-fresh-food-claude.csv 파일을 분석해서 총 매출액을 계산하고,
+#     카테고리별 매출 비중도 함께 보여줘. 그리고 pdf 로 보고서 생성해줘
+# """).strip()  # 20-25 min
 
+# Alternative prompt with weather analysis
+PROMPT = dedent("""
+    온라인 Moon 마켓의 신선식품 데이터를 분석하여 판매 분석 리포트를 만들고 싶습니다.
+    분석대상은 './data/Dat-fresh-food-claude.csv' 파일 입니다.
+    데이터를 기반으로 비즈니스 인사이트 추출을 위한 분석을 진행해 주세요.
+    세일즈 및 마케팅 대상이기에, 상관 분석 같은 기술적인 분석은 리포트에 넣지 말아 주세요.
+    분석 리포트는 상세 분석과 그 것을 뒷받침 할 수 있는 이미지 및 차트를 함께 삽입해 주세요.
+    최종 리포트는 pdf 형태로 저장해 주세요.
+""").strip()
 
 def parse_sse_data(sse_bytes):
     """Parse Server-Sent Events (SSE) data from streaming response"""
