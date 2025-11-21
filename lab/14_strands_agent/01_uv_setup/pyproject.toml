@@ -1,0 +1,17 @@
+[project]
+name = "strands-agent"
+version = "0.1.0"
+description = "Strands Agent project with UV environment"
+requires-python = ">=3.12"
+dependencies = [
+    "strands-agents",
+    "strands-agents-tools",
+    "strands-agents-builder",
+    "strands-agents[a2a]",
+    "mcp==1.9.2",
+    "ipykernel>=6.29.0",
+    "jupyter>=1.0.0",
+]
+
+[dependency-groups]
+dev = []
