@@ -1,4 +1,4 @@
-# Strands Agent 세션 관리
+# Strands Agent 세션 관리: FileSessionManager, AgentCore Memory, LangGraph 비교
 
 ## 요약
 
