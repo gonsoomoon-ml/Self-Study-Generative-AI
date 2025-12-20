@@ -1,0 +1,306 @@
+{
+  "test_examples": [
+    {
+      "id": 1,
+      "src": "앱을 실행하려면 홈 화면에서 아이콘을 탭하세요.",
+      "mt": "To launch the app, tap the icon on the home screen.",
+      "quality": "good",
+      "error_type": null,
+      "error_description": "Perfect translation: Accurate terminology, natural word order, appropriate formality level for UI instructions. Tests basic competency across all models."
+    },
+    {
+      "id": 2,
+      "src": "배터리가 20% 남았습니다. 절전 모드를 활성화하시겠습니까?",
+      "mt": "20% battery remaining. Would you like to enable power saving mode?",
+      "quality": "good",
+      "error_type": null,
+      "error_description": "Excellent translation: Proper percentage placement, technical terminology accurate, polite question form preserved. Tests technical accuracy and politeness recognition."
+    },
+    {
+      "id": 10,
+      "src": "이 기능을 사용하려면 카메라 권한이 필요합니다.",
+      "mt": "To use this feature, camera permissions are required.",
+      "quality": "good",
+      "error_type": null,
+      "error_description": "Solid translation: Accurate meaning, proper grammar, appropriate technical terminology. Tests baseline competency for permission-related UI text."
+    },
+    {
+      "id": 19,
+      "src": "얼굴 인식이 활성화되었습니다. 정면을 바라보고 스캔하세요.",
+      "mt": "Face recognition enabled. Look straight ahead and scan.",
+      "quality": "good",
+      "error_type": null,
+      "error_description": "Clear and accurate: Proper technical terminology, natural instructions, appropriate tone for biometric features. Tests competency with security features."
+    },
+    {
+      "id": 20,
+      "src": "앱 내 구매를 위해 결제 정보를 입력해 주세요.",
+      "mt": "Please enter payment information for in-app purchases.",
+      "quality": "good",
+      "error_type": null,
+      "error_description": "Professional translation: Accurate technical terms, proper politeness level, clear purpose statement. Tests e-commerce related UI competency."
+    },
+    {
+      "id": 21,
+      "src": "이 기능은 프리미엄 사용자에게만 제공됩니다. 업그레이드하시겠습니까?",
+      "mt": "This feature is available to premium users only. Would you like to upgrade?",
+      "quality": "good",
+      "error_type": null,
+      "error_description": "Effective upselling message: Clear restriction explanation, natural upgrade prompt. Tests business model related messaging."
+    },
+    {
+      "id": 22,
+      "src": "AI가 당신의 사진을 분석하여 최적의 필터를 추천해 드립니다.",
+      "mt": "AI will analyze your photos and recommend optimal filters for you.",
+      "quality": "good",
+      "error_type": null,
+      "error_description": "Modern AI feature explanation: Accurate technical description, appropriate personalization. Tests AI/ML feature communication."
+    },
+    {
+      "id": 23,
+      "src": "위치 서비스를 비활성화하면 일부 기능이 제한될 수 있습니다.",
+      "mt": "Disabling location services may limit some features.",
+      "quality": "good",
+      "error_type": null,
+      "error_description": "Clear privacy trade-off warning: Accurate consequence explanation, balanced tone. Tests privacy-related communication."
+    },
+    {
+      "id": 24,
+      "src": "복잡한 비밀번호를 설정하여 계정 보안을 강화하세요. 최소 8자, 대소문자, 숫자, 특수문자 포함.",
+      "mt": "Strengthen account security with a complex password. Minimum 8 characters including uppercase, lowercase, numbers, and special characters.",
+      "quality": "good",
+      "error_type": null,
+      "error_description": "Comprehensive security guidance: All requirements clearly listed, proper technical specifications. Tests detailed instruction handling."
+    },
+    {
+      "id": 25,
+      "src": "실시간으로 친구들과 위치를 공유하고 메시지를 주고받을 수 있습니다.",
+      "mt": "You can share locations with friends in real-time and exchange messages.",
+      "quality": "good",
+      "error_type": null,
+      "error_description": "Feature description: Accurate functionality explanation, natural phrasing. Tests social feature communication."
+    },
+    {
+      "id": 28,
+      "src": "마이크 권한을 허용해야 음성 메모 기능을 사용할 수 있습니다.",
+      "mt": "Microphone permission must be granted to use voice memo features.",
+      "quality": "good",
+      "error_type": null,
+      "error_description": "Clear permission explanation: Accurate requirement statement, proper technical terminology. Tests permission-related communication."
+    },
+    {
+      "id": 29,
+      "src": "클라우드 동기화가 완료되었습니다. 모든 기기에서 동일한 데이터에 액세스할 수 있습니다.",
+      "mt": "Cloud sync completed. You can access the same data across all devices.",
+      "quality": "good",
+      "error_type": null,
+      "error_description": "Sync confirmation: Clear completion status, benefit explanation. Tests cloud service communication."
+    },
+    {
+      "id": 6,
+      "src": "파일이 성공적으로 저장되었습니다.",
+      "mt": "Your high-resolution document file has been successfully saved to the secure cloud storage with full encryption.",
+      "quality": "bad",
+      "error_type": "accuracy.addition",
+      "error_description": "Extreme over-elaboration: Simple save confirmation expanded with non-existent details (high-resolution, document, secure, cloud, encryption). Tests ability to detect fabricated information - all models should recognize this."
+    },
+    {
+      "id": 3,
+      "src": "알림 설정을 변경하려면 설정 > 알림으로 이동하세요.",
+      "mt": "To delete notification settings, go to Settings > Notifications.",
+      "quality": "bad",
+      "error_type": "accuracy.mistranslation",
+      "error_description": "Critical action reversal: '변경' (change/modify) mistranslated as 'delete' - opposite destructive action. Tests ability to detect dangerous functional errors that could cause data loss. Opus should score lowest due to sophisticated understanding."
+    },
+    {
+      "id": 4,
+      "src": "앱이 응답하지 않습니다. 강제 종료하시겠습니까?",
+      "mt": "App is loading slowly. Do you want to wait?",
+      "quality": "bad",
+      "error_type": "accuracy.mistranslation",
+      "error_description": "System state confusion: '응답하지 않습니다' (not responding/frozen) vs 'loading slowly', and '강제 종료' (force quit) vs 'wait'. Tests understanding of critical system states - all Claude models should detect this severe error."
+    },
+    {
+      "id": 15,
+      "src": "보안 패치를 24시간 내에 설치하지 않으면 앱 사용이 중단됩니다.",
+      "mt": "If the security patch is not installed within 24 days, app usage will be suspended.",
+      "quality": "bad",
+      "error_type": "accuracy.mistranslation",
+      "error_description": "Critical time unit error: '시간' (hours) mistranslated as 'days' - 24x time extension creates security vulnerability. Tests safety-critical detail attention - all Claude models should catch this severe error."
+    },
+    {
+      "id": 16,
+      "src": "화면 밝기를 최대로 설정하면 배터리 소모가 증가합니다.",
+      "mt": "Setting screen brightness to minimum will increase battery consumption.",
+      "quality": "bad",
+      "error_type": "accuracy.mistranslation",
+      "error_description": "Value inversion error: '최대로' (maximum) translated as 'minimum' - opposite setting with incorrect cause-effect relationship. Tests logical consistency - Opus should detect this contradiction."
+    },
+    {
+      "id": 5,
+      "src": "데이터를 클라우드에 백업하는 중입니다. 진행률: 67%, 예상 완료 시간: 3분",
+      "mt": "Backing up data to cloud. Progress: 67%",
+      "quality": "bad",
+      "error_type": "accuracy.omission",
+      "error_description": "Information loss: Missing critical ETA information '예상 완료 시간: 3분' (estimated completion time: 3 minutes). Tests attention to detail - Opus should be most sensitive to missing information."
+    },
+    {
+      "id": 17,
+      "src": "푸시 알림",
+      "mt": "",
+      "quality": "bad",
+      "error_type": "accuracy.untranslated",
+      "error_description": "Complete translation failure: Critical UI label left empty, rendering feature inaccessible. Tests basic translation completion - all models should severely penalize empty output."
+    },
+    {
+      "id": 8,
+      "src": "사용자 프로필이 업데이트되었습니다. 변경사항을 확인하세요.",
+      "mt": "User profile have been updated. Check the changes.",
+      "quality": "bad",
+      "error_type": "fluency.grammar",
+      "error_description": "Subject-verb disagreement: 'have been' should be 'has been' for singular subject. Tests grammatical precision - Opus should be most strict, Haiku might be more lenient."
+    },
+    {
+      "id": 9,
+      "src": "연결이 일시적으로 중단되었습니다. 재시도하는 중...",
+      "mt": "Connection temporarly interrupted. Retrying...",
+      "quality": "bad",
+      "error_type": "fluency.spelling",
+      "error_description": "Spelling error: 'temporarly' should be 'temporarily'. Tests spelling sensitivity - models may vary in how harshly they penalize minor typos."
+    },
+    {
+      "id": 7,
+      "src": "생체 인증을 사용하여 로그인하세요.",
+      "mt": "biometric authentication login use please",
+      "quality": "bad",
+      "error_type": "fluency.word_order",
+      "error_description": "Severe grammatical breakdown: Korean word order directly mapped to English without restructuring. Tests basic fluency recognition - even Haiku should catch this obvious error."
+    },
+    {
+      "id": 14,
+      "src": "네이버페이로 결제를 진행하시겠습니까?",
+      "mt": "Would you like to proceed with Naver Payment?",
+      "quality": "bad",
+      "error_type": "locale.cultural",
+      "error_description": "Brand name localization error: '네이버페이' should remain as 'Naver Pay' (official brand name) not literal 'Naver Payment'. Tests cultural adaptation - Opus should better understand brand naming conventions."
+    },
+    {
+      "id": 18,
+      "src": "2024년 12월 31일 23:59까지 유효합니다.",
+      "mt": "Valid until 31/12/2024 23:59.",
+      "quality": "bad",
+      "error_type": "locale.format",
+      "error_description": "Date format error: Using European DD/MM/YYYY format instead of US MM/DD/YYYY for English localization. Tests localization awareness - Opus should better understand regional conventions."
+    },
+    {
+      "id": 13,
+      "src": "안녕하십니까, 고객님. 기술 지원이 필요하시면 연락해 주세요.",
+      "mt": "Hey! Need tech support? Just hit us up!",
+      "quality": "bad",
+      "error_type": "style.register",
+      "error_description": "Extreme formality mismatch: Formal Korean customer service (honorifics, 고객님) to casual slang English. Tests register sensitivity - Opus should be most sensitive to appropriateness."
+    },
+    {
+      "id": 26,
+      "src": "사용자의 행동 패턴을 분석하여 맞춤형 콘텐츠를 제공합니다.",
+      "mt": "We analyze user behavior patterns to provide personalized content.",
+      "quality": "bad",
+      "error_type": "style.register",
+      "error_description": "Subtle formality shift: Korean impersonal description vs English first-person 'We', creating slightly different corporate voice. Tests nuanced register sensitivity - Opus should be most attuned to subtle voice differences."
+    },
+    {
+      "id": 30,
+      "src": "이 앱은 귀하의 개인정보를 보호하며, 수집된 데이터는 암호화되어 안전하게 저장됩니다.",
+      "mt": "This app protects your personal information, and collected data is encrypted and stored securely.",
+      "quality": "bad",
+      "error_type": "style.register",
+      "error_description": "Register inconsistency within sentence: '귀하의' (formal 'your') suggests formal tone, but English translation uses casual 'your' instead of 'your personal'. Tests intra-sentence register consistency - Opus should detect mixed formality levels."
+    },
+    {
+      "id": 11,
+      "src": "메모리를 정리하여 앱 성능을 향상시킵니다.",
+      "mt": "Clean up storage to improve app performance.",
+      "quality": "bad",
+      "error_type": "terminology.incorrect",
+      "error_description": "Technical term confusion: '메모리' (memory/RAM) mistranslated as 'storage' (disk space). Different technical concepts. Tests technical precision - Opus should be most accurate with technical distinctions."
+    },
+    {
+      "id": 12,
+      "src": "작업을 완료하려면 추가 권한이 필요합니다.",
+      "mt": "Additional permissions are required to complete the operation.",
+      "quality": "bad",
+      "error_type": "terminology.inconsistent",
+      "error_description": "Terminology inconsistency: '작업' translated as 'operation' instead of standard UI term 'task' or 'action'. Tests consistency awareness - Opus should prefer standard UI vocabulary."
+    },
+    {
+      "id": 27,
+      "src": "구매 내역을 확인하시려면 계정 설정 > 구매 이력을 선택하세요.",
+      "mt": "To check purchase history, select Account Settings > Purchase Records.",
+      "quality": "bad",
+      "error_type": "terminology.inconsistent",
+      "error_description": "UI terminology inconsistency: '구매 이력' (purchase history) translated as 'Purchase Records' instead of matching the first part 'purchase history'. Tests UI consistency - Opus should maintain consistent terminology."
+    },
+    {
+      "id": 31,
+      "src": "새로운 업데이트가 있습니다. 지금 업데이트하시겠습니까?",
+      "mt": "There is a new update available. Would you like to update now?",
+      "quality": "good",
+      "error_type": null,
+      "error_description": "Accurate and natural translation: Clear meaning preservation, appropriate UI vocabulary, polite question form maintained. Tests standard update notification handling across all models."
+    }
+  ],
+  "differentiation_criteria": {
+    "claude_haiku_strengths": [
+      "Speed and efficiency for obvious errors",
+      "Basic fluency and grammar detection",
+      "Clear-cut accuracy problems",
+      "Straightforward terminology issues"
+    ],
+    "claude_sonnet_strengths": [
+      "Balanced detection across error types",
+      "Good register and style sensitivity", 
+      "Consistent technical terminology",
+      "Reliable accuracy assessment"
+    ],
+    "claude_opus_strengths": [
+      "Subtle register and formality nuances",
+      "Complex technical distinctions",
+      "Cultural and localization sophistication",
+      "Intra-sentence consistency analysis",
+      "Safety-critical detail attention",
+      "Brand name and proper noun handling"
+    ],
+    "designed_differences": [
+      "Subtle register mismatches (Opus should be most sensitive)",
+      "Technical term precision (Opus should distinguish memory vs storage)",
+      "Brand name localization (Opus should know official names)",
+      "Intra-sentence consistency (Opus should catch mixed formality)",
+      "Minor spelling vs major errors (models may weight differently)",
+      "Cultural adaptation depth (Opus should understand regional conventions)"
+    ]
+  },
+  "error_categories": {
+    "accuracy": {
+      "mistranslation": "Wrong meaning conveyed - semantic errors that change the intended message",
+      "omission": "Missing information - source content not included in translation",
+      "addition": "Extra information added - content not present in source",
+      "untranslated": "No translation provided - source text left as is or empty"
+    },
+    "fluency": {
+      "grammar": "Grammatical errors - verb conjugation, agreement, tense, number",
+      "spelling": "Spelling or typo errors in the translation",
+      "word_order": "Incorrect word order making text awkward or incomprehensible"
+    },
+    "terminology": {
+      "inconsistent": "Inconsistent use of terms within the app context",
+      "incorrect": "Wrong technical or domain-specific terminology"
+    },
+    "style": {
+      "register": "Formality mismatch - inappropriate tone for context"
+    },
+    "locale": {
+      "cultural": "Failed cultural adaptation - names, concepts, references",
+      "format": "Wrong format for dates, numbers, currency for target locale"
+    }
+  }
+}
