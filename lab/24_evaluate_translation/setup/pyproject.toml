@@ -1,0 +1,17 @@
+[project]
+name = "evaluate-translation"
+version = "0.1.0"
+description = "Translation Evaluation using MetricX-24 and COMET-KIWI"
+readme = "README.md"
+authors = [
+    {name = "evaluate-translation", email = "your-email@example.com"}
+]
+requires-python = ">=3.11"
+dependencies = [
+    "ipykernel>=6.29.5",
+    "jupyter>=1.1.1",
+    "torch>=2.0.0",
+    "transformers>=4.30.2",
+    "sentencepiece>=0.2.0",
+    "unbabel-comet>=2.0.0",
+]
