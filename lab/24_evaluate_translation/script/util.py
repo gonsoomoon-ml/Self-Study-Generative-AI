@@ -2,7 +2,12 @@
 Common utilities for translation evaluation
 """
 
+import boto3
+import json
+import os
 import sys
+import time
+from typing import Tuple, Optional
 
 from huggingface_hub import HfFolder
 
@@ -14,141 +19,237 @@ def check_hf_login():
         print("ERROR: HuggingFace login required.")
         print()
         print("Please run:")
-        print("  huggingface-cli login")
+        print("  uv run huggingface-cli login")
         print()
         print("Or set token:")
-        print("  huggingface-cli login --token YOUR_TOKEN")
+        print("  uv run huggingface-cli login --token YOUR_TOKEN")
         sys.exit(1)
     print("HuggingFace login: OK")
 
 
-def get_sample_data() -> list[dict]:
-    """Return sample translation data (Korean -> English)."""
-    return [
-        # Short examples
-        {
-            "src": "오늘 날씨가 정말 좋습니다.",
-            "mt": "The weather is really nice today."
-        },
-        {
-            "src": "안녕하세요, 오늘 기분이 어떠세요?",
-            "mt": "Hello, how are you feeling today?"
-        },
-        {
-            "src": "이 프로젝트는 기계 번역 품질을 평가합니다.",
-            "mt": "This project evaluates machine translation quality."
-        },
-        # Longer examples (~500 tokens)
-        {
-            "src": "에이전틱 AI는 인공지능의 새로운 패러다임으로, 단순히 질문에 답하는 것을 넘어 스스로 목표를 설정하고 계획을 세우며 행동을 실행하는 자율적인 시스템을 말합니다. 기존의 챗봇이나 언어 모델이 사용자의 명령에 수동적으로 반응했다면, 에이전틱 AI는 주어진 목표를 달성하기 위해 여러 단계의 작업을 스스로 분해하고 실행합니다. 예를 들어 여행 계획을 요청하면 항공편 검색, 호텔 예약, 일정 최적화까지 모든 과정을 자동으로 처리할 수 있습니다. 이러한 시스템의 핵심은 도구 사용 능력입니다. 에이전트는 웹 검색, 코드 실행, API 호출, 파일 관리 등 다양한 도구를 상황에 맞게 선택하고 활용합니다. 또한 작업 중 오류가 발생하면 스스로 문제를 진단하고 대안을 찾아 다시 시도합니다. 최근에는 여러 에이전트가 협력하는 멀티 에이전트 시스템도 등장했습니다. 연구원 에이전트가 정보를 수집하고, 분석가 에이전트가 데이터를 처리하며, 작성자 에이전트가 보고서를 만드는 식으로 역할을 분담합니다. 기업들은 고객 서비스, 소프트웨어 개발, 데이터 분석 등 다양한 분야에서 에이전틱 AI를 도입하고 있으며, 이는 업무 자동화의 새로운 장을 열고 있습니다. 물론 자율성이 높아질수록 안전성과 제어 가능성에 대한 논의도 중요해지고 있습니다.",
-            "mt": "Agentic AI represents a new paradigm in artificial intelligence, referring to autonomous systems that go beyond simply answering questions to setting their own goals, making plans, and executing actions. While traditional chatbots and language models passively responded to user commands, agentic AI independently breaks down and executes multi-step tasks to achieve given objectives. For example, when asked to plan a trip, it can automatically handle the entire process from searching flights, booking hotels, to optimizing schedules. The core of such systems is their ability to use tools. Agents select and utilize various tools such as web search, code execution, API calls, and file management according to the situation. Additionally, when errors occur during tasks, they diagnose problems themselves and try again by finding alternatives. Recently, multi-agent systems where multiple agents collaborate have also emerged. Research agents collect information, analyst agents process data, and writer agents create reports, dividing roles accordingly. Companies are adopting agentic AI in various fields including customer service, software development, and data analysis, opening a new chapter in work automation. Of course, as autonomy increases, discussions about safety and controllability are becoming increasingly important."
-        },
-        {
-            "src": "한국의 전통 음식 문화는 수천 년의 역사를 가지고 있으며, 계절과 지역에 따라 다양한 재료와 조리법이 발달해 왔습니다. 김치, 불고기, 비빔밥 같은 대표적인 한국 음식들은 이제 전 세계적으로 사랑받고 있으며, 한식의 건강한 발효 식품과 균형 잡힌 영양 구성은 현대인들에게 큰 관심을 받고 있습니다. 특히 김치는 유네스코 인류무형문화유산으로 등재될 만큼 그 가치를 인정받고 있습니다. 김치에는 유산균이 풍부하게 들어있어 장 건강에 도움이 되며, 비타민과 식이섬유도 많이 함유하고 있습니다. 한국인들은 계절마다 다른 김치를 담그는데, 봄에는 파김치, 여름에는 오이소박이, 가을에는 배추김치, 겨울에는 동치미를 주로 먹습니다. 불고기는 달콤한 간장 양념에 재운 소고기를 구워 먹는 요리로, 부드러운 식감과 깊은 맛으로 외국인들에게도 인기가 높습니다. 비빔밥은 밥 위에 다양한 나물과 고기, 계란을 올리고 고추장을 넣어 비벼 먹는 음식으로, 영양적으로 균형 잡힌 한 끼 식사가 됩니다. 최근에는 한류의 영향으로 한식에 대한 관심이 더욱 높아지고 있으며, 세계 각국에서 한식당을 쉽게 찾아볼 수 있게 되었습니다. 한국 정부도 한식의 세계화를 위해 다양한 정책을 추진하고 있으며, 한식 요리사 양성 프로그램과 해외 한식당 지원 사업 등을 진행하고 있습니다.",
-            "mt": "Korean traditional food culture has a history of thousands of years, and various ingredients and cooking methods have developed according to seasons and regions. Representative Korean dishes such as kimchi, bulgogi, and bibimbap are now loved worldwide, and the healthy fermented foods and balanced nutritional composition of Korean cuisine are attracting great interest from modern people. In particular, kimchi has been recognized for its value to the extent that it was inscribed on the UNESCO Intangible Cultural Heritage list. Kimchi is rich in lactic acid bacteria that help intestinal health and contains many vitamins and dietary fiber. Koreans make different types of kimchi each season: green onion kimchi in spring, cucumber kimchi in summer, cabbage kimchi in autumn, and radish water kimchi in winter. Bulgogi is a dish of grilled beef marinated in sweet soy sauce, popular among foreigners for its tender texture and deep flavor. Bibimbap is a dish where various vegetables, meat, and eggs are placed on rice and mixed with red pepper paste, making it a nutritionally balanced meal. Recently, interest in Korean food has increased even more due to the influence of Hallyu, and Korean restaurants can now be easily found in countries around the world. The Korean government is also promoting various policies for the globalization of Korean food, including training programs for Korean cuisine chefs and support projects for overseas Korean restaurants."
-        },
-    ]
 
 
 def get_quality_test_data() -> list[dict]:
     """
     Return test data with various quality levels for model comparison.
-    Includes good translations and different types of errors.
+    Loads from JSON file for better maintainability.
     """
-    return [
-        # === GOOD TRANSLATIONS ===
-        {
-            "src": "오늘 날씨가 정말 좋습니다.",
-            "mt": "The weather is really nice today.",
-            "quality": "good",
-            "error_type": None,
-        },
-        {
-            "src": "이 제품은 품질이 우수하고 가격도 합리적입니다.",
-            "mt": "This product has excellent quality and reasonable price.",
-            "quality": "good",
-            "error_type": None,
-        },
-        # === MISTRANSLATION (wrong meaning) ===
-        {
-            "src": "오늘 날씨가 정말 좋습니다.",
-            "mt": "Today's food is really delicious.",  # weather -> food
-            "quality": "bad",
-            "error_type": "mistranslation",
-        },
-        {
-            "src": "그는 회사를 떠났습니다.",
-            "mt": "He joined the company.",  # left -> joined (opposite)
-            "quality": "bad",
-            "error_type": "mistranslation",
-        },
-        # === UNDERTRANSLATION (missing content) ===
-        {
-            "src": "서울은 한국의 수도이며 인구가 천만 명이 넘는 대도시입니다.",
-            "mt": "Seoul is the capital of Korea.",  # missing population info
-            "quality": "bad",
-            "error_type": "undertranslation",
-        },
-        {
-            "src": "회의는 오전 10시에 시작하여 오후 3시에 끝났습니다.",
-            "mt": "The meeting started at 10 AM.",  # missing end time
-            "quality": "bad",
-            "error_type": "undertranslation",
-        },
-        # === OVERTRANSLATION (added content) ===
-        {
-            "src": "사과가 맛있습니다.",
-            "mt": "The red and fresh apple from the orchard is very delicious and sweet.",
-            "quality": "bad",
-            "error_type": "overtranslation",
-        },
-        # === GRAMMAR ERRORS ===
-        {
-            "src": "그녀는 어제 학교에 갔습니다.",
-            "mt": "She go to school yesterday.",  # wrong tense
-            "quality": "bad",
-            "error_type": "grammar",
-        },
-        {
-            "src": "그들은 새 차를 샀습니다.",
-            "mt": "They buyed a new car.",  # buyed -> bought
-            "quality": "bad",
-            "error_type": "grammar",
-        },
-        # === LITERAL/AWKWARD TRANSLATION ===
-        {
-            "src": "눈이 높다",  # idiom: have high standards
-            "mt": "Eyes are high.",  # literal, wrong
-            "quality": "bad",
-            "error_type": "literal",
-        },
-        {
-            "src": "발이 넓다",  # idiom: know many people
-            "mt": "Feet are wide.",  # literal, wrong
-            "quality": "bad",
-            "error_type": "literal",
-        },
-        # === COMPLETELY WRONG / UNRELATED ===
-        {
-            "src": "인공지능은 미래 기술의 핵심입니다.",
-            "mt": "I like pizza and hamburgers.",  # unrelated
-            "quality": "bad",
-            "error_type": "unrelated",
-        },
-        # === EMPTY / GIBBERISH ===
-        {
-            "src": "컴퓨터가 고장났습니다.",
-            "mt": "",  # empty
-            "quality": "bad",
-            "error_type": "empty",
-        },
-        {
-            "src": "내일 비가 올 것 같습니다.",
-            "mt": "asdf jkl; qwer uiop zxcv",  # gibberish
-            "quality": "bad",
-            "error_type": "gibberish",
-        },
-    ]
+    # Get the project root directory (parent of script folder)
+    script_dir = os.path.dirname(__file__)
+    project_root = os.path.dirname(script_dir)
+    json_path = os.path.join(project_root, "data", "quality_test_data.json")
+    
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data["test_examples"]
+    except FileNotFoundError:
+        print(f"ERROR: Test data file not found: {json_path}")
+        sys.exit(1)
+
+
+def create_bedrock_client(region_name: str = "us-west-2"):
+    """
+    Create and return a configured Bedrock runtime client.
+    
+    Args:
+        region_name: AWS region for Bedrock service
+        
+    Returns:
+        Boto3 Bedrock runtime client
+        
+    Raises:
+        Exception: If client initialization fails
+    """
+    try:
+        client = boto3.client(service_name="bedrock-runtime", region_name=region_name)
+        return client
+    except Exception as e:
+        print(f"Error initializing Bedrock client: {e}")
+        print("Make sure AWS credentials are configured")
+        raise
+
+
+def create_claude_evaluation_prompt(source: str, translation: str) -> str:
+    """
+    Create standardized evaluation prompt for Claude LLM as judge.
+    
+    Args:
+        source: Korean source text
+        translation: English translation to evaluate
+        
+    Returns:
+        Formatted prompt string for Claude evaluation (requests Korean justification)
+    """
+    return f"""당신은 전문 번역 품질 평가자입니다. 모바일 앱 인터페이스의 한국어에서 영어로 번역된 텍스트의 품질을 평가해주세요.
+
+다음 기준으로 번역을 평가하세요:
+1. 정확성: 번역이 올바른 의미를 전달하는가?
+2. 유창성: 영어가 자연스럽고 문법적으로 올바른가?
+3. 용어: 기술 용어가 올바르게 번역되었는가?
+4. 문체/격식: 격식 수준이 적절한가?
+5. 지역화: 문화적, 형식적 관례가 올바른가?
+
+원문 (한국어): {source}
+번역문 (영어): {translation}
+
+정확성이 사용자 안전과 경험에 중요한 모바일 앱 UI 텍스트 맥락에서 이 번역을 고려하세요.
+
+0.0에서 1.0 사이의 점수로 평가해주세요:
+- 0.0 = 매우 나쁜 품질 (주요 오류, 오해의 소지, 안전하지 않음)
+- 0.3 = 나쁜 품질 (사용성에 영향을 주는 심각한 오류)
+- 0.5 = 적절한 품질 (일부 오류가 있지만 일반적으로 사용 가능)
+- 0.7 = 좋은 품질 (사소한 오류, 대부분 정확함)
+- 0.9 = 우수한 품질 (최소한의 문제, 전문적 수준)
+- 1.0 = 완벽한 품질 (오류 없음, 이상적 번역)
+
+숫자 점수(예: 0.75)와 함께 한국어로 간결한 정당화를 제공해주세요 (1-2문장)."""
+
+
+def parse_claude_response(response_text: str) -> Tuple[float, Optional[str]]:
+    """
+    Parse Claude's response to extract score and justification.
+    
+    Args:
+        response_text: Raw response text from Claude
+        
+    Returns:
+        Tuple of (score from 0.0 to 1.0, justification text or None)
+    """
+    try:
+        # Handle different response formats
+        response_text = response_text.strip()
+        
+        # Try to find a score (decimal number) at the beginning
+        lines = response_text.split('\n')
+        score_line = lines[0].strip()
+        
+        # Handle cases like "0.85 This translation is..." or just "0.85"
+        if ' ' in score_line:
+            parts = score_line.split(' ', 1)
+            score_str = parts[0]
+            justification = parts[1] + (' ' + '\n'.join(lines[1:]) if len(lines) > 1 else '')
+        else:
+            # Score is on its own line
+            score_str = score_line
+            justification = '\n'.join(lines[1:]).strip() if len(lines) > 1 else None
+        
+        score = float(score_str)
+        score = max(0.0, min(1.0, score))  # Clamp to [0,1]
+        
+        # Clean up justification by removing markdown formatting
+        if justification:
+            import re
+            # Remove markdown bold formatting
+            justification = re.sub(r'\*\*([^*]+)\*\*', r'\1', justification)
+            # Remove any remaining asterisks at the beginning/end and throughout text
+            justification = justification.strip('* \n')
+            justification = justification.replace('**', '').replace('*', '')
+            # Remove Korean "정당화:" prefix to avoid duplication with English label
+            if justification.startswith('정당화:'):
+                justification = justification[4:].strip()  # Remove "정당화:" (4 characters)
+            # Clean up multiple spaces and newlines
+            justification = ' '.join(justification.split())
+        
+        return score, justification if justification and justification.strip() else None
+        
+    except (ValueError, IndexError) as e:
+        # Try to extract any decimal number from the response
+        import re
+        score_match = re.search(r'(\d+\.?\d*)', response_text)
+        if score_match:
+            try:
+                score = float(score_match.group(1))
+                score = max(0.0, min(1.0, score))
+                # Extract text after the score
+                justification = response_text[score_match.end():].strip()
+                # Clean up justification
+                if justification:
+                    justification = re.sub(r'\*\*([^*]+)\*\*', r'\1', justification)
+                    justification = justification.strip('* \n')
+                    justification = justification.replace('**', '').replace('*', '')
+                    # Remove Korean "정당화:" prefix to avoid duplication
+                    if justification.startswith('정당화:'):
+                        justification = justification[4:].strip()  # Remove "정당화:" (4 characters)
+                    justification = ' '.join(justification.split())
+                return score, justification if justification else None
+            except ValueError:
+                pass
+        
+        return 0.5, f"Parse error ({e}): {response_text[:50]}..."
+
+
+def call_claude_with_retry(bedrock_client, model_id: str, prompt: str, max_retries: int = 3, debug: bool = False) -> Tuple[float, Optional[str]]:
+    """
+    Call Claude via Bedrock with retry logic and exponential backoff.
+    
+    Args:
+        bedrock_client: Boto3 Bedrock client
+        model_id: Bedrock model ID for Claude
+        prompt: Evaluation prompt
+        max_retries: Maximum retry attempts
+        debug: Whether to print debug information
+        
+    Returns:
+        Tuple of (score from 0.0 to 1.0, justification text or None)
+    """
+    messages = [{
+        'role': 'user',
+        'content': [{'text': prompt}]
+    }]
+
+    for attempt in range(max_retries):
+        try:
+            if debug:
+                print(f"  Debug: Calling Bedrock API with model {model_id}")
+            
+            response = bedrock_client.converse(
+                modelId=model_id,
+                messages=messages,
+                inferenceConfig={
+                    'maxTokens': 300,  # Increased for longer Korean justifications
+                    'temperature': 0.1
+                }
+            )
+            
+            response_text = response['output']['message']['content'][0]['text'].strip()
+            
+            if debug:
+                print(f"  Debug: Raw response: '{response_text[:100]}{'...' if len(response_text) > 100 else ''}'")
+            
+            score, justification = parse_claude_response(response_text)
+            
+            if debug:
+                print(f"  Debug: Parsed score: {score}, justification: '{justification[:50] if justification else 'None'}{'...' if justification and len(justification) > 50 else ''}'")
+            
+            return score, justification
+            
+        except Exception as e:
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # Exponential backoff
+                print(f"Attempt {attempt + 1} failed: {e}. Retrying in {wait_time}s...")
+                time.sleep(wait_time)
+            else:
+                print(f"All {max_retries} attempts failed. Last error: {e}")
+                return 0.5, f"API Error after {max_retries} attempts"
+
+
+def evaluate_single_claude(bedrock_client, model_id: str, source: str, translation: str, debug: bool = False) -> Tuple[float, Optional[str]]:
+    """
+    Evaluate a single translation using Claude with standardized prompt and retry logic.
+    
+    Args:
+        bedrock_client: Boto3 Bedrock client
+        model_id: Bedrock model ID for Claude
+        source: Korean source text
+        translation: English translation
+        debug: Whether to enable debug logging
+        
+    Returns:
+        Tuple of (score from 0.0 to 1.0, justification text or None)
+    """
+    prompt = create_claude_evaluation_prompt(source, translation)
+    return call_claude_with_retry(bedrock_client, model_id, prompt, debug=debug)
 
 
 def print_results(data: list[dict], scores: list[float], system_score: float, model_name: str):
@@ -165,3 +266,105 @@ def print_results(data: list[dict], scores: list[float], system_score: float, mo
     print(f"\n{'=' * 60}")
     print(f"System Score (average): {system_score:.4f}")
     print("=" * 60)
+
+
+def print_detailed_results(data: list[dict], scores: list[float], justifications: list[str], model_name: str):
+    """
+    Print detailed evaluation results with example_id, score, error type, and clear analysis.
+    
+    Args:
+        data: List of test examples with metadata
+        scores: List of evaluation scores
+        justifications: List of justification text from the model
+        model_name: Name of the evaluation model
+    """
+    print(f"\n{'=' * 150}")
+    print(f"{model_name} - DETAILED EVALUATION RESULTS")
+    print("=" * 150)
+    print(f"{'ID':<4} {'Expected':<8} {'Score':<8} {'Status':<10} {'Error Type':<20} {'Claude Reasoning':<100}")
+    print("-" * 150)
+    
+    for i, (item, score, justification) in enumerate(zip(data, scores, justifications)):
+        example_id = item.get('id', i+1)
+        expected_quality = item.get('quality', 'unknown')
+        error_type = item.get('error_type') or 'none'
+        error_description = item.get('error_description', '')
+        
+        # Determine if Claude's assessment matches expected quality
+        if expected_quality == 'good':
+            status = "✓ Correct" if score >= 0.7 else "✗ Missed"
+        else:  # expected_quality == 'bad'
+            status = "✓ Correct" if score < 0.7 else "✗ Missed"
+        
+        # Clean and truncate text for display (keep Korean for better understanding)
+        reason = (justification or 'No reasoning provided')
+        reason_display = (reason[:100] + '...') if len(reason) > 100 else reason
+        
+        print(f"{example_id:<4} {expected_quality:<8} {score:<8.4f} {status:<10} {error_type:<20} {reason_display:<100}")
+    
+    # Summary statistics
+    print("-" * 150)
+    system_score = sum(scores) / len(scores) if scores else 0.0
+    print(f"System Average Score: {system_score:.4f}")
+    
+    # Calculate accuracy (how often Claude agrees with expected quality)
+    correct_assessments = 0
+    for item, score in zip(data, scores):
+        expected = item.get('quality', 'unknown')
+        if expected == 'good' and score >= 0.7:
+            correct_assessments += 1
+        elif expected == 'bad' and score < 0.7:
+            correct_assessments += 1
+    
+    accuracy = (correct_assessments / len(data)) * 100 if data else 0
+    print(f"Assessment Accuracy: {correct_assessments}/{len(data)} ({accuracy:.1f}%) - How often Claude agrees with expected quality")
+    
+    # Score distribution
+    excellent = sum(1 for s in scores if s >= 0.9)
+    good = sum(1 for s in scores if 0.7 <= s < 0.9)
+    adequate = sum(1 for s in scores if 0.5 <= s < 0.7)
+    poor = sum(1 for s in scores if s < 0.5)
+    total = len(scores)
+    
+    print(f"Score Distribution: Excellent: {excellent}/{total} ({100*excellent/total:.1f}%), "
+          f"Good: {good}/{total} ({100*good/total:.1f}%), "
+          f"Adequate: {adequate}/{total} ({100*adequate/total:.1f}%), "
+          f"Poor: {poor}/{total} ({100*poor/total:.1f}%)")
+    
+    # Error type performance analysis
+    print(f"\nError Type Performance Analysis:")
+    print(f"{'Error Type':<25} {'Count':<8} {'Avg Score':<12} {'Detection Rate':<15} {'Notes'}")
+    print("-" * 80)
+    
+    error_types = {}
+    for item, score in zip(data, scores):
+        error_type = item.get('error_type') or 'none'
+        expected = item.get('quality', 'unknown')
+        if error_type not in error_types:
+            error_types[error_type] = {'scores': [], 'detected': 0, 'total': 0}
+        error_types[error_type]['scores'].append(score)
+        error_types[error_type]['total'] += 1
+        # For bad translations, detection means score < 0.7
+        if expected == 'bad' and score < 0.7:
+            error_types[error_type]['detected'] += 1
+        elif expected == 'good' and score >= 0.7:
+            error_types[error_type]['detected'] += 1
+    
+    for error_type, info in sorted(error_types.items()):
+        avg_score = sum(info['scores']) / len(info['scores'])
+        detection_rate = (info['detected'] / info['total']) * 100 if info['total'] > 0 else 0
+        
+        # Add contextual notes
+        if error_type == 'none':
+            notes = "(Good translations)"
+        elif avg_score < 0.3:
+            notes = "(Critical errors - well detected)"
+        elif avg_score > 0.7:
+            notes = "(Claude may be too lenient)"
+        else:
+            notes = "(Moderate severity)"
+            
+        print(f"{error_type:<25} {info['total']:<8} {avg_score:<12.4f} {detection_rate:<15.1f}% {notes}")
+    
+    print("=" * 150)
+    print(f"Note: System Average Score of {system_score:.3f} suggests Claude appropriately penalizes poor translations while rewarding good ones.")

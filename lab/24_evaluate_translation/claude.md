@@ -1,10 +1,15 @@
-# Translation Evaluation Project
+# CLAUDE.md
 
-## Overview
-This project evaluates machine translation quality using two state-of-the-art metrics:
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-1. **MetricX-24 Hybrid XL** (Google)
-2. **COMET-KIWI** (Unbabel)
+## Project Overview
+This project evaluates machine translation quality using five different approaches:
+
+1. **MetricX-24 Hybrid XXL** (Google) - Hybrid reference-free metric (0-25 scale, lower = better)
+2. **COMET-KIWI** (Unbabel) - Reference-free quality estimation (0-1 scale, higher = better)  
+3. **LLM as Judge** (Claude Sonnet 4.5) - Balanced performance, human-like evaluation (0-1 scale, higher = better)
+4. **LLM as Judge** (Claude Haiku 4.5) - Fast and efficient evaluation (0-1 scale, higher = better)
+5. **LLM as Judge** (Claude Opus 4.5) - Most advanced evaluation model (0-1 scale, higher = better)
 
 ## Models
 
@@ -22,27 +27,63 @@ This project evaluates machine translation quality using two state-of-the-art me
 - **Architecture**: InfoXLM-based
 - **Languages**: 94 languages supported
 
-## Setup
+### LLM as Judge - Claude 4.5 Family
+All Claude 4.5 models use Amazon Bedrock Converse API with identical evaluation criteria.
 
+#### Claude Sonnet 4.5 (Balanced)
+- **Model**: `global.anthropic.claude-sonnet-4-5-20250929-v1:0`
+- **Characteristics**: Optimal balance of performance, speed, and cost
+- **Best for**: General-purpose translation evaluation
+
+#### Claude Haiku 4.5 (Fast)
+- **Model**: `global.anthropic.claude-haiku-4-5-20251001-v1:0`
+- **Characteristics**: Fastest response times, cost-effective
+- **Best for**: High-volume evaluation, rapid prototyping
+
+#### Claude Opus 4.5 (Advanced)
+- **Model**: `global.anthropic.claude-opus-4-5-20251101-v1:0`
+- **Characteristics**: Most sophisticated reasoning and accuracy
+- **Best for**: Critical applications requiring highest precision
+
+**Common Evaluation Criteria**: Accuracy, Fluency, Terminology, Style/Register, Locale
+
+## Common Commands
+
+### Environment Setup
 ```bash
 cd setup
 ./create_env.sh eval_translation
 ```
 
-## Run
-
+### Required Authentication
 ```bash
-# Login to HuggingFace (required)
+# HuggingFace login required before running any evaluations
 huggingface-cli login
 
-# Run individual evaluations
-cd script
-uv run eval_cometkiwi.py
-uv run eval_metricx.py
-
-# Run comparison on quality test data
-uv run compare_models.py
+# AWS credentials required for LLM as judge (Claude via Bedrock)
+aws configure
+# or set environment variables: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION
 ```
+
+### Running Evaluations
+```bash
+# Run individual model evaluations
+cd script
+uv run eval_cometkiwi.py      # COMET-KIWI on sample data
+uv run eval_metricx.py        # MetricX-24 on sample data
+
+# Run two-model comparison on quality test data
+uv run compare_models.py      # Compare MetricX-24 vs COMET-KIWI
+
+# Run three-model comparison including LLM as judge
+uv run compare_three_models.py  # Compare MetricX vs COMET vs Sonnet 4.5
+
+# Run five-model comparison with all Claude 4.5 models
+uv run compare_five_models.py   # Compare all five methods
+```
+
+### Testing
+No specific test framework is configured. Evaluation scripts serve as the primary validation method.
 
 ## Quality Test Results
 
@@ -85,24 +126,27 @@ MetricX-24 scores normalized to match COMET-KIWI scale:
 normalized = 1.0 - (raw_score / 25.0)
 ```
 
-## Project Structure
+## Key Architecture
 
-```
-24_evaluate_translation/
-├── script/
-│   ├── util.py              # Common utilities
-│   ├── eval_cometkiwi.py    # COMET-KIWI evaluation
-│   ├── eval_metricx.py      # MetricX-24 evaluation
-│   └── compare_models.py    # Side-by-side comparison
-├── setup/
-│   ├── pyproject.toml
-│   └── create_env.sh
-├── .gitignore
-├── claude.md
-├── README.md
-├── pyproject.toml -> setup/pyproject.toml
-└── uv.lock -> setup/uv.lock
-```
+### Core Components
+- **util.py** - Common utilities including HuggingFace authentication check and test data
+- **eval_cometkiwi.py** - COMET-KIWI model evaluation script 
+- **eval_metricx.py** - MetricX-24 model evaluation script
+- **compare_models.py** - Two-model comparison (MetricX vs COMET-KIWI)
+- **compare_three_models.py** - Three-model comparison (adds Claude Sonnet 4.5)
+- **compare_five_models.py** - Five-model comparison (all methods including Claude family)
+
+### Data Management
+- Sample data is hardcoded in `util.py` with Korean→English translation pairs
+- Quality test data includes various error types: mistranslation, undertranslation, overtranslation, grammar, literal, unrelated, empty, gibberish
+- Score normalization: MetricX-24 scores (0-25) are normalized to COMET-KIWI scale (0-1) using `1.0 - (score / 25.0)`
+
+### Dependencies
+- `torch` for GPU acceleration
+- `transformers` for MetricX-24 model loading
+- `unbabel-comet` for COMET-KIWI evaluation
+- `boto3` for Amazon Bedrock API access
+- `uv` for package management and script execution
 
 ## Using XXL Model (Multi-GPU)
 
