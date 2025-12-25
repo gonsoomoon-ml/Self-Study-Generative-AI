@@ -1,0 +1,26 @@
+# Secrets - Contains client_id, client_secret, tokens
+gateway_config.json
+**/gateway_config.json
+
+# Virtual environment
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
