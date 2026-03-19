@@ -112,9 +112,9 @@ if [[ -z "$TOTAL_COST" ]]; then
   fi
   END_TIME=$(date +%s)
 
-  # Start query
+  # Start query (include cache tokens in input count)
   QUERY_STRING="filter identity.arn = \"${USER_ARN}\"
-| stats sum(input.inputTokenCount) as totalInput, sum(output.outputTokenCount) as totalOutput by modelId"
+| stats sum(input.inputTokenCount + input.cacheReadInputTokenCount + input.cacheWriteInputTokenCount) as totalInput, sum(output.outputTokenCount) as totalOutput by modelId"
 
   QUERY_ID=$(aws logs start-query \
     --log-group-name "$LOG_GROUP" \
@@ -158,13 +158,38 @@ if [[ -z "$TOTAL_COST" ]]; then
       TOTAL_COST="0"
       while IFS= read -r row; do
         # Parse by field name (not positional index) for robustness
-        MODEL_ID=$(echo "$row" | jq -r '.[] | select(.field == "modelId") | .value // ""' 2>/dev/null) || continue
-        INPUT_TOKENS=$(echo "$row" | jq -r '.[] | select(.field == "totalInput") | .value // "0"' 2>/dev/null) || continue
-        OUTPUT_TOKENS=$(echo "$row" | jq -r '.[] | select(.field == "totalOutput") | .value // "0"' 2>/dev/null) || continue
+        MODEL_ID_RAW=$(echo "$row" | jq -r '.[] | select(.field == "modelId") | .value // ""' 2>/dev/null) || continue
+        INPUT_TOKENS=$(echo "$row" | jq -r '[.[] | select(.field == "totalInput") | .value] | first // "0"' 2>/dev/null) || INPUT_TOKENS="0"
+        OUTPUT_TOKENS=$(echo "$row" | jq -r '[.[] | select(.field == "totalOutput") | .value] | first // "0"' 2>/dev/null) || OUTPUT_TOKENS="0"
 
-        # Look up model pricing, fall back to defaults
-        INPUT_PRICE=$(jq -r ".pricing[\"${MODEL_ID}\"].input_per_1k // ${DEFAULT_INPUT}" "$CONFIG_FILE" 2>/dev/null) || INPUT_PRICE="$DEFAULT_INPUT"
-        OUTPUT_PRICE=$(jq -r ".pricing[\"${MODEL_ID}\"].output_per_1k // ${DEFAULT_OUTPUT}" "$CONFIG_FILE" 2>/dev/null) || OUTPUT_PRICE="$DEFAULT_OUTPUT"
+        # Ensure numeric (empty string → 0)
+        INPUT_TOKENS="${INPUT_TOKENS:-0}"
+        OUTPUT_TOKENS="${OUTPUT_TOKENS:-0}"
+        [[ "$INPUT_TOKENS" =~ ^[0-9]+$ ]] || INPUT_TOKENS="0"
+        [[ "$OUTPUT_TOKENS" =~ ^[0-9]+$ ]] || OUTPUT_TOKENS="0"
+
+        # Skip rows with no token data
+        if [[ "$INPUT_TOKENS" == "0" && "$OUTPUT_TOKENS" == "0" ]]; then
+          continue
+        fi
+
+        # Extract model ID from ARN if needed
+        # e.g. "arn:aws:bedrock:us-west-2:123:inference-profile/us.anthropic.claude-opus-4-6-v1" → "us.anthropic.claude-opus-4-6-v1"
+        MODEL_ID="$MODEL_ID_RAW"
+        if [[ "$MODEL_ID" == arn:* ]]; then
+          MODEL_ID="${MODEL_ID##*/}"
+        fi
+
+        # Look up model pricing: try exact match, then try without "us." prefix
+        INPUT_PRICE=$(jq -r ".pricing[\"${MODEL_ID}\"].input_per_1k // null" "$CONFIG_FILE" 2>/dev/null)
+        if [[ "$INPUT_PRICE" == "null" || -z "$INPUT_PRICE" ]]; then
+          # Try without region prefix (us.anthropic.xxx → anthropic.xxx)
+          SHORT_ID="${MODEL_ID#us.}"
+          INPUT_PRICE=$(jq -r ".pricing[\"${SHORT_ID}\"].input_per_1k // ${DEFAULT_INPUT}" "$CONFIG_FILE" 2>/dev/null) || INPUT_PRICE="$DEFAULT_INPUT"
+          OUTPUT_PRICE=$(jq -r ".pricing[\"${SHORT_ID}\"].output_per_1k // ${DEFAULT_OUTPUT}" "$CONFIG_FILE" 2>/dev/null) || OUTPUT_PRICE="$DEFAULT_OUTPUT"
+        else
+          OUTPUT_PRICE=$(jq -r ".pricing[\"${MODEL_ID}\"].output_per_1k // ${DEFAULT_OUTPUT}" "$CONFIG_FILE" 2>/dev/null) || OUTPUT_PRICE="$DEFAULT_OUTPUT"
+        fi
 
         MODEL_COST=$(echo "scale=4; (${INPUT_TOKENS} / 1000 * ${INPUT_PRICE}) + (${OUTPUT_TOKENS} / 1000 * ${OUTPUT_PRICE})" | bc 2>/dev/null) || MODEL_COST="0"
         TOTAL_COST=$(echo "scale=4; ${TOTAL_COST} + ${MODEL_COST}" | bc 2>/dev/null) || TOTAL_COST="0"
