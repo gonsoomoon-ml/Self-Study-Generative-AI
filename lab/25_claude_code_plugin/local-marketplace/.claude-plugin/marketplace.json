@@ -1,0 +1,19 @@
+{
+  "name": "local-plugins",
+  "description": "Local custom plugins",
+  "owner": {
+    "name": "local"
+  },
+  "plugins": [
+    {
+      "name": "translate-toolkit",
+      "description": "Multilingual translation plugin for technical documents with glossary enforcement and quality review",
+      "source": "./plugins/translate-toolkit"
+    },
+    {
+      "name": "cost-guardrail",
+      "description": "Per-user Bedrock cost monitoring with automatic usage blocking",
+      "source": "./plugins/cost-guardrail"
+    }
+  ]
+}

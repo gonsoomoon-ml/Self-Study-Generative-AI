@@ -1,0 +1,8 @@
+{
+  "name": "translate-toolkit",
+  "version": "1.0.0",
+  "description": "Multilingual translation plugin for technical documents with glossary enforcement and quality review",
+  "author": {
+    "name": "translate-team"
+  }
+}

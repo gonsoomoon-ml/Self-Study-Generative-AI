@@ -1,0 +1,17 @@
+{
+  "description": "Warn when source files change and translations may be outdated",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/check-translation.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

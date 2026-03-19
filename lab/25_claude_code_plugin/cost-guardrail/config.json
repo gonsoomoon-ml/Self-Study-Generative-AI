@@ -1,0 +1,19 @@
+{
+  "threshold_usd": 50,
+  "period": "monthly",
+  "check_interval": 10,
+  "log_group": "aws/bedrock/model-invocations",
+  "timezone": "UTC",
+  "default_input_per_1k": 0.003,
+  "default_output_per_1k": 0.015,
+  "pricing": {
+    "anthropic.claude-sonnet-4-6-v1": {
+      "input_per_1k": 0.003,
+      "output_per_1k": 0.015
+    },
+    "anthropic.claude-haiku-4-5-20251001-v1:0": {
+      "input_per_1k": 0.001,
+      "output_per_1k": 0.005
+    }
+  }
+}

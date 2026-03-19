@@ -1,0 +1,74 @@
+{
+  "terms": [
+    {
+      "term": "Agent Runtime",
+      "translations": {
+        "ko": "에이전트 런타임",
+        "ja": "エージェントランタイム"
+      }
+    },
+    {
+      "term": "observability",
+      "translations": {
+        "ko": "옵저버빌리티",
+        "ja": "オブザーバビリティ"
+      }
+    },
+    {
+      "term": "guardrails",
+      "translations": {
+        "ko": "가드레일",
+        "ja": "ガードレール"
+      }
+    },
+    {
+      "term": "plugin",
+      "translations": {
+        "ko": "플러그인",
+        "ja": "プラグイン"
+      }
+    },
+    {
+      "term": "prompt caching",
+      "translations": {
+        "ko": "프롬프트 캐싱",
+        "ja": "プロンプトキャッシング"
+      }
+    },
+    {
+      "term": "slash command",
+      "translations": {
+        "ko": "슬래시 커맨드",
+        "ja": "スラッシュコマンド"
+      }
+    },
+    {
+      "term": "hook",
+      "translations": {
+        "ko": "훅",
+        "ja": "フック"
+      }
+    },
+    {
+      "term": "skill",
+      "translations": {
+        "ko": "스킬",
+        "ja": "スキル"
+      }
+    },
+    {
+      "term": "Post-Trained Model",
+      "translations": {
+        "ko": "사후학습 모델",
+        "ja": "ポストトレーニングモデル"
+      }
+    },
+    {
+      "term": "fine-tuning",
+      "translations": {
+        "ko": "파인튜닝",
+        "ja": "ファインチューニング"
+      }
+    }
+  ]
+}
