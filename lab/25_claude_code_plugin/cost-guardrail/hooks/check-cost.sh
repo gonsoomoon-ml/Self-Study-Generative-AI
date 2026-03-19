@@ -45,6 +45,8 @@ LOG_GROUP=$(jq -r '.log_group // "aws/bedrock/model-invocations"' "$CONFIG_FILE"
 TIMEZONE=$(jq -r '.timezone // "UTC"' "$CONFIG_FILE" 2>/dev/null) || { exit 0; }
 DEFAULT_INPUT=$(jq -r '.default_input_per_1k // 0.003' "$CONFIG_FILE" 2>/dev/null) || { exit 0; }
 DEFAULT_OUTPUT=$(jq -r '.default_output_per_1k // 0.015' "$CONFIG_FILE" 2>/dev/null) || { exit 0; }
+DEFAULT_CACHE_READ=$(jq -r '.default_cache_read_per_1k // 0.0003' "$CONFIG_FILE" 2>/dev/null) || { exit 0; }
+DEFAULT_CACHE_WRITE=$(jq -r '.default_cache_write_per_1k // 0.00375' "$CONFIG_FILE" 2>/dev/null) || { exit 0; }
 
 # Guard: if threshold is 0 or non-numeric, fail-open
 if ! echo "$THRESHOLD_USD" | grep -qE '^[0-9]+\.?[0-9]*$' || [[ "$THRESHOLD_USD" == "0" ]]; then
@@ -112,9 +114,9 @@ if [[ -z "$TOTAL_COST" ]]; then
   fi
   END_TIME=$(date +%s)
 
-  # Start query (include cache tokens in input count)
+  # Start query (separate token types for accurate pricing)
   QUERY_STRING="filter identity.arn = \"${USER_ARN}\"
-| stats sum(input.inputTokenCount + input.cacheReadInputTokenCount + input.cacheWriteInputTokenCount) as totalInput, sum(output.outputTokenCount) as totalOutput by modelId"
+| stats sum(input.inputTokenCount) as inputTokens, sum(input.cacheReadInputTokenCount) as cacheReadTokens, sum(input.cacheWriteInputTokenCount) as cacheWriteTokens, sum(output.outputTokenCount) as outputTokens by modelId"
 
   QUERY_ID=$(aws logs start-query \
     --log-group-name "$LOG_GROUP" \
@@ -159,17 +161,19 @@ if [[ -z "$TOTAL_COST" ]]; then
       while IFS= read -r row; do
         # Parse by field name (not positional index) for robustness
         MODEL_ID_RAW=$(echo "$row" | jq -r '.[] | select(.field == "modelId") | .value // ""' 2>/dev/null) || continue
-        INPUT_TOKENS=$(echo "$row" | jq -r '[.[] | select(.field == "totalInput") | .value] | first // "0"' 2>/dev/null) || INPUT_TOKENS="0"
-        OUTPUT_TOKENS=$(echo "$row" | jq -r '[.[] | select(.field == "totalOutput") | .value] | first // "0"' 2>/dev/null) || OUTPUT_TOKENS="0"
+        INPUT_TOKENS=$(echo "$row" | jq -r '[.[] | select(.field == "inputTokens") | .value] | first // "0"' 2>/dev/null) || INPUT_TOKENS="0"
+        CACHE_READ_TOKENS=$(echo "$row" | jq -r '[.[] | select(.field == "cacheReadTokens") | .value] | first // "0"' 2>/dev/null) || CACHE_READ_TOKENS="0"
+        CACHE_WRITE_TOKENS=$(echo "$row" | jq -r '[.[] | select(.field == "cacheWriteTokens") | .value] | first // "0"' 2>/dev/null) || CACHE_WRITE_TOKENS="0"
+        OUTPUT_TOKENS=$(echo "$row" | jq -r '[.[] | select(.field == "outputTokens") | .value] | first // "0"' 2>/dev/null) || OUTPUT_TOKENS="0"
 
         # Ensure numeric (empty string → 0)
-        INPUT_TOKENS="${INPUT_TOKENS:-0}"
-        OUTPUT_TOKENS="${OUTPUT_TOKENS:-0}"
-        [[ "$INPUT_TOKENS" =~ ^[0-9]+$ ]] || INPUT_TOKENS="0"
-        [[ "$OUTPUT_TOKENS" =~ ^[0-9]+$ ]] || OUTPUT_TOKENS="0"
+        INPUT_TOKENS="${INPUT_TOKENS:-0}"; [[ "$INPUT_TOKENS" =~ ^[0-9]+$ ]] || INPUT_TOKENS="0"
+        CACHE_READ_TOKENS="${CACHE_READ_TOKENS:-0}"; [[ "$CACHE_READ_TOKENS" =~ ^[0-9]+$ ]] || CACHE_READ_TOKENS="0"
+        CACHE_WRITE_TOKENS="${CACHE_WRITE_TOKENS:-0}"; [[ "$CACHE_WRITE_TOKENS" =~ ^[0-9]+$ ]] || CACHE_WRITE_TOKENS="0"
+        OUTPUT_TOKENS="${OUTPUT_TOKENS:-0}"; [[ "$OUTPUT_TOKENS" =~ ^[0-9]+$ ]] || OUTPUT_TOKENS="0"
 
         # Skip rows with no token data
-        if [[ "$INPUT_TOKENS" == "0" && "$OUTPUT_TOKENS" == "0" ]]; then
+        if [[ "$INPUT_TOKENS" == "0" && "$CACHE_READ_TOKENS" == "0" && "$CACHE_WRITE_TOKENS" == "0" && "$OUTPUT_TOKENS" == "0" ]]; then
           continue
         fi
 
@@ -181,17 +185,25 @@ if [[ -z "$TOTAL_COST" ]]; then
         fi
 
         # Look up model pricing: try exact match, then try without "us." prefix
-        INPUT_PRICE=$(jq -r ".pricing[\"${MODEL_ID}\"].input_per_1k // null" "$CONFIG_FILE" 2>/dev/null)
+        LOOKUP_ID="$MODEL_ID"
+        INPUT_PRICE=$(jq -r ".pricing[\"${LOOKUP_ID}\"].input_per_1k // null" "$CONFIG_FILE" 2>/dev/null)
         if [[ "$INPUT_PRICE" == "null" || -z "$INPUT_PRICE" ]]; then
-          # Try without region prefix (us.anthropic.xxx → anthropic.xxx)
-          SHORT_ID="${MODEL_ID#us.}"
-          INPUT_PRICE=$(jq -r ".pricing[\"${SHORT_ID}\"].input_per_1k // ${DEFAULT_INPUT}" "$CONFIG_FILE" 2>/dev/null) || INPUT_PRICE="$DEFAULT_INPUT"
-          OUTPUT_PRICE=$(jq -r ".pricing[\"${SHORT_ID}\"].output_per_1k // ${DEFAULT_OUTPUT}" "$CONFIG_FILE" 2>/dev/null) || OUTPUT_PRICE="$DEFAULT_OUTPUT"
+          LOOKUP_ID="${MODEL_ID#us.}"
+          INPUT_PRICE=$(jq -r ".pricing[\"${LOOKUP_ID}\"].input_per_1k // null" "$CONFIG_FILE" 2>/dev/null)
+        fi
+        # If still not found, use defaults
+        if [[ "$INPUT_PRICE" == "null" || -z "$INPUT_PRICE" ]]; then
+          INPUT_PRICE="$DEFAULT_INPUT"
+          OUTPUT_PRICE="$DEFAULT_OUTPUT"
+          CACHE_READ_PRICE="$DEFAULT_CACHE_READ"
+          CACHE_WRITE_PRICE="$DEFAULT_CACHE_WRITE"
         else
-          OUTPUT_PRICE=$(jq -r ".pricing[\"${MODEL_ID}\"].output_per_1k // ${DEFAULT_OUTPUT}" "$CONFIG_FILE" 2>/dev/null) || OUTPUT_PRICE="$DEFAULT_OUTPUT"
+          OUTPUT_PRICE=$(jq -r ".pricing[\"${LOOKUP_ID}\"].output_per_1k // ${DEFAULT_OUTPUT}" "$CONFIG_FILE" 2>/dev/null) || OUTPUT_PRICE="$DEFAULT_OUTPUT"
+          CACHE_READ_PRICE=$(jq -r ".pricing[\"${LOOKUP_ID}\"].cache_read_per_1k // ${DEFAULT_CACHE_READ}" "$CONFIG_FILE" 2>/dev/null) || CACHE_READ_PRICE="$DEFAULT_CACHE_READ"
+          CACHE_WRITE_PRICE=$(jq -r ".pricing[\"${LOOKUP_ID}\"].cache_write_per_1k // ${DEFAULT_CACHE_WRITE}" "$CONFIG_FILE" 2>/dev/null) || CACHE_WRITE_PRICE="$DEFAULT_CACHE_WRITE"
         fi
 
-        MODEL_COST=$(echo "scale=4; (${INPUT_TOKENS} / 1000 * ${INPUT_PRICE}) + (${OUTPUT_TOKENS} / 1000 * ${OUTPUT_PRICE})" | bc 2>/dev/null) || MODEL_COST="0"
+        MODEL_COST=$(echo "scale=4; (${INPUT_TOKENS} / 1000 * ${INPUT_PRICE}) + (${CACHE_READ_TOKENS} / 1000 * ${CACHE_READ_PRICE}) + (${CACHE_WRITE_TOKENS} / 1000 * ${CACHE_WRITE_PRICE}) + (${OUTPUT_TOKENS} / 1000 * ${OUTPUT_PRICE})" | bc 2>/dev/null) || MODEL_COST="0"
         TOTAL_COST=$(echo "scale=4; ${TOTAL_COST} + ${MODEL_COST}" | bc 2>/dev/null) || TOTAL_COST="0"
       done < <(echo "$RESULTS" | jq -c '.results[]' 2>/dev/null)
 
