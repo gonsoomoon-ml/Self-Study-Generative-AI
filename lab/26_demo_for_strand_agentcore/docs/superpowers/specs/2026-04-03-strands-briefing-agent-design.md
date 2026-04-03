@@ -78,7 +78,7 @@ skills/
 ```markdown
 ---
 name: alex-standup
-description: Alex의 스탠드업 형식과 선호도
+description: Alex's standup format and preferences
 ---
 형식: 최대 3개 항목. 어제 한 일 / 오늘 할 일 / 블로커.
 팀 리드는 블로커를 가장 중요하게 생각함 — 있다면 항상 첫 번째로.

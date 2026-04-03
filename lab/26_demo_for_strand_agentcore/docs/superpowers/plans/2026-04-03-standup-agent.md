@@ -72,7 +72,7 @@ git commit -m "feat: add standup agent project setup"
 ```markdown
 ---
 name: alex-standup
-description: Alex의 스탠드업 형식과 선호도
+description: Alex's standup format and preferences
 ---
 Format: 3 bullets max. Yesterday / Today / Blockers.
 Alex's team lead cares most about blockers — always lead with those if any exist.
@@ -86,7 +86,7 @@ Keep each bullet under 15 words.
 ```markdown
 ---
 name: maria-standup
-description: Maria의 스탠드업 형식과 선호도
+description: Maria's standup format and preferences
 ---
 Format: numbered list. What I shipped / What I'm building / What I need.
 Maria's team uses a "What I need" format — always include this even if empty (write "nothing blocked").
