@@ -256,7 +256,12 @@ response = agent('Write my standup for today')
 print(response)
 "
 ```
-기대 결과: 터미널에 Alex의 스탠드업이 불릿 형식(Yesterday / Today / Blockers)으로 출력되며, 실제 GitHub PR이 언급됩니다.
+기대 출력 (실제 터미널 결과 예시):
+```
+• Blockers: PR #142 리뷰 대기 중 — CI 실패로 팀 배포 블로킹
+• Yesterday: PR #138 머지 완료 (auth 미들웨어 리팩토링)
+• Today: PR #142 리뷰 반영 후 재오픈, 이슈 #155 착수
+```
 
 - [ ] **Step 3: Maria로 에이전트 실행**
 
@@ -280,7 +285,14 @@ response = agent('Write my standup for today')
 print(response)
 "
 ```
-기대 결과: 터미널에 Maria의 스탠드업이 번호 목록 형식(What I shipped / What I'm building / What I need)으로 출력되며, PR 링크가 포함됩니다.
+기대 출력 (실제 터미널 결과 예시):
+```
+1. What I shipped: PR #97 머지 완료 — 결제 서비스 타임아웃 수정.
+   스테이징 배포 완료, 프로덕션 배포 오늘 예정.
+2. What I'm building: 이슈 #103 작업 중 — 주문 API 페이지네이션 추가.
+   현재 페이지 커서 로직 구현 단계.
+3. What I need: nothing blocked
+```
 
 **이 시점의 데모 핵심 멘트:** "에이전트 코드는 동일한 15줄입니다. 스킬 파일만 바꿨을 뿐인데 출력이 완전히 달라졌습니다."
 
@@ -324,7 +336,15 @@ agents:
 cd lab/26_demo_for_strand_agentcore
 bedrock-agentcore launch --agent standup_agent
 ```
-기대 결과: Docker 이미지 빌드 → ECR 푸시 → 에이전트 배포 완료. 출력에 `agent_arn` 포함.
+기대 출력:
+```
+Building Docker image...
+Pushing to ECR: 123456789.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-standup_agent
+Deploying agent to AgentCore Runtime...
+✓ Agent deployed successfully
+  agent_id : standup_agent-aBcDeF1234
+  agent_arn: arn:aws:bedrock-agentcore:us-east-1:123456789:runtime/standup_agent-aBcDeF1234
+```
 
 - [ ] **Step 3: 배포된 에이전트를 채팅으로 호출**
 
@@ -333,7 +353,12 @@ bedrock-agentcore invoke --agent standup_agent \
   --payload '{"prompt": "Write my standup for today"}' \
   --env DEV_NAME=alex GITHUB_TOKEN=$GITHUB_TOKEN
 ```
-기대 결과: 로컬 실행과 동일한 스탠드업 출력. 이제 AgentCore Runtime에서 서빙됩니다.
+기대 출력 (로컬 실행과 동일한 내용, AgentCore Runtime에서 서빙):
+```
+• Blockers: PR #142 리뷰 대기 중 — CI 실패로 팀 배포 블로킹
+• Yesterday: PR #138 머지 완료 (auth 미들웨어 리팩토링)
+• Today: PR #142 리뷰 반영 후 재오픈, 이슈 #155 착수
+```
 
 - [ ] **Step 4: 커밋**
 
