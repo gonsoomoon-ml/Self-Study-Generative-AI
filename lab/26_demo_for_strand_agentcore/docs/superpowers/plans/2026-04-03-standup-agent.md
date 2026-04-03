@@ -1,39 +1,39 @@
-# Standup Agent Implementation Plan
+# 스탠드업 에이전트 구현 계획
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **에이전트 실행자 참고:** 필수 서브스킬: superpowers:subagent-driven-development (권장) 또는 superpowers:executing-plans 를 사용하여 태스크 단위로 구현하세요. 각 단계는 체크박스 (`- [ ]`) 형식으로 진행 상황을 추적합니다.
 
-**Goal:** Build a "Write My Standup" demo agent that showcases Strands AgentSkills personalization and AgentCore Runtime hosting.
+**목표:** Strands AgentSkills 개인화와 AgentCore Runtime 호스팅을 시연하는 "내 스탠드업 작성해줘" 데모 에이전트 구축
 
-**Architecture:** A single `agent.py` wraps a Strands agent with `BedrockAgentCoreApp`. It loads a developer-specific `SKILL.md` from `skills/<DEV_NAME>/` and calls GitHub API autonomously via the `http_request` community tool. Two skill files (alex, maria) demonstrate same-code / different-output personalization.
+**아키텍처:** 단일 `agent.py`가 `BedrockAgentCoreApp`으로 Strands 에이전트를 감쌉니다. `skills/<DEV_NAME>/`에서 개발자별 `SKILL.md`를 로드하고, `http_request` 커뮤니티 툴을 통해 GitHub API를 자율적으로 호출합니다. Alex와 Maria 두 개의 스킬 파일로 "동일한 코드 / 다른 출력" 개인화를 시연합니다.
 
-**Tech Stack:** `strands-agents`, `strands-agents-tools`, `bedrock-agentcore`, Python 3.11
+**기술 스택:** `strands-agents`, `strands-agents-tools`, `bedrock-agentcore`, Python 3.11
 
 ---
 
-## File Map
+## 파일 구조
 
 ```
 lab/26_demo_for_strand_agentcore/
-  agent.py                      # Main agent — BedrockAgentCoreApp entrypoint
-  requirements.txt              # Python dependencies
-  .bedrock_agentcore.yaml       # AgentCore Runtime deployment config (fill AWS values before deploy)
+  agent.py                      # 메인 에이전트 — BedrockAgentCoreApp 엔트리포인트
+  requirements.txt              # Python 의존성 패키지
+  .bedrock_agentcore.yaml       # AgentCore Runtime 배포 설정 (배포 전 AWS 값 입력 필요)
   skills/
     alex/
-      SKILL.md                  # Alex's standup format and priorities
+      SKILL.md                  # Alex의 스탠드업 형식과 우선순위
     maria/
-      SKILL.md                  # Maria's standup format and priorities
+      SKILL.md                  # Maria의 스탠드업 형식과 우선순위
   tests/
-    test_agent.py               # Unit tests: skill loading + agent instantiation + mocked output
+    test_agent.py               # 단위 테스트: 스킬 로딩 + 에이전트 초기화 검증
 ```
 
 ---
 
-## Task 1: Project Setup
+## Task 1: 프로젝트 설정
 
-**Files:**
-- Create: `lab/26_demo_for_strand_agentcore/requirements.txt`
+**파일:**
+- 생성: `lab/26_demo_for_strand_agentcore/requirements.txt`
 
-- [ ] **Step 1: Create requirements.txt**
+- [ ] **Step 1: requirements.txt 생성**
 
 ```
 strands-agents>=0.1.0
@@ -42,20 +42,20 @@ bedrock-agentcore>=0.1.0
 pytest>=8.0.0
 ```
 
-- [ ] **Step 2: Install dependencies**
+- [ ] **Step 2: 의존성 설치**
 
 ```bash
 cd lab/26_demo_for_strand_agentcore
 pip install -r requirements.txt
 ```
 
-Expected: No errors. Verify with:
+정상 설치 확인:
 ```bash
 python -c "from strands import Agent, AgentSkills; from strands_tools import http_request; from bedrock_agentcore.runtime import BedrockAgentCoreApp; print('OK')"
 ```
-Expected output: `OK`
+기대 출력: `OK`
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: 커밋**
 
 ```bash
 git add lab/26_demo_for_strand_agentcore/requirements.txt
@@ -64,13 +64,13 @@ git commit -m "feat: add standup agent project setup"
 
 ---
 
-## Task 2: Skill Files
+## Task 2: 스킬 파일 생성
 
-**Files:**
-- Create: `lab/26_demo_for_strand_agentcore/skills/alex/SKILL.md`
-- Create: `lab/26_demo_for_strand_agentcore/skills/maria/SKILL.md`
+**파일:**
+- 생성: `lab/26_demo_for_strand_agentcore/skills/alex/SKILL.md`
+- 생성: `lab/26_demo_for_strand_agentcore/skills/maria/SKILL.md`
 
-- [ ] **Step 1: Create Alex's skill file**
+- [ ] **Step 1: Alex 스킬 파일 생성**
 
 `skills/alex/SKILL.md`:
 ```markdown
@@ -84,7 +84,7 @@ Skip routine commits. Only mention PRs and code reviews.
 Keep each bullet under 15 words.
 ```
 
-- [ ] **Step 2: Create Maria's skill file**
+- [ ] **Step 2: Maria 스킬 파일 생성**
 
 `skills/maria/SKILL.md`:
 ```markdown
@@ -98,7 +98,7 @@ Include PR links when mentioning pull requests.
 Maria's lead wants detail — 2 sentences per item is fine.
 ```
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: 커밋**
 
 ```bash
 git add lab/26_demo_for_strand_agentcore/skills/
@@ -107,12 +107,12 @@ git commit -m "feat: add alex and maria standup skill files"
 
 ---
 
-## Task 3: Agent Code
+## Task 3: 에이전트 코드 작성
 
-**Files:**
-- Create: `lab/26_demo_for_strand_agentcore/agent.py`
+**파일:**
+- 생성: `lab/26_demo_for_strand_agentcore/agent.py`
 
-- [ ] **Step 1: Write agent.py**
+- [ ] **Step 1: agent.py 작성**
 
 ```python
 import os
@@ -150,15 +150,15 @@ if __name__ == "__main__":
     app.run()
 ```
 
-- [ ] **Step 2: Verify the file runs without import errors**
+- [ ] **Step 2: 임포트 오류 없이 실행되는지 확인**
 
 ```bash
 cd lab/26_demo_for_strand_agentcore
 python -c "import agent; print('Import OK')"
 ```
-Expected output: `Import OK`
+기대 출력: `Import OK`
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: 커밋**
 
 ```bash
 git add lab/26_demo_for_strand_agentcore/agent.py
@@ -167,12 +167,12 @@ git commit -m "feat: add standup agent with BedrockAgentCoreApp entrypoint"
 
 ---
 
-## Task 4: Tests
+## Task 4: 테스트 작성
 
-**Files:**
-- Create: `lab/26_demo_for_strand_agentcore/tests/test_agent.py`
+**파일:**
+- 생성: `lab/26_demo_for_strand_agentcore/tests/test_agent.py`
 
-- [ ] **Step 1: Write failing test for skill loading**
+- [ ] **Step 1: 스킬 로딩 테스트 작성**
 
 `tests/test_agent.py`:
 ```python
@@ -206,20 +206,20 @@ def test_alex_and_maria_have_different_instructions():
     assert alex_instructions != maria_instructions
 ```
 
-- [ ] **Step 2: Run tests to verify they fail (before agent code exists)**
+- [ ] **Step 2: 테스트 실행**
 
 ```bash
 cd lab/26_demo_for_strand_agentcore
 pytest tests/test_agent.py -v
 ```
-Expected: Tests run. If skill files from Task 2 are already created, these should PASS at this point — that is expected since skills are data, not code.
+참고: Task 2에서 스킬 파일을 이미 생성했다면 이 시점에서 PASS가 정상입니다. 스킬은 코드가 아닌 데이터이므로 별도 구현 없이 바로 검증 가능합니다.
 
-- [ ] **Step 3: Run all tests to confirm green**
+- [ ] **Step 3: 전체 테스트 통과 확인**
 
 ```bash
 pytest tests/test_agent.py -v
 ```
-Expected output:
+기대 출력:
 ```
 tests/test_agent.py::test_alex_skill_loads PASSED
 tests/test_agent.py::test_maria_skill_loads PASSED
@@ -227,7 +227,7 @@ tests/test_agent.py::test_alex_and_maria_have_different_instructions PASSED
 3 passed
 ```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: 커밋**
 
 ```bash
 git add lab/26_demo_for_strand_agentcore/tests/
@@ -236,18 +236,18 @@ git commit -m "test: verify skill files load correctly for alex and maria"
 
 ---
 
-## Task 5: Local Demo Run
+## Task 5: 로컬 데모 실행
 
-> **Pre-requisite:** A GitHub Personal Access Token with `repo` and `read:user` scopes.
+> **사전 조건:** `repo` 및 `read:user` 권한이 있는 GitHub Personal Access Token (PAT) 필요
 
-- [ ] **Step 1: Set environment variables**
+- [ ] **Step 1: 환경 변수 설정**
 
 ```bash
 export GITHUB_TOKEN=your_github_pat_here
 export DEV_NAME=alex
 ```
 
-- [ ] **Step 2: Run agent as Alex**
+- [ ] **Step 2: Alex로 에이전트 실행**
 
 ```bash
 cd lab/26_demo_for_strand_agentcore
@@ -259,15 +259,15 @@ response = agent('Write my standup for today')
 print(response)
 "
 ```
-Expected: Terminal prints Alex's standup in bullet format (Yesterday / Today / Blockers), referencing actual GitHub PRs.
+기대 결과: 터미널에 Alex의 스탠드업이 불릿 형식(Yesterday / Today / Blockers)으로 출력되며, 실제 GitHub PR이 언급됩니다.
 
-- [ ] **Step 3: Run agent as Maria**
+- [ ] **Step 3: Maria로 에이전트 실행**
 
 ```bash
 python -c "
 import os
 os.environ['DEV_NAME'] = 'maria'
-# Re-create agent with Maria's skill
+# DEV_NAME은 모듈 로드 시점에 읽히므로 Maria용 에이전트를 새로 생성합니다
 from strands import Agent, AgentSkills
 from strands_tools import http_request
 from strands.models import BedrockModel
@@ -283,35 +283,35 @@ response = agent('Write my standup for today')
 print(response)
 "
 ```
-Expected: Terminal prints Maria's standup in numbered list format (What I shipped / What I'm building / What I need), with PR links.
+기대 결과: 터미널에 Maria의 스탠드업이 번호 목록 형식(What I shipped / What I'm building / What I need)으로 출력되며, PR 링크가 포함됩니다.
 
-**Demo talking point at this step:** Same 15 lines of agent code — completely different output because the Skill file changed.
+**이 시점의 데모 핵심 멘트:** "에이전트 코드는 동일한 15줄입니다. 스킬 파일만 바꿨을 뿐인데 출력이 완전히 달라졌습니다."
 
 ---
 
-## Task 6: AgentCore Runtime Deployment Config
+## Task 6: AgentCore Runtime 배포 설정
 
-**Files:**
-- Create: `lab/26_demo_for_strand_agentcore/.bedrock_agentcore.yaml`
+**파일:**
+- 생성: `lab/26_demo_for_strand_agentcore/.bedrock_agentcore.yaml`
 
-> **Pre-requisite:** AWS account, IAM role for AgentCore, ECR repository. Reference the existing config at `lab/17_bedrock_agent_core/01-tutorials/01-AgentCore-runtime/01-hosting-agent/01-strands-with-bedrock-model/.bedrock_agentcore.yaml` for exact field values.
+> **사전 조건:** AWS 계정, AgentCore용 IAM 역할, ECR 리포지토리 필요. 참고 설정 파일: `lab/17_bedrock_agent_core/01-tutorials/01-AgentCore-runtime/01-hosting-agent/01-strands-with-bedrock-model/.bedrock_agentcore.yaml`
 
-- [ ] **Step 1: Create .bedrock_agentcore.yaml**
+- [ ] **Step 1: .bedrock_agentcore.yaml 생성**
 
 ```yaml
 default_agent: standup_agent
 agents:
   standup_agent:
     name: standup_agent
-    entrypoint: agent.py          # relative path from this yaml file
+    entrypoint: agent.py          # 이 yaml 파일 기준 상대 경로
     platform: linux/arm64
     container_runtime: docker
     aws:
-      execution_role: arn:aws:iam::ACCOUNT_ID:role/agentcore-standup-role   # replace
+      execution_role: arn:aws:iam::ACCOUNT_ID:role/agentcore-standup-role   # 교체 필요
       execution_role_auto_create: false
-      account: 'ACCOUNT_ID'       # replace
+      account: 'ACCOUNT_ID'       # 교체 필요
       region: us-east-1
-      ecr_repository: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-standup_agent  # replace
+      ecr_repository: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-standup_agent  # 교체 필요
       ecr_auto_create: false
       network_configuration:
         network_mode: PUBLIC
@@ -321,24 +321,24 @@ agents:
         enabled: true
 ```
 
-- [ ] **Step 2: Launch to AgentCore Runtime**
+- [ ] **Step 2: AgentCore Runtime에 배포**
 
 ```bash
 cd lab/26_demo_for_strand_agentcore
 bedrock-agentcore launch --agent standup_agent
 ```
-Expected: Docker image built, pushed to ECR, agent deployed. Output includes `agent_arn`.
+기대 결과: Docker 이미지 빌드 → ECR 푸시 → 에이전트 배포 완료. 출력에 `agent_arn` 포함.
 
-- [ ] **Step 3: Invoke the deployed agent via chat**
+- [ ] **Step 3: 배포된 에이전트를 채팅으로 호출**
 
 ```bash
 bedrock-agentcore invoke --agent standup_agent \
   --payload '{"prompt": "Write my standup for today"}' \
   --env DEV_NAME=alex GITHUB_TOKEN=$GITHUB_TOKEN
 ```
-Expected: Same standup output as local run, now served from AgentCore Runtime.
+기대 결과: 로컬 실행과 동일한 스탠드업 출력. 이제 AgentCore Runtime에서 서빙됩니다.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: 커밋**
 
 ```bash
 git add lab/26_demo_for_strand_agentcore/.bedrock_agentcore.yaml
@@ -347,7 +347,7 @@ git commit -m "feat: add AgentCore Runtime deployment config for standup agent"
 
 ---
 
-## Demo Script (5분)
+## 데모 스크립트 (5분)
 
 | 시간 | 발표자가 할 것 |
 |---|---|
