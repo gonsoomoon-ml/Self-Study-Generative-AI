@@ -15,7 +15,9 @@
 ```
 lab/26_demo_for_strand_agentcore/
   agent.py                      # 메인 에이전트 — BedrockAgentCoreApp 엔트리포인트
-  requirements.txt              # Python 의존성 패키지
+  setup/
+    pyproject.toml              # Python 의존성 패키지 (uv)
+    create_env.sh               # 환경 설정 스크립트
   .bedrock_agentcore.yaml       # AgentCore Runtime 배포 설정 (배포 전 AWS 값 입력 필요)
   skills/
     alex/
@@ -31,34 +33,28 @@ lab/26_demo_for_strand_agentcore/
 ## Task 1: 프로젝트 설정
 
 **파일:**
-- 생성: `lab/26_demo_for_strand_agentcore/requirements.txt`
+- 생성: `lab/26_demo_for_strand_agentcore/setup/pyproject.toml`
+- 생성: `lab/26_demo_for_strand_agentcore/setup/create_env.sh`
 
-- [ ] **Step 1: requirements.txt 생성**
-
-```
-strands-agents>=0.1.0
-strands-agents-tools>=0.1.0
-bedrock-agentcore>=0.1.0
-pytest>=8.0.0
-```
-
-- [ ] **Step 2: 의존성 설치**
+- [ ] **Step 1: 환경 설정 스크립트 실행**
 
 ```bash
-cd lab/26_demo_for_strand_agentcore
-pip install -r requirements.txt
+cd lab/26_demo_for_strand_agentcore/setup
+./create_env.sh
 ```
 
-정상 설치 확인:
+- [ ] **Step 2: 의존성 설치 확인**
+
 ```bash
-python -c "from strands import Agent, AgentSkills; from strands_tools import http_request; from bedrock_agentcore.runtime import BedrockAgentCoreApp; print('OK')"
+cd lab/26_demo_for_strand_agentcore/setup
+uv run python -c "from strands import Agent, AgentSkills; from strands_tools import http_request; from bedrock_agentcore.runtime import BedrockAgentCoreApp; print('OK')"
 ```
 기대 출력: `OK`
 
 - [ ] **Step 3: 커밋**
 
 ```bash
-git add lab/26_demo_for_strand_agentcore/requirements.txt
+git add lab/26_demo_for_strand_agentcore/setup/
 git commit -m "feat: add standup agent project setup"
 ```
 
@@ -209,15 +205,15 @@ def test_alex_and_maria_have_different_instructions():
 - [ ] **Step 2: 테스트 실행**
 
 ```bash
-cd lab/26_demo_for_strand_agentcore
-pytest tests/test_agent.py -v
+cd lab/26_demo_for_strand_agentcore/setup
+uv run pytest ../tests/test_agent.py -v
 ```
 참고: Task 2에서 스킬 파일을 이미 생성했다면 이 시점에서 PASS가 정상입니다. 스킬은 코드가 아닌 데이터이므로 별도 구현 없이 바로 검증 가능합니다.
 
 - [ ] **Step 3: 전체 테스트 통과 확인**
 
 ```bash
-pytest tests/test_agent.py -v
+uv run pytest ../tests/test_agent.py -v
 ```
 기대 출력:
 ```
@@ -250,10 +246,11 @@ export DEV_NAME=alex
 - [ ] **Step 2: Alex로 에이전트 실행**
 
 ```bash
-cd lab/26_demo_for_strand_agentcore
-python -c "
+cd lab/26_demo_for_strand_agentcore/setup
+uv run python -c "
 import os
 os.environ['DEV_NAME'] = 'alex'
+import sys; sys.path.insert(0, '..')
 from agent import agent
 response = agent('Write my standup for today')
 print(response)
