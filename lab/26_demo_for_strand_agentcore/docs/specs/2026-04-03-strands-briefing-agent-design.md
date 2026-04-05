@@ -34,61 +34,85 @@
 
 | 시간 | 청중이 보는 것 |
 |---|---|
-| 0:00–1:00 | 에이전트 코드 화면 — `Agent(tools=[http_request], plugins=[AgentSkills(...)])`. 총 약 15줄 |
+| 0:00–1:00 | `strands_agent.py` 화면 — `Agent(tools=[http_request], plugins=[AgentSkills(...)])`. 총 약 20줄 |
 | 1:00–2:00 | `alex/SKILL.md` — Alex의 스탠드업 형식과 우선순위를 정의한 평문 마크다운 |
 | 2:00–3:00 | 로컬 실행 → 에이전트가 GitHub를 호출하고 터미널에 스탠드업 출력 |
 | 3:00–3:30 | `maria/SKILL.md` 공개 — 다른 형식, 다른 우선순위 |
 | 3:30–4:00 | Maria로 실행 → 동일한 코드, 다른 출력 결과 |
-| 4:00–5:00 | AgentCore Runtime에 배포 — 명령어 한 줄. 채팅으로 호출 → 동일한 결과, 이제는 팀 서비스 |
+| 4:00–5:00 | `agentcore_runtime.py` 공개 — `strands_agent.py`를 감싸는 12줄. `bedrock-agentcore launch` 한 줄로 배포 → 이제는 팀 서비스 |
 
 ### "아하!" 순간
 - **2분:** 에이전트가 어떤 GitHub 엔드포인트를 호출할지 스스로 판단 — 개발자가 REST 로직을 한 줄도 작성하지 않음
-- **3분 30초:** 동일한 15줄 코드, 완전히 다른 출력 — Skills가 해낸 것
-- **4분 30초:** 로컬 스크립트 → 팀 서비스, 단 한 단계
+- **3분 30초:** 동일한 코드, 완전히 다른 출력 — Skills가 해낸 것
+- **4분 30초:** 로컬 스크립트 → 팀 서비스, 12줄 래퍼 하나
 
 ---
 
 ## 코드 구조
 
-### `agent.py`
+### `strands_agent.py` (로컬 실행 — 데모 핵심)
 ```python
 import os
+from dotenv import load_dotenv
 from strands import Agent, AgentSkills
 from strands_tools import http_request
+from strands.models import BedrockModel
+
+load_dotenv()  # 로컬 전용 — AgentCore Runtime에서는 no-op
+
+dev_name = os.environ.get("DEV_NAME", "alex")
 
 agent = Agent(
-    system_prompt="You are a developer assistant. Use GITHUB_TOKEN from env to call GitHub API.",
+    model=BedrockModel(model_id="global.anthropic.claude-sonnet-4-6"),
+    system_prompt=(
+        f"You are a daily standup assistant for {dev_name}. "
+        f"Use GITHUB_TOKEN as Bearer token for https://api.github.com endpoints."
+    ),
     tools=[http_request],
-    plugins=[AgentSkills(skills=f"./skills/{os.environ['DEV_NAME']}/")]
+    plugins=[AgentSkills(skills=f"./skills/{dev_name}/")],
 )
 
-agent("Write my standup for today")
+if __name__ == "__main__":
+    response = agent("Write my standup for today")
+    print(response)
 ```
 
-### 스킬 파일 구조
-```
-skills/
-  alex/
-    SKILL.md
-  maria/
-    SKILL.md
+### `agentcore_runtime.py` (프로덕션 배포 — strands_agent.py 래퍼)
+```python
+from strands_agent import agent
+from bedrock_agentcore.runtime import BedrockAgentCoreApp
+
+app = BedrockAgentCoreApp()
+
+@app.entrypoint
+def standup_agent(payload):
+    response = agent(payload.get("prompt", "Write my standup for today"))
+    return response.message["content"][0]["text"]
+
+if __name__ == "__main__":
+    app.run()
 ```
 
-### `skills/alex/SKILL.md`
-```markdown
----
-name: alex-standup
-description: Alex's standup format and preferences
----
-형식: 최대 3개 항목. 어제 한 일 / 오늘 할 일 / 블로커.
-팀 리드는 블로커를 가장 중요하게 생각함 — 있다면 항상 첫 번째로.
-일상적인 커밋은 생략. PR과 리뷰만 언급.
+### 프로젝트 구조
+```
+26_demo_for_strand_agentcore/
+  strands_agent.py      # Strands 에이전트 — 로컬 실행
+  agentcore_runtime.py  # AgentCore 래퍼 — 프로덕션 배포
+  pyproject.toml        # 프로젝트 루트 — uv run은 여기서 실행
+  .env                  # 로컬 전용 (gitignore) — GITHUB_TOKEN, DEV_NAME
+  .env.example          # 커밋 가능한 템플릿
+  skills/
+    alex/SKILL.md       # name: alex
+    maria/SKILL.md      # name: maria
+  tests/
+    test_agent.py
+  setup/
+    create_env.sh       # uv sync 래퍼 스크립트
 ```
 
 ### 배포
 ```bash
-# AgentCore Runtime 배포 — 정확한 명령어는 AgentCore 문서에서 확인 필요
-agentcore deploy agent.py
+bedrock-agentcore launch --agent standup_agent
 ```
 
 ---
