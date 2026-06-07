@@ -1,0 +1,8 @@
+[project]
+name = "bedrock-mantle-lab"
+version = "0.1.0"
+description = "AWS Bedrock Mantle invocation logging test"
+requires-python = ">=3.11"
+dependencies = [
+    "boto3>=1.38",
+]
