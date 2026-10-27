@@ -1,24 +1,30 @@
-# Google ADK → OpenInference → ADOT → CloudWatch 추적 테스트 (Knox Q2(a)/(b))
+# Google ADK + Claude on Bedrock → OpenInference → ADOT → CloudWatch 추적 테스트 (Knox Q2(a)/(b))
 
-Google ADK 에이전트의 멀티턴 대화를 OpenInference 계측 + ADOT로 CloudWatch에 보내고,
-세션 그룹핑과 PII 마스킹 동작을 실제로 확인한 테스트입니다.
+Google ADK 에이전트(모델: Amazon Bedrock의 Claude Sonnet 5.5, LiteLLM·LangChain 없이 네이티브 호출)의
+멀티턴 대화를 OpenInference 계측 + ADOT로 CloudWatch에 보내고, 세션 그룹핑과 PII 마스킹 동작을
+실제로 확인한 테스트입니다. 초기 실험은 Gemini로 수행했고(아래 "결과" 절), 이후 고객 구성에 맞춰
+Bedrock으로 교체해 같은 결과를 재확인했습니다("Bedrock 구성 결과" 절).
+
+![CloudWatch Omni Agent overview](adk_omno.png)
 
 ## 구성
 
 | 파일 | 역할 |
 |---|---|
-| `agent.py` | ADK 에이전트(툴 1개) + 3턴 대화. 턴 1에 가짜 PII(이름·전화번호) 포함 |
+| `agent.py` | ADK 에이전트(툴 1개) + 3턴 대화. 턴 1에 가짜 PII(이름·전화번호) 포함. 모델은 ADK `AnthropicLlm` + Anthropic SDK → `bedrock-runtime/anthropic`(Anthropic Messages API, 단기 Bedrock 토큰) |
 | `run.sh` | ADOT(`opentelemetry-instrument`)로 실행. 모드: `plain` / `masked` / `redact` |
 | `verify.py` | `aws/spans` 로그 그룹을 Logs Insights로 조회해 세션별 스팬·마스킹 상태 출력 |
 | `run_q2b.sh` | Q2(b) 추가 실행 전용. `adot-redact`(ADOT 삭제만, OpenInference 플래그 없음) / `extract`(ADOT 기본 본문 분리 경로, 로그 exporter on) / `adk-nocontent`(`ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false`) |
 | `verify_q2b.py` | 스팬별 본문 속성의 **원시 값**과 에이전트 로그 그룹의 로그 이벤트를 출력(`__REDACTED__` vs `REDACTED` 구분용) |
-| `.env.example` | `GOOGLE_API_KEY` 템플릿 (`.env`는 git-ignore) |
+| `.env.example` | 선택 오버라이드(`BEDROCK_MODEL`, `AWS_REGION`) 템플릿 |
 
 환경: Python 3.12 (uv venv), google-adk 2.13.0, openinference-instrumentation-google-adk 1.0.5,
-aws-opentelemetry-distro 0.21.0. 리전 us-west-2, Transaction Search 활성 상태.
+aws-opentelemetry-distro 0.21.0, anthropic 2.3.0, aws-bedrock-token-generator. 리전 us-west-2,
+Transaction Search 활성, Bedrock Model Invocation Logging 활성 상태. AWS 자격 증명만 있으면 되고 API 키 파일은 필요 없다.
 
 ```bash
-cp .env.example .env   # GOOGLE_API_KEY 입력
+uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements.txt
+# 사전 조건: AWS 자격 증명(us-west-2, Claude 모델 액세스), CloudWatch Transaction Search 활성화
 ./run.sh plain          # A: 마스킹 없음
 ./run.sh masked         # B: OPENINFERENCE_HIDE_INPUTS/OUTPUTS=True
 ./run.sh redact         # C: B + AWS_REDACT_SPAN_ATTRIBUTES (ADOT)
@@ -31,7 +37,7 @@ cp .env.example .env   # GOOGLE_API_KEY 입력
 
 ```
  run.sh <mode>
-   │  .env 로드(GOOGLE_API_KEY), OTEL_* / AGENT_OBSERVABILITY_ENABLED 등 환경변수 설정
+   │  OTEL_* / AGENT_OBSERVABILITY_ENABLED 등 환경변수 설정 (API 키 불필요)
    │  session_id = knox-adk-<mode>-<timestamp>
    ▼
  opentelemetry-instrument python agent.py --session-id ...     ← ADOT 런처
@@ -45,6 +51,8 @@ cp .env.example .env   # GOOGLE_API_KEY 입력
    │  └──────────────────────────────────────────────────────────────┘
    ▼
  agent.py : InMemoryRunner.run_async(user_id=, session_id=, new_message=)  ×3턴
+   │     모델 = ADK AnthropicLlm(client=AsyncAnthropic(base_url=https://bedrock-runtime.<region>.amazonaws.com/anthropic,
+   │                                                   api_key=provide_token()))  → Claude Sonnet 5.5 on Bedrock
    │
    ▼
  OTel SDK (TracerProvider) ── OTLP http/protobuf ──▶ CloudWatch
@@ -69,7 +77,7 @@ cp .env.example .env   # GOOGLE_API_KEY 입력
  │               ├─ invoke_agent knox_trace_test_agent  LLM  gcp.vertex.agent
  │               │     gen_ai.usage.input/output_tokens, llm.input_messages.* (프롬프트 원문)
  │               │     gen_ai.conversation.id ✔   session.id ✘
- │               └─ POST generativelanguage.googleapis.com  httpx
+ │               └─ POST bedrock-runtime.<region>.amazonaws.com/anthropic/v1/messages  httpx
  ├─ trace #2 (턴 2 "weather in Seoul")  + execute_tool get_weather (TOOL)
  └─ trace #3 (턴 3 "what was my name ...")
 ```
@@ -152,6 +160,35 @@ cp .env.example .env   # GOOGLE_API_KEY 입력
 - 캡처 시 마스킹은 되돌릴 수 없으므로 디버깅용 원문이 필요하면 수집 시 데이터 보호 정책(패턴 마스킹) 또는 읽기 시 Omni 데이터 스코프와 조합한다.
 - 네 번째 선택지: 이 테스트는 `AWS_GENAI_CONTENT_EXTRACTION_OPT_OUT=true`로 프롬프트 본문을 스팬에 남기고 `OTEL_LOGS_EXPORTER=none`으로 로그를 끈 상태였다. ADOT 기본값(변수 미설정)은 본문을 스팬에서 떼어 OTel 로그 이벤트로 보내므로, 스팬에는 PII가 남지 않고 로그 그룹 쪽에 CloudWatch Logs 데이터 보호 정책을 적용하는 구성이 된다.
 - 테스트 부산물: plain/masked/extract/adk-nocontent 세션의 합성 PII가 `aws/spans`(계정 보존 기간 30일)와 `/aws/bedrock-agentcore/runtimes/knox-adk-trace-test`(7일)에 남아 있다. 합성 데이터라 위험은 낮다.
+
+
+## Bedrock 구성 결과 (2026-10-27, ADK 2.13 + AnthropicLlm → bedrock-runtime, us-west-2)
+
+ADK Python에는 Bedrock 전용 모델 클래스가 없고 레지스트리의 `bedrock/*`는 LiteLLM으로만 연결된다. 대신 Bedrock이
+`bedrock-runtime` 엔드포인트에서 Anthropic Messages API(`/anthropic`)와 OpenAI Chat Completions(`/openai/v1`)를
+네이티브로 제공하므로, ADK 내장 `AnthropicLlm`에 `AsyncAnthropic(base_url=…/anthropic, api_key=<단기 Bedrock 토큰>)`
+클라이언트를 주입하면 LiteLLM·LangChain 없이 Claude on Bedrock을 호출할 수 있다(ADK 문서에는 Bedrock 예시가 없는
+비공식 조합이며, 각 부분은 ADK·Bedrock 문서로 뒷받침된다). 단기 토큰은 `aws-bedrock-token-generator`가 AWS 자격 증명에서
+만든다(최대 12시간).
+
+| 세션 | 모델 | 스팬 | OpenInference 스팬 PII | ADK LLM 스팬 PII | LLM 토큰(in→out) |
+|---|---|---|---|---|---|
+| `knox-adk-bedrock-plain-20261027-052248` | Haiku 4.5 (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) | 13 | 4/10 원문 | 3/3 원문 | 923→34, 863→38, 699→65 |
+| `knox-adk-bedrock-redact-20261027-052256` | Haiku 4.5 | 13 | 0 (`REDACTED` 7) | 0 (`REDACTED` 3) | 938→34, 875→41, 699→77 |
+| `knox-adk-plain-20261027-052755` | Sonnet 5.5 (`us.anthropic.claude-sonnet-5-5`) | 13 | 6/10 원문 | 3/3 원문 | 766→42, 692→46, 551→41 |
+| `knox-adk-redact-20261027-052802` | Sonnet 5.5 | 13 | 0 (`REDACTED` 7) | 0 (`REDACTED` 3) | 791→38, 711→52, 551→60 |
+
+- 스팬 트리·세션 그룹핑·마스킹 동작은 Gemini 구성과 **동일**하다. ADK의 `trace_call_llm` 훅이 모델 클래스와 무관하게
+  동작하므로 OpenInference 래퍼가 ADK LLM 스팬에 본문을 쓰는 구조와 `AWS_REDACT_SPAN_ATTRIBUTES`의 효과가 그대로 재현됐다.
+- **공급자 라벨 오류:** `gen_ai.request.model`/`llm.model_name`은 Bedrock 모델 ID로 정확하지만 `gen_ai.provider.name=gcp.gemini`,
+  `llm.provider=google`로 기록된다(ADK/OpenInference 래퍼의 고정값). 공급자별 집계·비용 산정에서 Bedrock 호출이 Google로
+  분류될 수 있으므로 주의.
+- **Bedrock Model Invocation Logs(서버 측):** 계정에 호출 로깅이 켜져 있어 `/aws/bedrock/model-invocation-logs`에 모든 호출의
+  요청·응답 본문이 저장된다. 확인: 합성 PII가 포함된 이벤트 16건(Haiku 4.5 8건 + Sonnet 5.5 8건, operation `Messages`,
+  호출자 IAM 사용자, `inputTokenCount`/`outputTokenCount` 포함). 캡처 시 스팬 마스킹(`AWS_REDACT_SPAN_ATTRIBUTES`)은 이
+  로그에 영향을 주지 않는다. Bedrock을 쓰는 고객은 Q2(b)에 **다섯 번째 경로**로 호출 로깅 설정(텍스트 본문 전달 끄기,
+  또는 해당 로그 그룹에 데이터 보호 정책)을 포함해야 한다.
+- CloudWatch 콘솔 Model Invocations 뷰는 이 호출 로깅을 기반으로 하므로 Bedrock 구성에서는 채워진다(콘솔 확인은 사용자 몫).
 
 ## 세션 ID 기록
 `sessions.log`에 실행마다 session_id가 append 된다. CloudWatch 콘솔 → GenAI Observability → Bedrock AgentCore → Agents → Sessions view에서 같은 ID로 조회된다(확인됨).
