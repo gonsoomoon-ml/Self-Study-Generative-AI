@@ -5,9 +5,9 @@ Google ADK 에이전트(모델: Amazon Bedrock의 Claude Sonnet 5.5, LiteLLM·La
 실제로 확인한 테스트입니다. 초기 실험은 Gemini로 수행했고(아래 "결과" 절), 이후 고객 구성에 맞춰
 Bedrock으로 교체해 같은 결과를 재확인했습니다("Bedrock 구성 결과" 절).
 
-![CloudWatch Omni Agent overview](img/adk_omno.png)
-
-![CloudWatch GenAI Observability – Model Invocations (Claude Sonnet 5.5 on Bedrock)](img/bedrock-model-invocation.png)
+| 콘솔 GenAI Observability → Bedrock AgentCore (Agents, 12h) | 콘솔 GenAI Observability → Model Invocations (Sonnet 5.5) | CloudWatch Omni → Agent overview |
+|---|---|---|
+| ![AgentCore Observability](img/agentcore-observability.png) | ![Model Invocations](img/bedrock-model-invocation.png) | ![Omni Agent overview](img/cloudwatch-omni.png) |
 
 ## 구성
 
@@ -128,9 +128,10 @@ uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requi
 
 - 결론(당시): 토큰 속성을 어떤 스팬에 어떤 이름으로 넣어도 Agent/Trace 수준 토큰 합계에 반영되지 않았다. 스팬 속성, `session.id`, 인덱싱 비율, 공급자 라벨, 루트 스팬 위치는 모두 원인이 아니다.
 - **최종 원인(2026-10-27, Bedrock 구성 후 사용자 콘솔 확인):** 콘솔 Agent view의 Total tokens·Total token cost는 **스팬이 아니라 Bedrock 모델 호출 기록**에서 계산된다. Bedrock(Claude) 세션을 보낸 뒤 Agents 표가 `knox-adk-trace-test` 5.7K / $0.016, `knox-adk-bedrock-test` 7K / $0.009로 채워졌고, 각각 Bedrock 호출 로그의 토큰 합(Sonnet 8건 5,678, Haiku 8건 6,960)과 일치한다. 같은 에이전트의 Gemini 20세션은 Bedrock 호출이 없어 0에 기여한다. 스팬 실험 5건이 모두 실패한 이유다.
+- 화면: `img/agentcore-observability.png` (12h: Agents/Endpoints 2/0, OTEL sessions 24, Traces 68, Total tokens 12.6K, Total token cost $0.025, Error rate 1.5%).
 - 부수 발견: 콘솔 값이 스팬 토큰 합(Sonnet 4,341 / Haiku 5,286)보다 크다. ADK LLM 스팬은 턴당 1개라 툴 호출 왕복(턴 2의 두 번째 모델 호출)의 토큰을 빠뜨리는 반면 호출 기록은 세션당 4건을 모두 센다. **스팬 기반 합산(Logs Insights, Omni)은 툴 호출이 있는 턴에서 과소 집계**된다.
 - (해소) 메트릭 exporter 경로 가설은 더 이상 필요 없다. 집계 소스는 Bedrock 호출 기록으로 확인됐다.
-- **CloudWatch Omni에서는 집계됨(2026-10-27, 사용자 콘솔 확인):** 같은 계정·리전에 Omni 스페이스(`057716757052-us-west-2`)를 만들자 Agent overview(Past 4 hours)에 `knox-adk-trace-test`가 Active agents 1, Sessions 10, Traces 28, **Total tokens 12.9k**로 표시되고 "5 highest token-consuming agents" 차트에 토큰 시계열(1,154~4,399)이 그려졌다. 즉 ADK 트레이스의 토큰은 Omni 집계에는 들어가며, 0으로 나온 것은 **콘솔 GenAI Observability(Bedrock AgentCore 뷰)의 Agent/Trace 수준 집계 한정** 문제다. Omni 지원 프레임워크 표에 ADK가 없어도 Agents 목록에 잡혔다. 단 Omni 안에서도 "Top 10 agents" 표의 Tokens 열은 0으로 표시되어 요약 카드(12.9k)와 불일치가 있다.
+- **CloudWatch Omni에서는 집계됨(2026-10-27, 사용자 콘솔 확인):** 같은 계정·리전에 Omni 스페이스(`057716757052-us-west-2`)를 만들자 Agent overview(Past 4 hours)에 `knox-adk-trace-test`가 Active agents 1, Sessions 10, Traces 28, **Total tokens 12.9k**로 표시되고 "5 highest token-consuming agents" 차트에 토큰 시계열(1,154~4,399)이 그려졌다. 즉 ADK 트레이스의 토큰은 Omni 집계에는 들어가며, 0으로 나온 것은 **콘솔 GenAI Observability(Bedrock AgentCore 뷰)의 Agent/Trace 수준 집계 한정** 문제다. Omni 지원 프레임워크 표에 ADK가 없어도 Agents 목록에 잡혔다. 단 Omni 안에서도 "Top 10 agents" 표의 Tokens 열은 0으로 표시되어 요약 카드(12.9k)와 불일치가 있다(`img/cloudwatch-omni.png`로 스크린샷 확인).
 - 고객 답변에서의 의미: 에이전트 단위 토큰·비용은 **콘솔 Agent view(Bedrock 호출 기록 기반, 툴 호출 포함, 가장 정확)**, 모델 단위는 Model Invocations, 스팬 기반은 Omni/Logs Insights(툴 호출 왕복 누락 가능). Bedrock 외 모델을 쓰면 콘솔 Agent view는 0이므로 Omni나 Logs Insights 합산을 쓴다. ADK 기본 구성에서는 LLM 스팬에 `session.id`가 없으므로 **`gen_ai.conversation.id`로 필터**해야 한다(검증 완료: stamper 없는 plain 세션에서 LLM 스팬 3개, 입력 953 / 출력 210 토큰).
   ```
   filter attributes.gen_ai.conversation.id = "<session_id>" and attributes.aws.genai.span_kind = "LLM"
