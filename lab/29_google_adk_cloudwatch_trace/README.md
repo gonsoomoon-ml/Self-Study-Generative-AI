@@ -5,7 +5,9 @@ Google ADK 에이전트(모델: Amazon Bedrock의 Claude Sonnet 5.5, LiteLLM·La
 실제로 확인한 테스트입니다. 초기 실험은 Gemini로 수행했고(아래 "결과" 절), 이후 고객 구성에 맞춰
 Bedrock으로 교체해 같은 결과를 재확인했습니다("Bedrock 구성 결과" 절).
 
-![CloudWatch Omni Agent overview](adk_omno.png)
+![CloudWatch Omni Agent overview](img/adk_omno.png)
+
+![CloudWatch GenAI Observability – Model Invocations (Claude Sonnet 5.5 on Bedrock)](img/bedrock-model-invocation.png)
 
 ## 구성
 
@@ -193,6 +195,7 @@ ADK Python에는 Bedrock 전용 모델 클래스가 없고 레지스트리의 `b
   TTFT·프롬프트 캐시·스로틀·오류는 "No data", Latency 열은 "-". 목록의 Input/Output 열에 프롬프트·응답 원문이 그대로 표시되며
   **redact 세션의 호출도 포함**된다. 즉 스팬 마스킹은 이 뷰와 호출 로그에 영향을 주지 않는다. 같은 화면에 "To protect and mask
   your sensitive data, turn on CloudWatch Data protection at account level" 안내가 있다(계정 단위 데이터 보호 정책이 공식 경로).
+  Sonnet 5.5 선택 시 Total tokens 차트 값 5,678은 Sonnet 호출 8건의 토큰 합(808+738+678+611+829+763+659+592)과 일치한다(`img/bedrock-model-invocation.png`).
 
 ## 세션 ID 기록
 `sessions.log`에 실행마다 session_id가 append 된다. CloudWatch 콘솔 → GenAI Observability → Bedrock AgentCore → Agents → Sessions view에서 같은 ID로 조회된다(확인됨).
