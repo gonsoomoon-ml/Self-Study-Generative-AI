@@ -188,7 +188,11 @@ ADK Python에는 Bedrock 전용 모델 클래스가 없고 레지스트리의 `b
   호출자 IAM 사용자, `inputTokenCount`/`outputTokenCount` 포함). 캡처 시 스팬 마스킹(`AWS_REDACT_SPAN_ATTRIBUTES`)은 이
   로그에 영향을 주지 않는다. Bedrock을 쓰는 고객은 Q2(b)에 **다섯 번째 경로**로 호출 로깅 설정(텍스트 본문 전달 끄기,
   또는 해당 로그 그룹에 데이터 보호 정책)을 포함해야 한다.
-- CloudWatch 콘솔 Model Invocations 뷰는 이 호출 로깅을 기반으로 하므로 Bedrock 구성에서는 채워진다(콘솔 확인은 사용자 몫).
+- **콘솔 Model Invocations 뷰(사용자 확인, 2026-10-27):** 모델 `us.anthropic.claude-sonnet-5-5` 선택 시 Invocations (16)
+  목록(세션당 4회 = 3턴 + 툴 호출 왕복 1회 × 4세션), Input/Output 토큰 차트, Invocation count, 입력 토큰 크기 분포가 채워졌다.
+  TTFT·프롬프트 캐시·스로틀·오류는 "No data", Latency 열은 "-". 목록의 Input/Output 열에 프롬프트·응답 원문이 그대로 표시되며
+  **redact 세션의 호출도 포함**된다. 즉 스팬 마스킹은 이 뷰와 호출 로그에 영향을 주지 않는다. 같은 화면에 "To protect and mask
+  your sensitive data, turn on CloudWatch Data protection at account level" 안내가 있다(계정 단위 데이터 보호 정책이 공식 경로).
 
 ## 세션 ID 기록
 `sessions.log`에 실행마다 session_id가 append 된다. CloudWatch 콘솔 → GenAI Observability → Bedrock AgentCore → Agents → Sessions view에서 같은 ID로 조회된다(확인됨).
