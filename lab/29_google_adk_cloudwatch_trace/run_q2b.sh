@@ -12,13 +12,12 @@
 #                               Question: is prompt/response text removed from spans (incl. the ADK-native
 #                               LLM span) and delivered as log events instead?
 #
-# Requires GOOGLE_API_KEY in ./.env (see .env.example). Never commit .env.
+# Needs AWS credentials only (see run.sh).
 set -euo pipefail
 cd "$(dirname "$0")"
 
 MODE="${1:?usage: ./run_q2b.sh adot-redact|extract}"
 if [[ -f .env ]]; then set -a; source .env; set +a; fi
-: "${GOOGLE_API_KEY:?GOOGLE_API_KEY is not set (put it in .env)}"
 
 export AWS_REGION="${AWS_REGION:-us-west-2}"
 export AWS_DEFAULT_REGION="$AWS_REGION"

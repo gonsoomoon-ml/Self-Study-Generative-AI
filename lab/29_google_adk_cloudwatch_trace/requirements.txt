@@ -8,3 +8,6 @@ aws-opentelemetry-distro==0.21.0
 opentelemetry-sdk==1.44.0
 opentelemetry-exporter-otlp-proto-http==1.44.0
 boto3==1.43.119
+# Claude on Bedrock via ADK AnthropicLlm (no LiteLLM)
+anthropic==2.3.0
+aws-bedrock-token-generator

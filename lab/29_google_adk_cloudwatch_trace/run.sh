@@ -5,13 +5,13 @@
 #   ./run.sh masked  -> run B: OPENINFERENCE_HIDE_INPUTS/OUTPUTS=True
 #   ./run.sh redact  -> run C: run B + AWS_REDACT_SPAN_ATTRIBUTES (ADOT-level, all spans)
 #
-# Requires GOOGLE_API_KEY in ./.env (see .env.example). Never commit .env.
+# Needs AWS credentials only (Bedrock model access for Claude). Optional overrides in ./.env
+# (BEDROCK_MODEL, AWS_REGION). The Bedrock bearer token is generated in-process.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 MODE="${1:-plain}"
 if [[ -f .env ]]; then set -a; source .env; set +a; fi
-: "${GOOGLE_API_KEY:?GOOGLE_API_KEY is not set (put it in .env)}"
 
 export AWS_REGION="${AWS_REGION:-us-west-2}"
 export AWS_DEFAULT_REGION="$AWS_REGION"
@@ -46,7 +46,7 @@ if [[ "$MODE" == "redact" ]]; then
   export AWS_REDACT_SPAN_ATTRIBUTES='llm.input_messages.*,llm.output_messages.*,input.value,output.value,gen_ai.input.messages,gen_ai.output.messages'
 fi
 
-echo "mode=$MODE region=$AWS_REGION session_id=$SESSION_ID"
+echo "mode=$MODE region=$AWS_REGION session_id=$SESSION_ID model=${BEDROCK_MODEL:-us.anthropic.claude-sonnet-5-5}"
 echo "$SESSION_ID" >> sessions.log
 .venv/bin/opentelemetry-instrument .venv/bin/python agent.py --session-id "$SESSION_ID"
 echo
