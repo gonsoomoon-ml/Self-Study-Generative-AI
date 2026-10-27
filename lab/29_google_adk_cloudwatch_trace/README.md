@@ -10,7 +10,7 @@ Google ADK 에이전트의 멀티턴 대화를 OpenInference 계측 + ADOT로 Cl
 | `agent.py` | ADK 에이전트(툴 1개) + 3턴 대화. 턴 1에 가짜 PII(이름·전화번호) 포함 |
 | `run.sh` | ADOT(`opentelemetry-instrument`)로 실행. 모드: `plain` / `masked` / `redact` |
 | `verify.py` | `aws/spans` 로그 그룹을 Logs Insights로 조회해 세션별 스팬·마스킹 상태 출력 |
-| `run_q2b.sh` | Q2(b) 추가 실행 전용. `adot-redact`(ADOT 삭제만, OpenInference 플래그 없음) / `extract`(ADOT 기본 본문 분리 경로, 로그 exporter on) |
+| `run_q2b.sh` | Q2(b) 추가 실행 전용. `adot-redact`(ADOT 삭제만, OpenInference 플래그 없음) / `extract`(ADOT 기본 본문 분리 경로, 로그 exporter on) / `adk-nocontent`(`ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false`) |
 | `verify_q2b.py` | 스팬별 본문 속성의 **원시 값**과 에이전트 로그 그룹의 로그 이벤트를 출력(`__REDACTED__` vs `REDACTED` 구분용) |
 | `.env.example` | `GOOGLE_API_KEY` 템플릿 (`.env`는 git-ignore) |
 
@@ -87,7 +87,7 @@ cp .env.example .env   # GOOGLE_API_KEY 입력
 ```
 
 핵심 두 가지:
-- 스팬 출처가 둘(OpenInference 계측기 + ADK 내장 추적)이라 OpenInference 마스킹 플래그는 ADK의 LLM 스팬에 닿지 않는다. 둘 다 가리려면 ADOT 단계의 `AWS_REDACT_SPAN_ATTRIBUTES`가 필요하다.
+- 스팬 출처가 둘(OpenInference 계측기 + ADK 내장 추적)이고, ADK LLM 스팬의 본문 속성은 OpenInference 래퍼가 마스킹 트레이서를 거치지 않고 `set_attribute`로 직접 쓰므로 `OPENINFERENCE_HIDE_*`가 닿지 않는다. 둘 다 가리려면 ADOT 단계의 `AWS_REDACT_SPAN_ATTRIBUTES`(스팬 속성 전용 프로세서)가 필요하다.
 - 세션 묶음은 OpenInference 루트 스팬의 `session.id`가 담당하고 토큰은 ADK LLM 스팬에만 있어, 콘솔의 Agent 단위 Total tokens 카드가 0으로 나온다. 토큰 합산은 `gen_ai.conversation.id`로 Logs Insights에서 직접 한다.
 
 ## 결과 (2026-10-27, us-west-2)
@@ -143,10 +143,11 @@ cp .env.example .env   # GOOGLE_API_KEY 입력
   ADOT 변수 **단독**으로도 두 출처의 스팬이 모두 가려진다(세션 `knox-adk-adot-redact-20261027-032809`, 17 스팬 중 합성 PII 잔존 필드 0). OpenInference 플래그는 없어도 된다. 와일드카드 `llm.input_messages.*`가 중첩 키까지 잡는다.
 - **ADOT 기본 본문 분리 경로(extract) 상세** (세션 `knox-adk-extract-20261027-033639`, 로그 스트림 생성 후):
   - ADOT의 LLO 핸들러(`amazon/opentelemetry/distro/llo_handler.py`)는 정해진 키 패턴만 스팬에서 떼어 로그 이벤트로 보낸다: `input.value`, `output.value`, `llm.input_messages.{i}.message.content`, `gen_ai.prompt.{i}.content`, `gen_ai.input.messages` 등. OpenInference 래퍼가 ADK 스팬에 쓰는 중첩형 `llm.input_messages.{i}.message.contents.{j}.message_content.text`는 패턴에 없어 **ADK LLM 스팬 3개에 PII가 그대로 남았다**.
-  - 로그 그룹(`/aws/bedrock-agentcore/runtimes/knox-adk-trace-test`)에는 본문 이벤트 7건이 도착했고 7건 모두 PII 포함: ADK가 내는 `gen_ai.client.inference.operation.details` 4건(ADOT가 `AGENT_OBSERVABILITY_ENABLED=true`일 때 `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`를 기본 설정하므로 ADK가 본문 이벤트를 냄) + ADOT LLO 추출 3건. 이 로그 그룹에 CloudWatch Logs 데이터 보호 정책을 거는 구성이 된다.
+  - 로그 그룹(`/aws/bedrock-agentcore/runtimes/knox-adk-trace-test`)에는 본문 이벤트가 도착했고 전부 PII 포함(이벤트 `attributes`/`body`를 직접 확인): ADK가 내는 `gen_ai.client.inference.operation.details` 4건(`gen_ai.input.messages`/`gen_ai.output.messages` 속성; ADOT가 `AGENT_OBSERVABILITY_ENABLED=true`일 때 `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`를 기본 설정하므로 ADK가 본문 이벤트를 냄) + ADOT LLO가 OpenInference 스팬의 `input.value`/`output.value`를 옮긴 이벤트(scope `openinference.instrumentation.google_adk`, 본문은 body) 3건. 이 로그 그룹에 CloudWatch Logs 데이터 보호 정책을 거는 구성이 된다.
+- **extract + `AWS_REDACT_SPAN_ATTRIBUTES` 동시 적용** (세션 `knox-adk-extract-20261027-035657`): 스팬은 두 출처 모두 PII 0(ADK LLM 스팬 3개 `REDACTED`). 로그 그룹에는 ADK 본문 이벤트 4건이 **PII 포함 그대로** 도착(redact는 스팬 프로세서라 로그 레코드에는 작용하지 않음), ADOT LLO 추출 이벤트 3건은 redact 이후 값이 복사되어 `REDACTED`로 도착. 즉 redact 변수는 스팬 전용이며, 로그 경로는 별도로 통제해야 한다(`OTEL_LOGS_EXPORTER=none`, 또는 로그 그룹 데이터 보호 정책). `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`를 비활성 값으로 명시해 ADK 본문 이벤트를 끄는 방법은 코드상 가능해 보이나 **미실행**.
   - **함정:** ADOT는 `OTEL_EXPORTER_OTLP_LOGS_HEADERS`의 `x-aws-log-stream`에 적은 로그 스트림을 만들어 주지 않는다. 스트림이 없으면 `400 The specified log stream does not exist`로 로그 export가 조용히 실패한다(ERROR 로그만 남고 프로세스는 정상 종료). `aws logs create-log-stream`으로 미리 만들어야 한다. 첫 extract 실행(`...-032821`)은 이 때문에 로그 이벤트가 0건이었다.
 - **ADK 자체 스위치는 무효:** `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false`(세션 `knox-adk-adk-nocontent-20261027-033532`)로도 ADK LLM 스팬 3개에 `llm.input_messages.*`와 PII가 남는다. 이 속성은 ADK가 아니라 OpenInference 래퍼가 쓰기 때문이다.
-- **종합:** ADK 2.13 + OpenInference ADK 1.0.5 + ADOT 0.21 조합에서 캡처 시점에 모든 스팬의 본문을 확실히 없애는 방법은 ADOT `AWS_REDACT_SPAN_ATTRIBUTES` 하나뿐이었다. 본문 분리 경로를 쓰더라도 이 변수를 함께 걸어야 ADK LLM 스팬의 중첩 키가 정리된다.
+- **종합:** ADK 2.13 + OpenInference ADK 1.0.5 + ADOT 0.21 조합에서 캡처 시점에 모든 **스팬**의 본문을 확실히 없애는 방법은 ADOT `AWS_REDACT_SPAN_ATTRIBUTES` 하나뿐이었다. 본문 분리 경로를 쓰더라도 이 변수를 함께 걸어야 ADK LLM 스팬의 중첩 키가 정리된다. **로그 경로**(ADK 본문 이벤트)는 이 변수로 막히지 않으므로 로그 exporter를 끄거나 로그 그룹에 데이터 보호 정책을 적용해야 한다.
 - 캡처 시 마스킹은 되돌릴 수 없으므로 디버깅용 원문이 필요하면 수집 시 데이터 보호 정책(패턴 마스킹) 또는 읽기 시 Omni 데이터 스코프와 조합한다.
 - 네 번째 선택지: 이 테스트는 `AWS_GENAI_CONTENT_EXTRACTION_OPT_OUT=true`로 프롬프트 본문을 스팬에 남기고 `OTEL_LOGS_EXPORTER=none`으로 로그를 끈 상태였다. ADOT 기본값(변수 미설정)은 본문을 스팬에서 떼어 OTel 로그 이벤트로 보내므로, 스팬에는 PII가 남지 않고 로그 그룹 쪽에 CloudWatch Logs 데이터 보호 정책을 적용하는 구성이 된다.
 - 테스트 부산물: plain/masked/extract/adk-nocontent 세션의 합성 PII가 `aws/spans`(계정 보존 기간 30일)와 `/aws/bedrock-agentcore/runtimes/knox-adk-trace-test`(7일)에 남아 있다. 합성 데이터라 위험은 낮다.
