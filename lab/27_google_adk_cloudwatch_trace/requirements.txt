@@ -1,0 +1,10 @@
+# Versions used for the 2026-10-27 test (Python 3.12). Behaviour depends on the
+# google-adk / openinference-instrumentation-google-adk pair; see README.
+google-adk==2.13.0
+openinference-instrumentation-google-adk==1.0.5
+openinference-instrumentation==0.1.72
+openinference-semantic-conventions==0.1.42
+aws-opentelemetry-distro==0.21.0
+opentelemetry-sdk==1.44.0
+opentelemetry-exporter-otlp-proto-http==1.44.0
+boto3==1.43.119
