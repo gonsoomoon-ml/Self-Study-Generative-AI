@@ -27,6 +27,77 @@ cp .env.example .env   # GOOGLE_API_KEY 입력
 .venv/bin/python verify.py --session-id <run.sh가 출력한 session_id>
 ```
 
+## 동작 흐름
+
+### 전체 파이프라인
+
+```
+ run.sh <mode>
+   │  .env 로드(GOOGLE_API_KEY), OTEL_* / AGENT_OBSERVABILITY_ENABLED 등 환경변수 설정
+   │  session_id = knox-adk-<mode>-<timestamp>
+   ▼
+ opentelemetry-instrument python agent.py --session-id ...     ← ADOT 런처
+   │
+   │  ┌──────────────────────────────────────────────────────────────┐
+   │  │ 프로세스 시작 시 ADOT(aws_distro)가 자동 계측기를 붙임          │
+   │  │  • openinference-instrumentation-google-adk  (CHAIN/AGENT/TOOL) │
+   │  │  • httpx 계측                                   (POST 스팬)     │
+   │  │  • ADK 2.x 내장 OTel 추적 gcp.vertex.agent      (LLM 스팬)      │
+   │  │  • (실험용) SessionIdStamper SpanProcessor                      │
+   │  └──────────────────────────────────────────────────────────────┘
+   ▼
+ agent.py : InMemoryRunner.run_async(user_id=, session_id=, new_message=)  ×3턴
+   │
+   ▼
+ OTel SDK (TracerProvider) ── OTLP http/protobuf ──▶ CloudWatch
+                                                     ├─ aws/spans 로그 그룹 (모든 스팬)
+                                                     ├─ X-Ray 인덱스 (기본 1% 샘플)
+                                                     └─ GenAI Observability 콘솔
+                                                        Agents › Sessions › Traces › Spans
+   ▲
+   │  verify.py : Logs Insights 2단계 조회
+   │    ① @message like "<session_id>"  → traceId 수집
+   │    ② 그 traceId의 모든 스팬 조회  → scope / kind / session.id / 마스킹 상태 출력
+```
+
+### 한 세션이 CloudWatch에 쌓이는 모양 (턴 1개 = 트레이스 1개)
+
+```
+ session.id = knox-adk-plain-20261027-001352
+ ├─ trace #1 (턴 1 "my name is Gildong Hong ...")
+ │   └─ invocation [knox-adk-trace-test]        CHAIN  openinference  session.id ✔
+ │       └─ invoke_workflow knox_trace_test_agent CHAIN  openinference  session.id ✔
+ │           └─ agent_run [knox_trace_test_agent] AGENT  openinference  session.id ✔
+ │               ├─ invoke_agent knox_trace_test_agent  LLM  gcp.vertex.agent
+ │               │     gen_ai.usage.input/output_tokens, llm.input_messages.* (프롬프트 원문)
+ │               │     gen_ai.conversation.id ✔   session.id ✘
+ │               └─ POST generativelanguage.googleapis.com  httpx
+ ├─ trace #2 (턴 2 "weather in Seoul")  + execute_tool get_weather (TOOL)
+ └─ trace #3 (턴 3 "what was my name ...")
+```
+
+### 모드별로 바뀌는 지점
+
+```
+ mode    환경변수                                 가려지는 스팬
+ ─────── ──────────────────────────────────────── ─────────────────────────────────
+ plain   (없음)                                   없음 → PII 원문 저장
+ masked  OPENINFERENCE_HIDE_INPUTS/OUTPUTS=True    openinference 스팬만 (__REDACTED__)
+                                                  ADK LLM 스팬은 원문 그대로 ✘
+ redact  masked + AWS_REDACT_SPAN_ATTRIBUTES=      모든 스팬 (ADOT 단계에서 REDACTED)
+         'llm.input_messages.*,llm.output_messages.*,input.value,output.value,...'
+
+ sid / tok / bedrock / root : SessionIdStamper가 스팬 속성을 덧붙이는 토큰 집계 실험
+   on_start   → 모든 스팬에 session.id / user.id 복사
+   _on_ending → LLM 스팬에 gen_ai.usage.total_tokens, gen_ai.system 추가
+                (bedrock) 모델 라벨을 Bedrock ID로 교체
+                (root)    트레이스별 토큰 합을 루트 invocation 스팬에 기록
+```
+
+핵심 두 가지:
+- 스팬 출처가 둘(OpenInference 계측기 + ADK 내장 추적)이라 OpenInference 마스킹 플래그는 ADK의 LLM 스팬에 닿지 않는다. 둘 다 가리려면 ADOT 단계의 `AWS_REDACT_SPAN_ATTRIBUTES`가 필요하다.
+- 세션 묶음은 OpenInference 루트 스팬의 `session.id`가 담당하고 토큰은 ADK LLM 스팬에만 있어, 콘솔의 Agent 단위 Total tokens 카드가 0으로 나온다. 토큰 합산은 `gen_ai.conversation.id`로 Logs Insights에서 직접 한다.
+
 ## 결과 (2026-10-27, us-west-2)
 
 ### (a) 멀티턴 추적
