@@ -118,7 +118,8 @@ cp .env.example .env   # GOOGLE_API_KEY 입력
 
 - 결론: **이 구성(AgentCore 외부, ADOT 런처, `OTEL_LOGS_EXPORTER=none`, `OTEL_METRICS_EXPORTER=none`)에서는 토큰 속성을 어떤 스팬(ADK LLM 스팬, OpenInference 루트 CHAIN 스팬)에 어떤 이름으로 넣어도 Agent/Trace 수준 토큰 합계에 반영되지 않았다.** 스팬 속성, `session.id`, 인덱싱 비율, 공급자 라벨, 루트 스팬 위치는 모두 원인이 아니다. 실험 5가 OpenInference 루트 스팬에서도 0이었으므로 ADK 고유 문제라고 단정할 수 없다.
 - 검증하지 못한 가설: run.sh가 로그/메트릭 exporter를 꺼 두었다. AWS 문서의 AgentCore 외부 ADOT 설정은 이를 끄지 않으며 `x-aws-metric-namespace=bedrock-agentcore` 헤더는 메트릭 경로용이므로, Agent view의 토큰/비용 카드가 스팬이 아니라 **메트릭 경로**에서 계산될 가능성이 남아 있다. 두 exporter를 기본값으로 두고 한 번 더 실행하면 판별 가능(미실행, 원인 미확정 → 서비스 팀 확인 필요).
-- 고객 답변에서의 의미: 세션·트레이스·스팬 단위 추적과 스팬별 토큰 조회는 되지만, 콘솔의 에이전트 단위 토큰/비용 합계 카드는 이 구성에서 0이므로 Logs Insights(`aws/spans`)나 Omni SQL로 직접 합산해야 한다. ADK 기본 구성에서는 LLM 스팬에 `session.id`가 없으므로 **`gen_ai.conversation.id`로 필터**해야 한다(검증 완료: stamper 없는 plain 세션에서 LLM 스팬 3개, 입력 953 / 출력 210 토큰).
+- **CloudWatch Omni에서는 집계됨(2026-10-27, 사용자 콘솔 확인):** 같은 계정·리전에 Omni 스페이스(`057716757052-us-west-2`)를 만들자 Agent overview(Past 4 hours)에 `knox-adk-trace-test`가 Active agents 1, Sessions 10, Traces 28, **Total tokens 12.9k**로 표시되고 "5 highest token-consuming agents" 차트에 토큰 시계열(1,154~4,399)이 그려졌다. 즉 ADK 트레이스의 토큰은 Omni 집계에는 들어가며, 0으로 나온 것은 **콘솔 GenAI Observability(Bedrock AgentCore 뷰)의 Agent/Trace 수준 집계 한정** 문제다. Omni 지원 프레임워크 표에 ADK가 없어도 Agents 목록에 잡혔다. 단 Omni 안에서도 "Top 10 agents" 표의 Tokens 열은 0으로 표시되어 요약 카드(12.9k)와 불일치가 있다.
+- 고객 답변에서의 의미: 세션·트레이스·스팬 단위 추적과 스팬별 토큰 조회는 되고, 에이전트 단위 토큰 합계는 **Omni에서는 보이지만 콘솔 GenAI Observability 카드에서는 0**이다. 콘솔만 쓸 경우 Logs Insights(`aws/spans`)로 직접 합산해야 한다. ADK 기본 구성에서는 LLM 스팬에 `session.id`가 없으므로 **`gen_ai.conversation.id`로 필터**해야 한다(검증 완료: stamper 없는 plain 세션에서 LLM 스팬 3개, 입력 953 / 출력 210 토큰).
   ```
   filter attributes.gen_ai.conversation.id = "<session_id>" and attributes.aws.genai.span_kind = "LLM"
   | stats sum(attributes.gen_ai.usage.input_tokens) as input_tokens,
