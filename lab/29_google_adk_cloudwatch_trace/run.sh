@@ -4,10 +4,6 @@
 #   ./run.sh plain   -> run A: content kept on spans (no masking)
 #   ./run.sh masked  -> run B: OPENINFERENCE_HIDE_INPUTS/OUTPUTS=True
 #   ./run.sh redact  -> run C: run B + AWS_REDACT_SPAN_ATTRIBUTES (ADOT-level, all spans)
-#   ./run.sh sid     -> run E: plain + session.id stamped on every span (token-aggregation experiment)
-#   ./run.sh tok     -> run F: sid + gen_ai.usage.total_tokens / gen_ai.system on LLM spans
-#   ./run.sh bedrock -> run I: tok + LLM spans relabelled as a Bedrock model (diagnostic only)
-#   ./run.sh root    -> run J: tok + per-trace token sums stamped on the root invocation span
 #
 # Requires GOOGLE_API_KEY in ./.env (see .env.example). Never commit .env.
 set -euo pipefail
@@ -43,24 +39,6 @@ if [[ "$MODE" == "masked" || "$MODE" == "redact" ]]; then
   # OpenInference-level masking: affects spans created by the OpenInference instrumentor only.
   export OPENINFERENCE_HIDE_INPUTS=True
   export OPENINFERENCE_HIDE_OUTPUTS=True
-fi
-if [[ "$MODE" == "sid" ]]; then
-  # Experiment: stamp session.id/user.id onto every span (incl. ADK-native LLM spans).
-  export COPY_SESSION_ID=1
-fi
-if [[ "$MODE" == "root" ]]; then
-  # Experiment 4: tok + per-trace token sums copied onto the root (invocation) span.
-  export COPY_ROOT_TOKENS=1
-fi
-if [[ "$MODE" == "tok" || "$MODE" == "bedrock" || "$MODE" == "root" ]]; then
-  # Experiment 2: sid + add gen_ai.usage.total_tokens and gen_ai.system on LLM spans.
-  export COPY_SESSION_ID=1
-  export COPY_TOKEN_TOTAL=1
-fi
-if [[ "$MODE" == "bedrock" ]]; then
-  # Experiment 3 (diagnostic): relabel LLM spans as a Bedrock model so we can see whether
-  # the console token aggregation only counts recognised providers.
-  export FAKE_BEDROCK=1
 fi
 if [[ "$MODE" == "redact" ]]; then
   # ADOT-level redaction: applies to every span attribute, including ADK's native

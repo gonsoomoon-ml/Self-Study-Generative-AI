@@ -8,22 +8,18 @@ Google ADK 에이전트의 멀티턴 대화를 OpenInference 계측 + ADOT로 Cl
 | 파일 | 역할 |
 |---|---|
 | `agent.py` | ADK 에이전트(툴 1개) + 3턴 대화. 턴 1에 가짜 PII(이름·전화번호) 포함 |
-| `run.sh` | ADOT(`opentelemetry-instrument`)로 실행. 모드: `plain` / `masked` / `redact` + 토큰 집계 실험용 `sid` / `tok` / `bedrock` / `root` |
+| `run.sh` | ADOT(`opentelemetry-instrument`)로 실행. 모드: `plain` / `masked` / `redact` |
 | `verify.py` | `aws/spans` 로그 그룹을 Logs Insights로 조회해 세션별 스팬·마스킹 상태 출력 |
 | `.env.example` | `GOOGLE_API_KEY` 템플릿 (`.env`는 git-ignore) |
-| `requirements.txt` | 테스트에 사용한 고정 버전 |
 
 환경: Python 3.12 (uv venv), google-adk 2.13.0, openinference-instrumentation-google-adk 1.0.5,
 aws-opentelemetry-distro 0.21.0. 리전 us-west-2, Transaction Search 활성 상태.
 
 ```bash
-uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements.txt
 cp .env.example .env   # GOOGLE_API_KEY 입력
-# 사전 조건: AWS 자격 증명(us-west-2), CloudWatch Transaction Search 활성화
 ./run.sh plain          # A: 마스킹 없음
 ./run.sh masked         # B: OPENINFERENCE_HIDE_INPUTS/OUTPUTS=True
 ./run.sh redact         # C: B + AWS_REDACT_SPAN_ATTRIBUTES (ADOT)
-./run.sh sid|tok|bedrock|root   # 토큰 집계 실험 (아래 (a)-토큰 절 참조)
 .venv/bin/python verify.py --session-id <run.sh가 출력한 session_id>
 ```
 
@@ -43,7 +39,6 @@ cp .env.example .env   # GOOGLE_API_KEY 입력
    │  │  • openinference-instrumentation-google-adk  (CHAIN/AGENT/TOOL) │
    │  │  • httpx 계측                                   (POST 스팬)     │
    │  │  • ADK 2.x 내장 OTel 추적 gcp.vertex.agent      (LLM 스팬)      │
-   │  │  • (실험용) SessionIdStamper SpanProcessor                      │
    │  └──────────────────────────────────────────────────────────────┘
    ▼
  agent.py : InMemoryRunner.run_async(user_id=, session_id=, new_message=)  ×3턴
@@ -86,12 +81,6 @@ cp .env.example .env   # GOOGLE_API_KEY 입력
                                                   ADK LLM 스팬은 원문 그대로 ✘
  redact  masked + AWS_REDACT_SPAN_ATTRIBUTES=      모든 스팬 (ADOT 단계에서 REDACTED)
          'llm.input_messages.*,llm.output_messages.*,input.value,output.value,...'
-
- sid / tok / bedrock / root : SessionIdStamper가 스팬 속성을 덧붙이는 토큰 집계 실험
-   on_start   → 모든 스팬에 session.id / user.id 복사
-   _on_ending → LLM 스팬에 gen_ai.usage.total_tokens, gen_ai.system 추가
-                (bedrock) 모델 라벨을 Bedrock ID로 교체
-                (root)    트레이스별 토큰 합을 루트 invocation 스팬에 기록
 ```
 
 핵심 두 가지:
@@ -114,7 +103,7 @@ cp .env.example .env   # GOOGLE_API_KEY 입력
 
 #### (a)-토큰 Agent view "Total tokens = 0" 원인 실험 (2026-10-27, 모두 콘솔에서 직접 확인)
 
-가설마다 `SessionIdStamper`(`agent.py`의 SpanProcessor)로 스팬 속성을 바꿔 한 세션씩 보내고 Agent view 수치를 확인했다. Sessions/Traces는 매번 정확히 증가했고 Total tokens는 **다섯 번 모두 0** 이었다.
+가설마다 SpanProcessor(`SessionIdStamper`)로 스팬 속성을 바꿔 한 세션씩 보내고 Agent view 수치를 확인했다. 이 실험 코드(`sid`/`tok`/`bedrock`/`root` 모드)는 결론이 난 뒤 단순화를 위해 제거했으며, git 이력(lab/29 최초 커밋)에 남아 있다. Sessions/Traces는 매번 정확히 증가했고 Total tokens는 **다섯 번 모두 0** 이었다.
 
 | # | 가설 | 실행 모드 / 조치 | 저장 확인(aws/spans) | 결과 |
 |---|---|---|---|---|
