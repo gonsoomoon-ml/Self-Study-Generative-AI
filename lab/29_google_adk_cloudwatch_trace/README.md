@@ -17,6 +17,7 @@ Bedrock으로 교체해 같은 결과를 재확인했습니다("Bedrock 구성 �
 | `run.sh` | ADOT(`opentelemetry-instrument`)로 실행. 모드: `plain` / `masked` / `redact` |
 | `verify.py` | `aws/spans` 로그 그룹을 Logs Insights로 조회해 세션별 스팬·마스킹 상태 출력 |
 | `run_q2b.sh` | Q2(b) 추가 실행 전용. `adot-redact`(ADOT 삭제만, OpenInference 플래그 없음) / `extract`(ADOT 기본 본문 분리 경로, 로그 exporter on) / `adk-nocontent`(`ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false`) |
+| `omni_query.py` | CloudWatch Omni 공개 API(`cloudwatchomni`: StartTelemetryQuerySession → StartTelemetryQuery(SQL) → GetTelemetryQueryResults)로 스팬을 조회. Omni skills/코딩 에이전트가 쓰는 경로와 동일 |
 | `verify_q2b.py` | 스팬별 본문 속성의 **원시 값**과 에이전트 로그 그룹의 로그 이벤트를 출력(`__REDACTED__` vs `REDACTED` 구분용) |
 | `.env.example` | 선택 오버라이드(`BEDROCK_MODEL`, `AWS_REGION`) 템플릿 |
 
@@ -199,6 +200,26 @@ ADK Python에는 Bedrock 전용 모델 클래스가 없고 레지스트리의 `b
   **redact 세션의 호출도 포함**된다. 즉 스팬 마스킹은 이 뷰와 호출 로그에 영향을 주지 않는다. 같은 화면에 "To protect and mask
   your sensitive data, turn on CloudWatch Data protection at account level" 안내가 있다(계정 단위 데이터 보호 정책이 공식 경로).
   Sonnet 5.5 선택 시 Total tokens 차트 값 5,678은 Sonnet 호출 8건의 토큰 합(808+738+678+611+829+763+659+592)과 일치한다(`img/bedrock-model-invocation.png`).
+
+
+## 코딩 에이전트(Claude Code·Cursor)에서 Omni 데이터 가져오기 (2026-10-27 확인)
+
+- **Agent Toolkit for AWS**: Claude Code에서 `/plugin install aws-core@claude-plugins-official` → `/reload-plugins`(CLI: `claude plugin install aws-core@claude-plugins-official`). aws-core 1.1.0은 원격 AWS MCP Server(`uvx mcp-proxy-for-aws-cli` → `https://aws-mcp.us-east-1.api.aws/mcp`)와 25개 skills를 설치하며, `aws-observability` skill 안에 `references/cloudwatch-omni/`(개념·SQL 질의·PromQL·대시보드·알림·평가)와 스크립트가 들어 있다. Cursor/Kiro는 MCP 설정 + `npx skills add aws/agent-toolkit-for-aws/skills`, AWS CLI 2.35+면 `aws configure agent-toolkit`.
+- **동작 원리**: skills는 로컬 AWS 자격 증명으로 공개 `cloudwatchomni` API(SigV4, Smithy RPC v2 CBOR)를 호출한다. Omni 웹 로그인이 아니라 IAM 권한 + 스페이스 그랜트 두 겹으로 인가된다. CLI는 `aws cloudwatchomni …`(이 호스트의 CLI 2.34.19는 모델이 없어 미지원, boto3 1.43.119는 지원).
+- **직접 조회 예(`omni_query.py`)**: `traces.default` 테이블에 SQL. 세션 `knox-adk-plain-20261027-052755`로 13개 스팬(3 트레이스)과 `gen_ai.usage.*`, 모델 ID, duration을 가져왔다. 주의: ADK LLM 스팬은 `session.id`가 없고 `gen_ai.conversation.id`에 세션 ID가 있으므로 두 속성을 OR로 묶어야 한다.
+  ```sql
+  SELECT `@timestamp`, name, scope['name'] AS scope, traceId,
+         attributes['session.id'] AS session_id, attributes['gen_ai.conversation.id'] AS conversation_id,
+         attributes['gen_ai.request.model'] AS model,
+         attributes['gen_ai.usage.input_tokens'] AS in_tok, attributes['gen_ai.usage.output_tokens'] AS out_tok
+  FROM traces.default
+  WHERE `@timestamp` BETWEEN NOW() - INTERVAL '6 HOUR' AND NOW()
+    AND (attributes['session.id'] = '<session>' OR attributes['gen_ai.conversation.id'] = '<session>')
+  ORDER BY `@timestamp`
+  ```
+- **Omni IDE 확장**(VS Code·Kiro·Cursor): 로컬 모드는 `.omni/`에 트레이스 저장(AWS 계정 불필요), 클라우드 모드는 스페이스 로그인. "Analyze with AI" 내장. MCP 서버를 직접 노출하지는 않는다.
+- **Omni 없이 스팬만**: awslabs `cloudwatch-applicationsignals-mcp-server`의 `search_transaction_spans`(Logs Insights, `@data_format = "AWS-OTEL-TRACE-V1"`)로 `aws/spans` 조회 가능(Transaction Search 필요).
+- PII 주의: 어느 경로든 본문이 마스킹되지 않은 채 코딩 에이전트 컨텍스트로 들어온다. Q2(b)의 캡처 시 마스킹이 선행돼야 한다.
 
 ## 세션 ID 기록
 `sessions.log`에 실행마다 session_id가 append 된다. CloudWatch 콘솔 → GenAI Observability → Bedrock AgentCore → Agents → Sessions view에서 같은 ID로 조회된다(확인됨).
