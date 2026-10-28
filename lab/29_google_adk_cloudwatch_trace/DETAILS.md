@@ -1,5 +1,7 @@
 # 상세 근거 — Google ADK + Claude on Bedrock → OpenInference → ADOT → CloudWatch
 
+한국어 · [English](DETAILS.en.md)
+
 [README.md](README.md)의 질문별 답을 뒷받침하는 검증 기록과 문서 근거다. 검증 환경: Google ADK 2.13.0 + Claude Sonnet 5.5 on Amazon Bedrock(ADK `AnthropicLlm` 네이티브, LiteLLM 없음), openinference-instrumentation-google-adk 1.0.5, aws-opentelemetry-distro 0.21.0, 2026-10-27.
 
 목차: [동작 흐름](#동작-흐름) · [(a) 멀티턴 추적](#a-멀티턴-추적) · [(b) PII 마스킹](#b-pii-마스킹) · [Bedrock 구성](#bedrock-구성-adk--anthropicllm--bedrock-runtime) · [(c) SSO/MFA 대시보드](#c-ssomfa-대시보드) · [(d) 분석](#d-분석) · [코딩 에이전트에서 Omni 질의](#코딩-에이전트에서-omni-질의)

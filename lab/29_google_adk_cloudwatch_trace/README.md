@@ -1,5 +1,7 @@
 # Google ADK + Claude on Bedrock → OpenInference → ADOT → CloudWatch (고객 질문 4개 검증)
 
+한국어 · [English](README.en.md)
+
 | 콘솔 GenAI Observability → Bedrock AgentCore (Agents, 12h) | 콘솔 GenAI Observability → Model Invocations (Sonnet 5.5) | CloudWatch Omni → Agent overview | Claude Code + aws-core 플러그인으로 Omni 스팬 조회 |
 |---|---|---|---|
 | ![AgentCore Observability](img/agentcore-observability.png) | ![Model Invocations](img/bedrock-model-invocation.png) | ![Omni Agent overview](img/cloudwatch-omni.png) | ![Omni via plugin](img/omni-plugin.png) |
