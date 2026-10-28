@@ -1,8 +1,8 @@
 # 상세 근거 — Google ADK + Claude on Bedrock → OpenInference → ADOT → CloudWatch
 
-[README.md](README.md)의 질문별 답을 뒷받침하는 실험 기록과 문서 근거다. 검증 환경: Google ADK 2.13.0 + Claude Sonnet 5.5 on Amazon Bedrock(ADK `AnthropicLlm` 네이티브, LiteLLM 없음), openinference-instrumentation-google-adk 1.0.5, aws-opentelemetry-distro 0.21.0, 2026-10-27. 초기 실험 일부는 Gemini로 수행했고 이후 Bedrock으로 교체해 같은 결과를 재확인했다("Bedrock 구성 결과" 절).
+[README.md](README.md)의 질문별 답을 뒷받침하는 검증 기록과 문서 근거다. 검증 환경: Google ADK 2.13.0 + Claude Sonnet 5.5 on Amazon Bedrock(ADK `AnthropicLlm` 네이티브, LiteLLM 없음), openinference-instrumentation-google-adk 1.0.5, aws-opentelemetry-distro 0.21.0, 2026-10-27.
 
-목차: [동작 흐름](#동작-흐름) · [(a) 멀티턴 추적](#a-멀티턴-추적) · [(b) PII 마스킹](#b-pii-마스킹) · [Bedrock 구성 결과](#bedrock-구성-결과-2026-10-27-adk-213--anthropicllm--bedrock-runtime) · [(c) SSO/MFA 대시보드](#c-ssomfa-대시보드-aws-계정-없는-사용자) · [(d) 분석](#d-분석-트레이싱-대시보드) · [코딩 에이전트에서 Omni 데이터 가져오기](#코딩-에이전트claude-codecursor에서-omni-데이터-가져오기-2026-10-27-확인) · [세션 ID 기록](#세션-id-기록)
+목차: [동작 흐름](#동작-흐름) · [(a) 멀티턴 추적](#a-멀티턴-추적) · [(b) PII 마스킹](#b-pii-마스킹) · [Bedrock 구성 결과](#bedrock-구성-결과-2026-10-27-adk-213--anthropicllm--bedrock-runtime) · [(c) SSO/MFA 대시보드](#c-ssomfa-대시보드-aws-계정-없는-사용자) · [(d) 분석](#d-분석-트레이싱-대시보드) · [코딩 에이전트에서 Omni 데이터 가져오기](#코딩-에이전트claude-codecursor에서-omni-데이터-가져오기-2026-10-27-확인)
 
 ## 동작 흐름
 
@@ -10,7 +10,7 @@
 
 ```
  run.sh <mode>
-   │  OTEL_* / AGENT_OBSERVABILITY_ENABLED 등 환경변수 설정 (API 키 불필요)
+   │  OTEL_* / AGENT_OBSERVABILITY_ENABLED 등 환경변수 설정
    │  session_id = knox-adk-<mode>-<timestamp>
    ▼
  opentelemetry-instrument python agent.py --session-id ...     ← ADOT 런처
@@ -69,7 +69,7 @@
 
 핵심 두 가지:
 - 스팬 출처가 둘(OpenInference 계측기 + ADK 내장 추적)이고, ADK LLM 스팬의 본문 속성은 OpenInference 래퍼가 마스킹 트레이서를 거치지 않고 `set_attribute`로 직접 쓰므로 `OPENINFERENCE_HIDE_*`가 닿지 않는다. 둘 다 가리려면 ADOT 단계의 `AWS_REDACT_SPAN_ATTRIBUTES`(스팬 속성 전용 프로세서)가 필요하다.
-- 세션 묶음은 OpenInference 루트 스팬의 `session.id`가 담당하고 토큰은 ADK LLM 스팬에만 있어, 콘솔의 Agent 단위 Total tokens 카드가 0으로 나온다. 토큰 합산은 `gen_ai.conversation.id`로 Logs Insights에서 직접 한다.
+- 세션 묶음은 OpenInference 루트 스팬의 `session.id`가 담당하고 토큰은 ADK LLM 스팬에만 있다. 스팬 기준으로 세션별 토큰을 합산하려면 `gen_ai.conversation.id`로 LLM 스팬을 찾아야 한다.
 
 
 ## (a) 멀티턴 추적
@@ -79,39 +79,22 @@
   - `openinference.instrumentation.google_adk`: `invocation`(CHAIN) → `invoke_workflow`(CHAIN) → `agent_run`(AGENT) → `execute_tool`(TOOL). 모두 `session.id`, `user.id` 보유.
   - `gcp.vertex.agent` (ADK 2.x 내장 OTel 추적): `invoke_agent ...` LLM 스팬. `llm.input_messages.*`에 프롬프트 전문, `session.id` 없음(같은 트레이스 안에 있어 트레이스 뷰에서는 보임).
 - `session.id`는 `Runner.run_async(user_id=..., session_id=...)` 키워드 인자에서만 추출됨.
-- 첫 턴의 스팬이 조회에 늦게 나타난 사례가 있었음(약 10분 이상). 유실이 아니라 수집 지연이며, 로컬 콘솔 exporter로 3개 트레이스 생성은 확인됨. 최종적으로 plain/masked/redact 세 세션 모두 3/3 턴, 17 스팬 확인.
+- 첫 턴의 스팬이 조회에 약 10분 이상 늦게 나타난 사례가 있었다. 유실이 아니라 수집 지연이며, 최종적으로 plain/masked/redact 세 세션 모두 3/3 턴이 확인됐다.
 - **버전 의존성(중요):** AWS AgentCore 문서(OpenInference ADK 0.1.13/0.1.14)는 `call_llm` LLM 스팬이 `openinference.instrumentation.google_adk` scope로 나온다고 예시하지만, 이번 조합(ADK 2.13.0 + OpenInference ADK 1.0.5)에서는 OpenInference LLM 스팬이 전혀 생성되지 않고 LLM 스팬은 ADK 내장 `gcp.vertex.agent`에서만 나왔다. 어떤 마스킹 플래그가 프롬프트를 가리는지가 ADK/OpenInference 버전 쌍에 따라 달라진다.
-- **콘솔 확인(2026-10-27, 사용자 직접 확인):** CloudWatch 콘솔 → GenAI Observability → Bedrock AgentCore → Agents → `knox-adk-trace-test` → Sessions view에 `knox-adk-plain-20261027-001352`가 **Traces (3)** 으로 표시됨. 트레이스 상세에서 ADK 내장 `invoke_agent` 스팬(scope `gcp.vertex.agent`)이 `aws.genai.span_kind = LLM`, `gen_ai.usage.input_tokens = 419`, `gen_ai.usage.output_tokens = 77`, `aws.genai.token_count_total = 496`으로 인식되어 스팬 패널에 Model / Input tokens / Output tokens가 표시됨. 즉 ADOT가 이 scope도 모델 호출로 분류한다.
-- 이 ADK 내장 LLM 스팬에는 `openinference.span.kind = LLM`, `llm.input_messages.*`, `gen_ai.conversation.id`(세션 ID와 동일 값)가 붙어 있다. **정정(소스 확인):** 스팬 자체는 ADK가 만들지만(`gcp.vertex.agent`), `llm.input_messages.*` 등 OpenInference 속성은 **OpenInference ADK 1.0.5가 ADK의 `trace_call_llm` 훅을 패치해 `get_current_span().set_attribute()`로 ADK 스팬 위에 직접 써 넣는 것**이다(`openinference/instrumentation/google_adk/_wrappers.py`). OITracer를 거치지 않으므로 `OPENINFERENCE_HIDE_*`가 적용되지 않는다. OpenInference 1.0.5는 LLM 스팬을 따로 만들지 않고, `session.id` 속성도 이 스팬에는 없다(세션 그룹핑은 OpenInference의 `invocation` 루트 스팬이 담당).
-- **불일치 1건:** 트레이스 상세 상단 "Trace metrics"는 Spans 3, **Tokens 0** 으로 표시되는데, 하위 LLM 스팬에는 토큰 419→77이 있다. Agent view(Agents → `knox-adk-trace-test`)의 **Total tokens도 0, Total token cost는 "-"** 로 표시된다(Sessions/Traces 수는 정확). 아래 실험으로 원인을 좁혔다.
+- **콘솔 확인(2026-10-27):** CloudWatch 콘솔 → GenAI Observability → Bedrock AgentCore → Agents → `knox-adk-trace-test` → Sessions view에 한 세션이 **Traces (3)** 으로 표시됨. 트레이스 상세에서 ADK 내장 `invoke_agent` 스팬(scope `gcp.vertex.agent`)이 `aws.genai.span_kind = LLM`, `gen_ai.usage.input_tokens = 419`, `gen_ai.usage.output_tokens = 77`, `aws.genai.token_count_total = 496`으로 인식되어 스팬 패널에 Model / Input tokens / Output tokens가 표시됨. 즉 ADOT가 이 scope도 모델 호출로 분류한다.
+- 이 ADK 내장 LLM 스팬에는 `openinference.span.kind = LLM`, `llm.input_messages.*`, `gen_ai.conversation.id`(세션 ID와 동일 값)가 붙어 있다. **소스 확인:** 스팬 자체는 ADK가 만들지만(`gcp.vertex.agent`), `llm.input_messages.*` 등 OpenInference 속성은 **OpenInference ADK 1.0.5가 ADK의 `trace_call_llm` 훅을 패치해 `get_current_span().set_attribute()`로 ADK 스팬 위에 직접 써 넣는 것**이다(`openinference/instrumentation/google_adk/_wrappers.py`). OITracer를 거치지 않으므로 `OPENINFERENCE_HIDE_*`가 적용되지 않는다. OpenInference 1.0.5는 LLM 스팬을 따로 만들지 않고, `session.id` 속성도 이 스팬에는 없다(세션 그룹핑은 OpenInference의 `invocation` 루트 스팬이 담당).
+### Total tokens 집계 방식 (콘솔 Agent view vs 스팬 합산, 2026-10-27 콘솔 확인)
 
-
-### Total tokens 집계 원인 실험 (Agent view "Total tokens = 0", 2026-10-27, 모두 콘솔에서 직접 확인)
-
-가설마다 SpanProcessor(`SessionIdStamper`)로 스팬 속성을 바꿔 한 세션씩 보내고 Agent view 수치를 확인했다. 이 실험 코드(`sid`/`tok`/`bedrock`/`root` 모드)는 결론이 난 뒤 단순화를 위해 제거했으며, git 이력(lab/29 최초 커밋)에 남아 있다. Sessions/Traces는 매번 정확히 증가했고 Total tokens는 **다섯 번 모두 0** 이었다.
-
-| # | 가설 | 실행 모드 / 조치 | 저장 확인(aws/spans) | 결과 |
-|---|---|---|---|---|
-| 1 | LLM 스팬에 `session.id`가 없어 세션 집계에서 빠진다 | `sid`: 모든 스팬에 `session.id`/`user.id` 복사 | LLM 스팬 `session.id=Y` | Total tokens 0 |
-| 2 | `gen_ai.usage.total_tokens`/`gen_ai.system`이 없어 집계 키가 안 맞는다 | `tok`: LLM 스팬에 두 속성 추가 | 저장됨 | 0 |
-| 3 | X-Ray 인덱싱 기본 1%라 집계 대상 트레이스가 샘플링에서 빠진다 | `Default` 인덱싱 규칙 100%로 상향 후 재전송 | 3개 트레이스 모두 인덱싱됨 | 0 |
-| 4 | 인식된 모델 공급자(Bedrock)만 집계한다 | `bedrock`: `gen_ai.system=aws.bedrock`, 모델 ID를 Claude Haiku 4.5로 relabel(진단용) | 저장됨 | 0 |
-| 5 | 루트(에이전트) 스팬의 토큰만 읽는다 | `root`: 트레이스별 토큰 합을 루트 `invocation` 스팬에 `gen_ai.usage.*`/`llm.token_count.*`로 기록 | 루트 스팬 3개에 `aws.genai.token_count_total` 298/442/554까지 저장됨 | 0 |
-
-- 결론(당시): 토큰 속성을 어떤 스팬에 어떤 이름으로 넣어도 Agent/Trace 수준 토큰 합계에 반영되지 않았다. 스팬 속성, `session.id`, 인덱싱 비율, 공급자 라벨, 루트 스팬 위치는 모두 원인이 아니다.
-- **최종 원인(2026-10-27, Bedrock 구성 후 사용자 콘솔 확인):** 콘솔 Agent view의 Total tokens·Total token cost는 **스팬이 아니라 Bedrock 모델 호출 기록**에서 계산된다. Bedrock(Claude) 세션을 보낸 뒤 Agents 표가 `knox-adk-trace-test` 5.7K / $0.016, `knox-adk-bedrock-test` 7K / $0.009로 채워졌고, 각각 Bedrock 호출 로그의 토큰 합(Sonnet 8건 5,678, Haiku 8건 6,960)과 일치한다. 같은 에이전트의 Gemini 20세션은 Bedrock 호출이 없어 0에 기여한다. 스팬 실험 5건이 모두 실패한 이유다.
-- 화면: `img/agentcore-observability.png` (12h: Agents/Endpoints 2/0, OTEL sessions 24, Traces 68, Total tokens 12.6K, Total token cost $0.025, Error rate 1.5%).
-- 부수 발견: 콘솔 값이 스팬 토큰 합(Sonnet 4,341 / Haiku 5,286)보다 크다. ADK LLM 스팬은 턴당 1개라 툴 호출 왕복(턴 2의 두 번째 모델 호출)의 토큰을 빠뜨리는 반면 호출 기록은 세션당 4건을 모두 센다. **스팬 기반 합산(Logs Insights, Omni)은 툴 호출이 있는 턴에서 과소 집계**된다.
-- (해소) 메트릭 exporter 경로 가설은 더 이상 필요 없다. 집계 소스는 Bedrock 호출 기록으로 확인됐다.
-- **CloudWatch Omni에서는 집계됨(2026-10-27, 사용자 콘솔 확인):** 같은 계정·리전에 Omni 스페이스(`057716757052-us-west-2`)를 만들자 Agent overview(Past 4 hours)에 `knox-adk-trace-test`가 Active agents 1, Sessions 10, Traces 28, **Total tokens 12.9k**로 표시되고 "5 highest token-consuming agents" 차트에 토큰 시계열(1,154~4,399)이 그려졌다. 즉 ADK 트레이스의 토큰은 Omni 집계에는 들어가며, 0으로 나온 것은 **콘솔 GenAI Observability(Bedrock AgentCore 뷰)의 Agent/Trace 수준 집계 한정** 문제다. Omni 지원 프레임워크 표에 ADK가 없어도 Agents 목록에 잡혔다. 단 Omni 안에서도 "Top 10 agents" 표의 Tokens 열은 0으로 표시되어 요약 카드(12.9k)와 불일치가 있다(`img/cloudwatch-omni.png`로 스크린샷 확인).
-- 고객 답변에서의 의미: 에이전트 단위 토큰·비용은 **콘솔 Agent view(Bedrock 호출 기록 기반, 툴 호출 포함, 가장 정확)**, 모델 단위는 Model Invocations, 스팬 기반은 Omni/Logs Insights(툴 호출 왕복 누락 가능). Bedrock 외 모델을 쓰면 콘솔 Agent view는 0이므로 Omni나 Logs Insights 합산을 쓴다. ADK 기본 구성에서는 LLM 스팬에 `session.id`가 없으므로 **`gen_ai.conversation.id`로 필터**해야 한다(검증 완료: stamper 없는 plain 세션에서 LLM 스팬 3개, 입력 953 / 출력 210 토큰).
+- **콘솔 Agent view의 Total tokens·Total token cost는 스팬이 아니라 Bedrock 모델 호출 기록에서 계산된다.** Agents 표의 값(`knox-adk-trace-test` 5.7K / $0.016, `knox-adk-bedrock-test` 7K / $0.009)이 각각 Bedrock 호출 로그의 토큰 합(Sonnet 5.5 8건 5,678, Haiku 4.5 8건 6,960)과 일치한다. 스팬 속성(`gen_ai.usage.*`, `session.id`, `gen_ai.system`), X-Ray 인덱싱 비율, 루트 스팬 위치를 바꿔도 이 값은 달라지지 않았다. 화면: `img/agentcore-observability.png`.
+- **스팬 기반 합산은 툴 호출 턴에서 과소 집계된다.** 콘솔 값이 스팬 토큰 합(Sonnet 4,341 / Haiku 5,286)보다 크다. ADK LLM 스팬은 턴당 1개라 툴 호출 왕복(턴 2의 두 번째 모델 호출)의 토큰을 빠뜨리는 반면 호출 기록은 세션당 4건을 모두 센다. Logs Insights·Omni 등 스팬을 합산하는 경로는 이 차이를 감안해야 한다.
+- **CloudWatch Omni에서도 집계된다(2026-10-27 콘솔 확인):** 같은 계정·리전에 Omni 스페이스를 만들자 Agent overview에 `knox-adk-trace-test`가 Active agents 1, Sessions 10, Traces 28, **Total tokens 12.9k**로 표시되고 "5 highest token-consuming agents" 차트에 토큰 시계열이 그려졌다. Omni 지원 프레임워크 표에 ADK가 없어도 Agents 목록에 잡혔다. 단 "Top 10 agents" 표의 Tokens 열은 0으로 표시되어 요약 카드(12.9k)와 불일치가 있었다(`img/cloudwatch-omni.png`).
+- **권장:** 에이전트 단위 토큰·비용은 콘솔 Agent view(Bedrock 호출 기록 기반, 툴 호출 포함, 가장 정확), 모델 단위는 Model Invocations, 스팬 기반은 Omni/Logs Insights(툴 호출 왕복 누락 가능). ADK 기본 구성에서는 LLM 스팬에 `session.id`가 없으므로 Logs Insights에서는 **`gen_ai.conversation.id`로 필터**해야 한다(검증: 한 세션에서 LLM 스팬 3개, 입력 953 / 출력 210 토큰).
   ```
   filter attributes.gen_ai.conversation.id = "<session_id>" and attributes.aws.genai.span_kind = "LLM"
   | stats sum(attributes.gen_ai.usage.input_tokens) as input_tokens,
           sum(attributes.gen_ai.usage.output_tokens) as output_tokens, count(*) as llm_spans
   ```
   (`attributes.session.id` 필터는 ADK LLM 스팬을 놓치므로 토큰 합이 0/null로 나온다.)
-- 실험 뒤처리: X-Ray `Default` 인덱싱 규칙은 1%로 복원함. 실험 3~5(`tok` 재전송, `bedrock`, `root`)의 트레이스만 100% 인덱싱 상태로 전송됐고 실험 1~2(`sid`, 첫 `tok`)는 기본 1%에서 전송됐다. `bedrock` 모드 세션은 실제 Gemini 호출을 Bedrock 모델로 라벨만 바꾼 진단 데이터이므로 비용 분석에 쓰면 안 된다.
 
 
 ## (b) PII 마스킹
@@ -127,21 +110,20 @@
 
 - 결론: ADK에서는 OpenInference 플래그만으로 부족하다. ADK 자체 추적이 만드는 LLM 스팬은
   ADOT 수준 `AWS_REDACT_SPAN_ATTRIBUTES='llm.input_messages.*,llm.output_messages.*,input.value,output.value,...'`로 가려야 한다.
-  ADOT 변수 **단독**으로도 두 출처의 스팬이 모두 가려진다(세션 `knox-adk-adot-redact-20261027-032809`, 17 스팬 중 합성 PII 잔존 필드 0). OpenInference 플래그는 없어도 된다. 와일드카드 `llm.input_messages.*`가 중첩 키까지 잡는다.
+  ADOT 변수 **단독**으로도 두 출처의 스팬이 모두 가려진다(17 스팬 중 합성 PII 잔존 필드 0). OpenInference 플래그는 없어도 된다. 와일드카드 `llm.input_messages.*`가 중첩 키까지 잡는다.
 ### ADOT 로그 경로 실험
 
-- **ADOT 기본 본문 분리 경로(extract) 상세** (세션 `knox-adk-extract-20261027-033639`, 로그 스트림 생성 후):
+- **ADOT 기본 본문 분리 경로(extract) 상세**:
   - ADOT의 LLO 핸들러(`amazon/opentelemetry/distro/llo_handler.py`)는 정해진 키 패턴만 스팬에서 떼어 로그 이벤트로 보낸다: `input.value`, `output.value`, `llm.input_messages.{i}.message.content`, `gen_ai.prompt.{i}.content`, `gen_ai.input.messages` 등. OpenInference 래퍼가 ADK 스팬에 쓰는 중첩형 `llm.input_messages.{i}.message.contents.{j}.message_content.text`는 패턴에 없어 **ADK LLM 스팬 3개에 PII가 그대로 남았다**.
   - 로그 그룹(`/aws/bedrock-agentcore/runtimes/knox-adk-trace-test`)에는 본문 이벤트가 도착했고 전부 PII 포함(이벤트 `attributes`/`body`를 직접 확인): ADK가 내는 `gen_ai.client.inference.operation.details` 4건(`gen_ai.input.messages`/`gen_ai.output.messages` 속성; ADOT가 `AGENT_OBSERVABILITY_ENABLED=true`일 때 `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`를 기본 설정하므로 ADK가 본문 이벤트를 냄) + ADOT LLO가 OpenInference 스팬의 `input.value`/`output.value`를 옮긴 이벤트(scope `openinference.instrumentation.google_adk`, 본문은 body) 3건. 이 로그 그룹에 CloudWatch Logs 데이터 보호 정책을 거는 구성이 된다.
-- **extract + `AWS_REDACT_SPAN_ATTRIBUTES` 동시 적용** (세션 `knox-adk-extract-20261027-035657`): 스팬은 두 출처 모두 PII 0(ADK LLM 스팬 3개 `REDACTED`). 로그 그룹에는 ADK 본문 이벤트 4건이 **PII 포함 그대로** 도착(redact는 스팬 프로세서라 로그 레코드에는 작용하지 않음), ADOT LLO 추출 이벤트 3건은 redact 이후 값이 복사되어 `REDACTED`로 도착. 즉 redact 변수는 스팬 전용이며, 로그 경로는 별도로 통제해야 한다(`OTEL_LOGS_EXPORTER=none`, 또는 로그 그룹 데이터 보호 정책). `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`를 비활성 값으로 명시해 ADK 본문 이벤트를 끄는 방법은 코드상 가능해 보이나 **미실행**.
-  - **함정:** ADOT는 `OTEL_EXPORTER_OTLP_LOGS_HEADERS`의 `x-aws-log-stream`에 적은 로그 스트림을 만들어 주지 않는다. 스트림이 없으면 `400 The specified log stream does not exist`로 로그 export가 조용히 실패한다(ERROR 로그만 남고 프로세스는 정상 종료). `aws logs create-log-stream`으로 미리 만들어야 한다. 첫 extract 실행(`...-032821`)은 이 때문에 로그 이벤트가 0건이었다.
+- **extract + `AWS_REDACT_SPAN_ATTRIBUTES` 동시 적용**: 스팬은 두 출처 모두 PII 0(ADK LLM 스팬 3개 `REDACTED`). 로그 그룹에는 ADK 본문 이벤트 4건이 **PII 포함 그대로** 도착(redact는 스팬 프로세서라 로그 레코드에는 작용하지 않음), ADOT LLO 추출 이벤트 3건은 redact 이후 값이 복사되어 `REDACTED`로 도착. 즉 redact 변수는 스팬 전용이며, 로그 경로는 별도로 통제해야 한다(`OTEL_LOGS_EXPORTER=none`, 또는 로그 그룹 데이터 보호 정책). `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`를 비활성 값으로 명시해 ADK 본문 이벤트를 끄는 방법은 코드상 가능해 보이나 **미실행**.
+  - **함정:** ADOT는 `OTEL_EXPORTER_OTLP_LOGS_HEADERS`의 `x-aws-log-stream`에 적은 로그 스트림을 만들어 주지 않는다. 스트림이 없으면 `400 The specified log stream does not exist`로 로그 export가 조용히 실패한다(ERROR 로그만 남고 프로세스는 정상 종료). `aws logs create-log-stream`으로 미리 만들어야 한다.
 ### 효과 없는 설정과 한계
 
-- **ADK 자체 스위치는 무효:** `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false`(세션 `knox-adk-adk-nocontent-20261027-033532`)로도 ADK LLM 스팬 3개에 `llm.input_messages.*`와 PII가 남는다. 이 속성은 ADK가 아니라 OpenInference 래퍼가 쓰기 때문이다.
+- **ADK 자체 스위치는 무효:** `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false`로도 ADK LLM 스팬 3개에 `llm.input_messages.*`와 PII가 남는다. 이 속성은 ADK가 아니라 OpenInference 래퍼가 쓰기 때문이다.
 - **종합:** ADK 2.13 + OpenInference ADK 1.0.5 + ADOT 0.21 조합에서 캡처 시점에 모든 **스팬**의 본문을 확실히 없애는 방법은 ADOT `AWS_REDACT_SPAN_ATTRIBUTES` 하나뿐이었다. 본문 분리 경로를 쓰더라도 이 변수를 함께 걸어야 ADK LLM 스팬의 중첩 키가 정리된다. **로그 경로**(ADK 본문 이벤트)는 이 변수로 막히지 않으므로 로그 exporter를 끄거나 로그 그룹에 데이터 보호 정책을 적용해야 한다.
 - 캡처 시 마스킹은 되돌릴 수 없으므로 디버깅용 원문이 필요하면 수집 시 데이터 보호 정책(패턴 마스킹) 또는 읽기 시 Omni 데이터 스코프와 조합한다.
-- 네 번째 선택지: 이 테스트는 `AWS_GENAI_CONTENT_EXTRACTION_OPT_OUT=true`로 프롬프트 본문을 스팬에 남기고 `OTEL_LOGS_EXPORTER=none`으로 로그를 끈 상태였다. ADOT 기본값(변수 미설정)은 본문을 스팬에서 떼어 OTel 로그 이벤트로 보내므로, 스팬에는 PII가 남지 않고 로그 그룹 쪽에 CloudWatch Logs 데이터 보호 정책을 적용하는 구성이 된다.
-- 테스트 부산물: plain/masked/extract/adk-nocontent 세션의 합성 PII가 `aws/spans`(계정 보존 기간 30일)와 `/aws/bedrock-agentcore/runtimes/knox-adk-trace-test`(7일)에 남아 있다. 합성 데이터라 위험은 낮다.
+- ADOT 기본값 구성: 이 테스트는 `AWS_GENAI_CONTENT_EXTRACTION_OPT_OUT=true`로 프롬프트 본문을 스팬에 남기고 `OTEL_LOGS_EXPORTER=none`으로 로그를 끈 상태였다. ADOT 기본값(변수 미설정)은 본문을 스팬에서 떼어 OTel 로그 이벤트로 보내므로, 스팬에는 PII가 남지 않고 로그 그룹 쪽에 CloudWatch Logs 데이터 보호 정책을 적용하는 구성이 된다.
 
 
 - **부분 마스킹 한계**: `AWS_REDACT_SPAN_ATTRIBUTES`는 속성 단위 전체 삭제다. 전화번호만 가리는 부분 마스킹은 커스텀 SpanProcessor 또는 OpenTelemetry Collector의 redaction/transform 프로세서가 필요하다.
@@ -157,24 +139,24 @@ ADK Python에는 Bedrock 전용 모델 클래스가 없고 레지스트리의 `b
 비공식 조합이며, 각 부분은 ADK·Bedrock 문서로 뒷받침된다). 단기 토큰은 `aws-bedrock-token-generator`가 AWS 자격 증명에서
 만든다(최대 12시간).
 
-| 세션 | 모델 | 스팬 | OpenInference 스팬 PII | ADK LLM 스팬 PII | LLM 토큰(in→out) |
+| 실행 | 모델 | 스팬 | OpenInference 스팬 PII | ADK LLM 스팬 PII | LLM 토큰(in→out) |
 |---|---|---|---|---|---|
-| `knox-adk-bedrock-plain-20261027-052248` | Haiku 4.5 (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) | 13 | 4/10 원문 | 3/3 원문 | 923→34, 863→38, 699→65 |
-| `knox-adk-bedrock-redact-20261027-052256` | Haiku 4.5 | 13 | 0 (`REDACTED` 7) | 0 (`REDACTED` 3) | 938→34, 875→41, 699→77 |
-| `knox-adk-plain-20261027-052755` | Sonnet 5.5 (`us.anthropic.claude-sonnet-5-5`) | 13 | 6/10 원문 | 3/3 원문 | 766→42, 692→46, 551→41 |
-| `knox-adk-redact-20261027-052802` | Sonnet 5.5 | 13 | 0 (`REDACTED` 7) | 0 (`REDACTED` 3) | 791→38, 711→52, 551→60 |
+| Haiku plain | Haiku 4.5 (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) | 13 | 4/10 원문 | 3/3 원문 | 923→34, 863→38, 699→65 |
+| Haiku redact | Haiku 4.5 | 13 | 0 (`REDACTED` 7) | 0 (`REDACTED` 3) | 938→34, 875→41, 699→77 |
+| Sonnet plain | Sonnet 5.5 (`us.anthropic.claude-sonnet-5-5`) | 13 | 6/10 원문 | 3/3 원문 | 766→42, 692→46, 551→41 |
+| Sonnet redact | Sonnet 5.5 | 13 | 0 (`REDACTED` 7) | 0 (`REDACTED` 3) | 791→38, 711→52, 551→60 |
 
-- 스팬 트리·세션 그룹핑·마스킹 동작은 Gemini 구성과 **동일**하다. ADK의 `trace_call_llm` 훅이 모델 클래스와 무관하게
-  동작하므로 OpenInference 래퍼가 ADK LLM 스팬에 본문을 쓰는 구조와 `AWS_REDACT_SPAN_ATTRIBUTES`의 효과가 그대로 재현됐다.
+- 스팬 트리·세션 그룹핑·마스킹 동작은 모델(Haiku/Sonnet)과 무관하게 동일하다. ADK의 `trace_call_llm` 훅이 모델 클래스와 무관하게
+  동작하므로 OpenInference 래퍼가 ADK LLM 스팬에 본문을 쓰는 구조와 `AWS_REDACT_SPAN_ATTRIBUTES`의 효과가 그대로 나타난다.
 - **공급자 라벨 오류:** `gen_ai.request.model`/`llm.model_name`은 Bedrock 모델 ID로 정확하지만 `gen_ai.provider.name=gcp.gemini`,
   `llm.provider=google`로 기록된다(ADK/OpenInference 래퍼의 고정값). 공급자별 집계·비용 산정에서 Bedrock 호출이 Google로
   분류될 수 있으므로 주의.
 - **Bedrock Model Invocation Logs(서버 측):** 계정에 호출 로깅이 켜져 있어 `/aws/bedrock/model-invocation-logs`에 모든 호출의
   요청·응답 본문이 저장된다. 확인: 합성 PII가 포함된 이벤트 16건(Haiku 4.5 8건 + Sonnet 5.5 8건, operation `Messages`,
-  호출자 IAM 사용자, `inputTokenCount`/`outputTokenCount` 포함). 캡처 시 스팬 마스킹(`AWS_REDACT_SPAN_ATTRIBUTES`)은 이
-  로그에 영향을 주지 않는다. Bedrock을 쓰는 고객은 Q2(b)에 **다섯 번째 경로**로 호출 로깅 설정(텍스트 본문 전달 끄기,
+  `inputTokenCount`/`outputTokenCount` 포함). 캡처 시 스팬 마스킹(`AWS_REDACT_SPAN_ATTRIBUTES`)은 이
+  로그에 영향을 주지 않는다. Bedrock을 쓰는 경우 (b)에 **추가 경로**로 호출 로깅 설정(텍스트 본문 전달 끄기,
   또는 해당 로그 그룹에 데이터 보호 정책)을 포함해야 한다.
-- **콘솔 Model Invocations 뷰(사용자 확인, 2026-10-27):** 모델 `us.anthropic.claude-sonnet-5-5` 선택 시 Invocations (16)
+- **콘솔 Model Invocations 뷰(2026-10-27 확인):** 모델 `us.anthropic.claude-sonnet-5-5` 선택 시 Invocations (16)
   목록(세션당 4회 = 3턴 + 툴 호출 왕복 1회 × 4세션), Input/Output 토큰 차트, Invocation count, 입력 토큰 크기 분포가 채워졌다.
   TTFT·프롬프트 캐시·스로틀·오류는 "No data", Latency 열은 "-". 목록의 Input/Output 열에 프롬프트·응답 원문이 그대로 표시되며
   **redact 세션의 호출도 포함**된다. 즉 스팬 마스킹은 이 뷰와 호출 로그에 영향을 주지 않는다. 같은 화면에 "To protect and mask
@@ -235,7 +217,7 @@ ADK Python에는 Bedrock 전용 모델 클래스가 없고 레지스트리의 `b
 ## 코딩 에이전트(Claude Code·Cursor)에서 Omni 데이터 가져오기 (2026-10-27 확인)
 
 - **Agent Toolkit for AWS**: Claude Code에서 `/plugin install aws-core@claude-plugins-official` → `/reload-plugins`(CLI: `claude plugin install aws-core@claude-plugins-official`). aws-core 1.1.0은 원격 AWS MCP Server(`uvx mcp-proxy-for-aws-cli` → `https://aws-mcp.us-east-1.api.aws/mcp`)와 25개 skills를 설치하며, `aws-observability` skill 안에 `references/cloudwatch-omni/`(개념·SQL 질의·PromQL·대시보드·알림·평가)와 스크립트가 들어 있다. Cursor/Kiro는 MCP 설정 + `npx skills add aws/agent-toolkit-for-aws/skills`, AWS CLI 2.35+면 `aws configure agent-toolkit`.
-- **동작 원리**: skills는 로컬 AWS 자격 증명으로 공개 `cloudwatchomni` API(SigV4, Smithy RPC v2 CBOR)를 호출한다. Omni 웹 로그인이 아니라 IAM 권한 + 스페이스 그랜트 두 겹으로 인가된다. CLI는 `aws cloudwatchomni …`(이 호스트의 CLI 2.34.19는 모델이 없어 미지원, boto3 1.43.119는 지원).
+- **동작 원리**: skills는 로컬 AWS 자격 증명으로 공개 `cloudwatchomni` API(SigV4, Smithy RPC v2 CBOR)를 호출한다. Omni 웹 로그인이 아니라 IAM 권한 + 스페이스 그랜트 두 겹으로 인가된다. CLI는 `aws cloudwatchomni …`(AWS CLI 2.35+ 또는 최신 boto3 필요).
 - **직접 조회 예(`omni_query.py`)**: `traces.default` 테이블에 SQL. 세션 `knox-adk-plain-20261027-052755`로 13개 스팬(3 트레이스)과 `gen_ai.usage.*`, 모델 ID, duration을 가져왔다. 주의: ADK LLM 스팬은 `session.id`가 없고 `gen_ai.conversation.id`에 세션 ID가 있으므로 두 속성을 OR로 묶어야 한다.
   ```sql
   SELECT `@timestamp`, name, scope['name'] AS scope, traceId,
@@ -249,11 +231,11 @@ ADK Python에는 Bedrock 전용 모델 클래스가 없고 레지스트리의 `b
   ```
 - **Omni IDE 확장**(VS Code·Kiro·Cursor): 로컬 모드는 `.omni/`에 트레이스 저장(AWS 계정 불필요), 클라우드 모드는 스페이스 로그인. "Analyze with AI" 내장. MCP 서버를 직접 노출하지는 않는다.
 - **Omni 없이 스팬만**: awslabs `cloudwatch-applicationsignals-mcp-server`의 `search_transaction_spans`(Logs Insights, `@data_format = "AWS-OTEL-TRACE-V1"`)로 `aws/spans` 조회 가능(Transaction Search 필요).
-- PII 주의: 어느 경로든 본문이 마스킹되지 않은 채 코딩 에이전트 컨텍스트로 들어온다. Q2(b)의 캡처 시 마스킹이 선행돼야 한다.
+- PII 주의: 어느 경로든 본문이 마스킹되지 않은 채 코딩 에이전트 컨텍스트로 들어온다. (b)의 캡처 시 마스킹이 선행돼야 한다.
 
 ### 플러그인 경로 실제 동작 확인 (Claude Code, 2026-10-27)
 
-`/reload-plugins` 후 `plugin:aws-core:aws-mcp`의 `aws___run_script` 도구가 올라오고, 그 샌드박스 안에서 `call_boto3("cloudwatchomni", "StartTelemetryQuerySession" → "StartTelemetryQuery" → "GetTelemetryQueryResults")`가 로컬 IAM 자격 증명(SigV4)으로 실행된다. 로컬 CLI/boto3 버전과 무관하다(구형 AWS CLI 문제 우회). 결과는 `omni_query.py` 직접 호출과 동일(13 스팬, 같은 토큰 값). 플러그인 설치 전에 열린 세션에는 도구가 붙지 않으므로 같은 창에서 `/reload-plugins`를 다시 실행해야 한다.
+`/reload-plugins` 후 `plugin:aws-core:aws-mcp`의 `aws___run_script` 도구가 올라오고, 그 샌드박스 안에서 `call_boto3("cloudwatchomni", "StartTelemetryQuerySession" → "StartTelemetryQuery" → "GetTelemetryQueryResults")`가 로컬 IAM 자격 증명(SigV4)으로 실행된다. 로컬 CLI/boto3 버전과 무관하다(구형 AWS CLI 문제 우회). 결과는 `omni_query.py` 직접 호출과 동일(13 스팬, 같은 토큰 값).
 
 **그대로 입력해 볼 수 있는 프롬프트**
 
@@ -285,7 +267,3 @@ ADK Python에는 Bedrock 전용 모델 클래스가 없고 레지스트리의 `b
 한 LLM 스팬에 시스템 프롬프트·전체 대화 이력·도구 호출·도구 결과·최종 답변·토큰이 모두 들어 있다(속성 57개). plain 실행이라 PII가 그대로 보이며 redact 실행에서는 같은 필드가 `REDACTED`로 나온다.
 
 **traceId로 조회하면 스팬이 4개가 아니라 9개**: 세션 ID 필터에서는 턴당 OpenInference 스팬 3개 + ADK LLM 스팬 1개(+ TOOL)만 잡히지만, traceId로 조회하면 Anthropic SDK 스팬 `anthropic.messages.create`(scope `com.anthropic.sdk.python`, `aws.genai.span_kind=LLM`) 2개와 httpx `POST` 2개가 더 나온다. 도구 호출 턴은 Bedrock 호출이 2번(도구 호출 요청 → 도구 결과 전달)이고 ADK LLM 스팬은 턴당 1개라 토큰이 마지막 호출분만 기록되는 반면, SDK 스팬은 호출마다 1개다. 이 SDK/httpx 스팬에는 `session.id`·`gen_ai.conversation.id`가 없어 세션 필터에서 빠진다. 세션 기준 토큰 합과 콘솔(Bedrock 호출 기록 집계)의 차이가 여기서 생긴다.
-
-
-## 세션 ID 기록
-`sessions.log`에 실행마다 session_id가 append 된다. CloudWatch 콘솔 → GenAI Observability → Bedrock AgentCore → Agents → Sessions view에서 같은 ID로 조회된다(확인됨).

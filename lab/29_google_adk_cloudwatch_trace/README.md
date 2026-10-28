@@ -19,7 +19,7 @@
 - **구현 포인트**: `Runner.run_async(user_id=, session_id=)`를 키워드 인자로 전달합니다. Python ADOT는 `AWS_GENAI_CONTENT_EXTRACTION_OPT_OUT=true`를 켜야 본문이 스팬에 남습니다. Transaction Search(스팬 100%를 `aws/spans` 로그 그룹에 저장하는 CloudWatch 설정)를 계정·리전에 먼저 활성화해야 스팬이 수신되고 콘솔 뷰가 동작하며, 첫 수집은 10분 이상 지연될 수 있습니다.
 - **토큰·비용 집계**: 콘솔 Agent view의 Total tokens·cost는 스팬이 아니라 **Bedrock 모델 호출 기록**으로 계산되며, 호출 로그 합과 정확히 일치합니다(툴 호출 왕복 포함).
 
-**근거**: [DETAILS.md](DETAILS.md) → "동작 흐름", "(a) 멀티턴 추적"(세션 키 두 개: `session.id` / `gen_ai.conversation.id`), "Total tokens 집계 원인 실험", "Bedrock 구성 결과". 스크린샷 `img/agentcore-observability.png`, `img/cloudwatch-omni.png`.
+**근거**: [DETAILS.md](DETAILS.md) → "동작 흐름", "(a) 멀티턴 추적"(세션 키 두 개: `session.id` / `gen_ai.conversation.id`), "Total tokens 집계 방식", "Bedrock 구성 결과". 스크린샷 `img/agentcore-observability.png`, `img/cloudwatch-omni.png`.
 
 ## (b) OpenInference PII 마스킹 — OpenInference 플래그만으로는 부족하고, ADOT 마스킹 + 로그 경로 차단으로 해결됩니다
 
@@ -56,7 +56,7 @@
 - **임의 분석(툴 실패율, 세션당 턴 수 등)**: Logs Insights(`aws/spans`) 또는 Omni SQL(`traces.default`)로 집계하며, 메트릭 필터로 커스텀 메트릭·알람을 만들 수 있습니다.
 - **대화 품질**: Omni의 AgentCore Evaluations(내장 평가기 + 커스텀 judge, 온라인 평가)가 CloudWatch 안의 유일한 수단이며, (b)의 마스킹 정책과 함께 설계해야 합니다.
 
-**근거**: [DETAILS.md](DETAILS.md) → "(d) 분석"(표면별 능력 비교, Logs Insights 검증 쿼리, Omni 집계 결과와 Top 10 표 불일치), "코딩 에이전트에서 Omni 데이터 가져오기"(프롬프트 3개, 한 스팬 결과 표, traceId 조회 시 SDK 스팬 9개 발견). 스크린샷 `img/bedrock-model-invocation.png`, `img/cloudwatch-omni.png`, `img/omni-plugin.png`.
+**근거**: [DETAILS.md](DETAILS.md) → "(d) 분석"(표면별 능력 비교, 권장 사용처), "Total tokens 집계 방식"(Logs Insights 검증 쿼리, Omni 집계 결과), "코딩 에이전트에서 Omni 데이터 가져오기"(프롬프트 3개, 한 스팬 결과 표, traceId 조회 시 SDK 스팬 9개 발견). 스크린샷 `img/bedrock-model-invocation.png`, `img/cloudwatch-omni.png`, `img/omni-plugin.png`.
 
 ## 빠른 시작
 
@@ -89,10 +89,9 @@ uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requi
 ## 상세 문서 (DETAILS.md)
 
 1. [동작 흐름](DETAILS.md#동작-흐름) — 파이프라인, 세션→트레이스→스팬 트리, 모드별 차이(ASCII)
-2. [(a) 멀티턴 추적](DETAILS.md#a-멀티턴-추적) — 스팬 출처 두 종류, 버전 의존성, 콘솔 확인, Total tokens 집계 원인 실험(가설 5개)과 검증 쿼리
+2. [(a) 멀티턴 추적](DETAILS.md#a-멀티턴-추적) — 스팬 출처 두 종류, 버전 의존성, 콘솔 확인, Total tokens 집계 방식과 검증 쿼리
 3. [(b) PII 마스킹](DETAILS.md#b-pii-마스킹) — 설정 조합 6개 매트릭스, ADOT 로그 경로 실험, 효과 없는 설정과 한계
 4. [Bedrock 구성 결과](DETAILS.md#bedrock-구성-결과-2026-10-27-adk-213--anthropicllm--bedrock-runtime) — ADK + AnthropicLlm 네이티브 경로, 공급자 라벨 버그, 호출 로그 원문
 5. [(c) SSO/MFA 대시보드](DETAILS.md#c-ssomfa-대시보드-aws-계정-없는-사용자) — 후보 4개 비교, Omni 설계 포인트, 제공 리전
 6. [(d) 분석](DETAILS.md#d-분석-트레이싱-대시보드) — 세 표면 비교, 권장 사용처
 7. [코딩 에이전트에서 Omni 데이터 가져오기](DETAILS.md#코딩-에이전트claude-codecursor에서-omni-데이터-가져오기-2026-10-27-확인) — Agent Toolkit 플러그인, 프롬프트 3개, 한 스팬 결과 표
-8. [세션 ID 기록](DETAILS.md#세션-id-기록)
