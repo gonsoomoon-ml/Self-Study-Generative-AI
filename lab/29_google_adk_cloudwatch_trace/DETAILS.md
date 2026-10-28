@@ -67,17 +67,10 @@
 - **스팬 합산은 툴 호출 턴에서 과소 집계된다.** ADK LLM 스팬은 턴당 1개라 툴 호출 왕복(두 번째 모델 호출)의 토큰을 빠뜨린다(스팬 합 Sonnet 4,341 vs 호출 기록 5,678). Logs Insights·Omni 등 스팬 기반 경로는 이 차이를 감안한다.
 - **CloudWatch Omni도 ADK 토큰을 집계한다.** Agent overview에 Sessions 10, Traces 28, Total tokens 12.9k로 표시됐다(`img/cloudwatch-omni.png`). "Top 10 agents" 표의 Tokens 열은 0으로 나와 요약 카드와 불일치가 있었다.
 - Logs Insights로 세션별 토큰을 합산할 때는 `gen_ai.conversation.id`로 필터한다(`session.id` 필터는 LLM 스팬을 놓쳐 0/null).
-```text
-1) 세션 목록
-   Omni에서 knox-adk-trace-test 에이전트의 최근 6시간 세션별 트레이스 수, 토큰 합, LLM 지연 평균을 표로 보여줘.
-   (session.id 또는 gen_ai.conversation.id 기준)
-
-2) 한 턴의 전체 흐름 (추천)
-   세션 knox-adk-plain-20261027-052755 에서 도구를 호출한 턴의 LLM 스팬(scope gcp.vertex.agent) 하나를 골라
-   시스템 프롬프트, 사용자 입력, 도구 호출(이름·인자), 도구 결과, 최종 답변, 입력/출력 토큰을 한 표로 정리해줘.
-
-3) PII 마스킹 검증
-   같은 세션의 plain 실행과 redact 실행을 비교해, input.value / llm.input_messages.* 가 REDACTED 로 바뀌었는지 스팬별로 보여줘.
+```
+filter attributes.gen_ai.conversation.id = "<session_id>" and attributes.aws.genai.span_kind = "LLM"
+| stats sum(attributes.gen_ai.usage.input_tokens) as input_tokens,
+        sum(attributes.gen_ai.usage.output_tokens) as output_tokens, count(*) as llm_spans
 ```
 
 ## (b) PII 마스킹
@@ -141,17 +134,15 @@ ADK Python에는 Bedrock 전용 모델 클래스가 없고 레지스트리의 `b
 
 - **Agent Toolkit for AWS**: Claude Code에서 `/plugin install aws-core@claude-plugins-official` → `/reload-plugins`. aws-core 플러그인은 원격 AWS MCP Server(`aws-mcp`)와 skills(`aws-observability` 안에 `references/cloudwatch-omni/`)를 설치한다. Cursor/Kiro는 MCP 설정 + `npx skills add aws/agent-toolkit-for-aws/skills`.
 - **동작 원리**: 로컬 AWS 자격 증명으로 공개 `cloudwatchomni` API(StartTelemetryQuerySession → StartTelemetryQuery(SQL) → GetTelemetryQueryResults)를 호출한다. Omni 웹 로그인이 아니라 IAM 권한 + 스페이스 그랜트로 인가된다. `omni_query.py`가 같은 API를 직접 호출하는 예다.
-```text
-1) 세션 목록
-   Omni에서 knox-adk-trace-test 에이전트의 최근 6시간 세션별 트레이스 수, 토큰 합, LLM 지연 평균을 표로 보여줘.
-   (session.id 또는 gen_ai.conversation.id 기준)
-
-2) 한 턴의 전체 흐름 (추천)
-   세션 knox-adk-plain-20261027-052755 에서 도구를 호출한 턴의 LLM 스팬(scope gcp.vertex.agent) 하나를 골라
-   시스템 프롬프트, 사용자 입력, 도구 호출(이름·인자), 도구 결과, 최종 답변, 입력/출력 토큰을 한 표로 정리해줘.
-
-3) PII 마스킹 검증
-   같은 세션의 plain 실행과 redact 실행을 비교해, input.value / llm.input_messages.* 가 REDACTED 로 바뀌었는지 스팬별로 보여줘.
+```sql
+SELECT `@timestamp`, name, scope['name'] AS scope, traceId,
+       attributes['session.id'] AS session_id, attributes['gen_ai.conversation.id'] AS conversation_id,
+       attributes['gen_ai.request.model'] AS model,
+       attributes['gen_ai.usage.input_tokens'] AS in_tok, attributes['gen_ai.usage.output_tokens'] AS out_tok
+FROM traces.default
+WHERE `@timestamp` BETWEEN NOW() - INTERVAL '6 HOUR' AND NOW()
+  AND (attributes['session.id'] = '<session>' OR attributes['gen_ai.conversation.id'] = '<session>')
+ORDER BY `@timestamp`
 ```
 
 ```text
